@@ -8,17 +8,8 @@ Spring Boot 3.x application targeting Oracle 19c.
 - Pluggable storage adapters with filesystem default.
 
 ## Getting Started
-Ensure you are using Java 17 or a newer JDK (the project is compiled with `--release 17` and runs on any JRE ≥ 17).
 ```bash
 mvn spring-boot:run
-```
-
-### Container builds with alternative Java versions
-
-The backend Dockerfile accepts build arguments to choose the JDK/JRE images. For example, to run with a Java 23 runtime:
-
-```bash
-docker build --build-arg RUNTIME_JAVA_MAJOR=23 --build-arg MAVEN_JDK_TAG=3.9.6-eclipse-temurin-23 -t docflow-backend .
 ```
 
 ## Sample Upload Field Definition

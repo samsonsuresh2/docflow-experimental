@@ -1,6 +1,6 @@
 # DocFlow
 
-DocFlow is a single-tenant document review and approval portal featuring a maker–checker workflow, dynamic metadata configuration, and BFSI-compliant audit capabilities. The backend targets Java 17 and runs on any modern JRE version 17 or higher.
+DocFlow is a single-tenant document review and approval portal featuring a maker–checker workflow, dynamic metadata configuration, and BFSI-compliant audit capabilities.
 
 ## Structure
 

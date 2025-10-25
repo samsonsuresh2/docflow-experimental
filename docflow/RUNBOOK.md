@@ -1,7 +1,7 @@
 # DocFlow Runbook
 
 ## Requirements
-- Java 17 or newer (the build compiles with `--release 17`, so any JRE ≥ 17 can run the service)
+- Java 17
 - Node.js 20
 - Oracle Database 19c running and accessible on port 1522
 
@@ -32,8 +32,6 @@ Use Docker Compose to launch the full stack, including Oracle XE:
 ```bash
 docker-compose up
 ```
-
-To build the backend container with a different JRE (for example Java 23), export `DOCFLOW_BACKEND_JAVA_MAJOR=23` before running `docker-compose build` or `docker-compose up --build`. If you need to align the build stage JDK, set `DOCFLOW_BACKEND_MAVEN_TAG` (e.g. `DOCFLOW_BACKEND_MAVEN_TAG=3.9.6-eclipse-temurin-23`).
 
 ## Authentication
 DocFlow uses header-based authentication only. Each request must include `X-USER-ID`.

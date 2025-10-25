@@ -17,9 +17,6 @@ services:
   backend:
     build:
       context: ../backend
-      args:
-        MAVEN_JDK_TAG: ${DOCFLOW_BACKEND_MAVEN_TAG:-3.9.6-eclipse-temurin-17}
-        RUNTIME_JAVA_MAJOR: ${DOCFLOW_BACKEND_JAVA_MAJOR:-17}
     environment:
       SPRING_DATASOURCE_URL: jdbc:oracle:thin:@oracle:1521/FREEPDB1
       SPRING_DATASOURCE_USERNAME: docflow
