@@ -1,0 +1,56 @@
+{
+  "type": "UPLOAD_FIELDS",
+  "version": 1,
+  "fields": [
+    {
+      "key": "customerName",
+      "label": "Customer Name",
+      "type": "text",
+      "required": true,
+      "maxLength": 120
+    },
+    {
+      "key": "applicationDate",
+      "label": "Application Date",
+      "type": "date",
+      "required": true
+    },
+    {
+      "key": "loanAmount",
+      "label": "Loan Amount",
+      "type": "number",
+      "required": true,
+      "min": 10000,
+      "step": 1000
+    },
+    {
+      "key": "productType",
+      "label": "Product Type",
+      "type": "select",
+      "options": [
+        "Home Loan",
+        "Auto Loan",
+        "Working Capital"
+      ]
+    },
+    {
+      "key": "riskRating",
+      "label": "Risk Rating",
+      "type": "dropdown",
+      "options": [
+        {
+          "label": "Low",
+          "value": "LOW"
+        },
+        {
+          "label": "Medium",
+          "value": "MEDIUM"
+        },
+        {
+          "label": "High",
+          "value": "HIGH"
+        }
+      ]
+    }
+  ]
+}

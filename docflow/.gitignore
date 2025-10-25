@@ -1,0 +1,14 @@
+# General
+.DS_Store
+.idea/
+*.iml
+
+# Maven
+backend/target/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Logs
+*.log
