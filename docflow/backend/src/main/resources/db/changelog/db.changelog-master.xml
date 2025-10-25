@@ -4,8 +4,223 @@
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.18.xsd">
 
-    <changeSet id="init-structure" author="docflow">
-        <comment>Initial placeholder change set</comment>
+    <changeSet id="document-parent-table" author="docflow">
+        <comment>Create document_parent table with sequence and trigger</comment>
+        <createSequence sequenceName="document_parent_seq" startValue="1"/>
+        <createTable tableName="document_parent">
+            <column name="id" type="NUMBER(19)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="document_number" type="VARCHAR2(100)">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="title" type="VARCHAR2(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR2(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="VARCHAR2(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP(6)" defaultValueComputed="SYSTIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="VARCHAR2(100)"/>
+            <column name="updated_at" type="TIMESTAMP(6)"/>
+        </createTable>
+        <sql>
+            CREATE OR REPLACE TRIGGER document_parent_bir
+            BEFORE INSERT ON document_parent
+            FOR EACH ROW
+            WHEN (NEW.id IS NULL)
+            BEGIN
+                SELECT document_parent_seq.NEXTVAL INTO :NEW.id FROM dual;
+            END;
+        </sql>
+        <rollback>
+            <sql>DROP TRIGGER document_parent_bir</sql>
+            <dropTable tableName="document_parent"/>
+            <dropSequence sequenceName="document_parent_seq"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="document-metadata-table" author="docflow">
+        <comment>Create document_metadata table with sequence and trigger</comment>
+        <createSequence sequenceName="document_metadata_seq" startValue="1"/>
+        <createTable tableName="document_metadata">
+            <column name="id" type="NUMBER(19)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="document_id" type="NUMBER(19)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="field_key" type="VARCHAR2(150)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="field_value" type="CLOB"/>
+            <column name="created_by" type="VARCHAR2(100)"/>
+            <column name="created_at" type="TIMESTAMP(6)" defaultValueComputed="SYSTIMESTAMP"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="document_metadata"
+                                 baseColumnNames="document_id"
+                                 referencedTableName="document_parent"
+                                 referencedColumnNames="id"
+                                 constraintName="fk_document_metadata_parent"/>
+        <sql>
+            CREATE OR REPLACE TRIGGER document_metadata_bir
+            BEFORE INSERT ON document_metadata
+            FOR EACH ROW
+            WHEN (NEW.id IS NULL)
+            BEGIN
+                SELECT document_metadata_seq.NEXTVAL INTO :NEW.id FROM dual;
+            END;
+        </sql>
+        <rollback>
+            <sql>DROP TRIGGER document_metadata_bir</sql>
+            <dropTable tableName="document_metadata"/>
+            <dropSequence sequenceName="document_metadata_seq"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="audit-log-table" author="docflow">
+        <comment>Create audit_log table with sequence and trigger</comment>
+        <createSequence sequenceName="audit_log_seq" startValue="1"/>
+        <createTable tableName="audit_log">
+            <column name="id" type="NUMBER(19)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="document_id" type="NUMBER(19)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="field_key" type="VARCHAR2(150)"/>
+            <column name="old_value" type="CLOB"/>
+            <column name="new_value" type="CLOB"/>
+            <column name="change_type" type="VARCHAR2(50)"/>
+            <column name="changed_by" type="VARCHAR2(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="changed_at" type="TIMESTAMP(6)" defaultValueComputed="SYSTIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="audit_log"
+                                 baseColumnNames="document_id"
+                                 referencedTableName="document_parent"
+                                 referencedColumnNames="id"
+                                 constraintName="fk_audit_log_parent"/>
+        <sql>
+            CREATE OR REPLACE TRIGGER audit_log_bir
+            BEFORE INSERT ON audit_log
+            FOR EACH ROW
+            WHEN (NEW.id IS NULL)
+            BEGIN
+                SELECT audit_log_seq.NEXTVAL INTO :NEW.id FROM dual;
+            END;
+        </sql>
+        <rollback>
+            <sql>DROP TRIGGER audit_log_bir</sql>
+            <dropTable tableName="audit_log"/>
+            <dropSequence sequenceName="audit_log_seq"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="app-config-table" author="docflow">
+        <comment>Create app_config table with sequence and trigger</comment>
+        <createSequence sequenceName="app_config_seq" startValue="1"/>
+        <createTable tableName="app_config">
+            <column name="id" type="NUMBER(19)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="config_key" type="VARCHAR2(150)">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="config_value" type="CLOB">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="VARCHAR2(100)"/>
+            <column name="updated_at" type="TIMESTAMP(6)" defaultValueComputed="SYSTIMESTAMP"/>
+        </createTable>
+        <sql>
+            CREATE OR REPLACE TRIGGER app_config_bir
+            BEFORE INSERT ON app_config
+            FOR EACH ROW
+            WHEN (NEW.id IS NULL)
+            BEGIN
+                SELECT app_config_seq.NEXTVAL INTO :NEW.id FROM dual;
+            END;
+        </sql>
+        <rollback>
+            <sql>DROP TRIGGER app_config_bir</sql>
+            <dropTable tableName="app_config"/>
+            <dropSequence sequenceName="app_config_seq"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="user-roles-table" author="docflow">
+        <comment>Create user_roles table with sequence and trigger</comment>
+        <createSequence sequenceName="user_roles_seq" startValue="1"/>
+        <createTable tableName="user_roles">
+            <column name="id" type="NUMBER(19)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="VARCHAR2(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="role_name" type="VARCHAR2(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="assigned_at" type="TIMESTAMP(6)" defaultValueComputed="SYSTIMESTAMP"/>
+        </createTable>
+        <addUniqueConstraint tableName="user_roles" columnNames="user_id, role_name" constraintName="uk_user_roles_user_role"/>
+        <sql>
+            CREATE OR REPLACE TRIGGER user_roles_bir
+            BEFORE INSERT ON user_roles
+            FOR EACH ROW
+            WHEN (NEW.id IS NULL)
+            BEGIN
+                SELECT user_roles_seq.NEXTVAL INTO :NEW.id FROM dual;
+            END;
+        </sql>
+        <rollback>
+            <sql>DROP TRIGGER user_roles_bir</sql>
+            <dropUniqueConstraint tableName="user_roles" constraintName="uk_user_roles_user_role"/>
+            <dropTable tableName="user_roles"/>
+            <dropSequence sequenceName="user_roles_seq"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="seed-user-roles" author="docflow">
+        <comment>Seed default user roles</comment>
+        <insert tableName="user_roles">
+            <column name="id" valueComputed="user_roles_seq.NEXTVAL"/>
+            <column name="user_id" value="admin1"/>
+            <column name="role_name" value="ADMIN"/>
+            <column name="assigned_at" valueComputed="SYSTIMESTAMP"/>
+        </insert>
+        <insert tableName="user_roles">
+            <column name="id" valueComputed="user_roles_seq.NEXTVAL"/>
+            <column name="user_id" value="maker1"/>
+            <column name="role_name" value="MAKER"/>
+            <column name="assigned_at" valueComputed="SYSTIMESTAMP"/>
+        </insert>
+        <insert tableName="user_roles">
+            <column name="id" valueComputed="user_roles_seq.NEXTVAL"/>
+            <column name="user_id" value="reviewer1"/>
+            <column name="role_name" value="REVIEWER"/>
+            <column name="assigned_at" valueComputed="SYSTIMESTAMP"/>
+        </insert>
+        <insert tableName="user_roles">
+            <column name="id" valueComputed="user_roles_seq.NEXTVAL"/>
+            <column name="user_id" value="checker1"/>
+            <column name="role_name" value="CHECKER"/>
+            <column name="assigned_at" valueComputed="SYSTIMESTAMP"/>
+        </insert>
+        <rollback>
+            <delete tableName="user_roles">
+                <where>user_id IN ('admin1','maker1','reviewer1','checker1')</where>
+            </delete>
+        </rollback>
     </changeSet>
 
 </databaseChangeLog>
