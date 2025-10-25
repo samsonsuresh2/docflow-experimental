@@ -1,0 +1,33 @@
+spring:
+  datasource:
+    url: jdbc:oracle:thin:@localhost:1522/FREEPDB1
+    username: docflow
+    password: docflow
+    driver-class-name: oracle.jdbc.OracleDriver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.OracleDialect
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+docflow:
+  storage:
+    type: filesystem
+    filesystem:
+      root: uploads

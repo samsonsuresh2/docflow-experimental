@@ -1,0 +1,362 @@
+{
+  "info": {
+    "name": "DocFlow Oracle Workflow",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "End-to-end workflow collection for DocFlow Oracle deployment."
+  },
+  "item": [
+    {
+      "name": "Fetch Upload Fields",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-USER-ID",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/config/upload-fields",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "config",
+            "upload-fields"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Save Upload Fields",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-USER-ID",
+            "value": "{{userId}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{{uploadFieldsPayload}}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/config/upload-fields",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "config",
+            "upload-fields"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Upload Document",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-USER-ID",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "metadata",
+              "type": "text",
+              "value": "{\n  \"documentNumber\": \"DOC-2024-001\",\n  \"title\": \"Treasury Policy Update\",\n  \"metadata\": {\n    \"customerName\": \"Acme Corp\",\n    \"applicationDate\": \"2024-05-01\",\n    \"loanAmount\": 250000,\n    \"productType\": \"Working Capital\",\n    \"riskRating\": \"MEDIUM\"\n  }\n}"
+            },
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{sampleFilePath}}"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/documents/upload",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "documents",
+            "upload"
+          ]
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "  const json = pm.response.json();",
+              "  pm.collectionVariables.set('documentId', json.id);",
+              "}",
+              ""
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Document",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-USER-ID",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/documents/{{documentId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "documents",
+            "{{documentId}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Update Metadata",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "X-USER-ID",
+            "value": "{{userId}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"metadata\": {\n    \"loanAmount\": 275000,\n    \"riskRating\": \"LOW\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/documents/{{documentId}}/metadata",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "documents",
+            "{{documentId}}",
+            "metadata"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Audit Trail",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-USER-ID",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/documents/{{documentId}}/audit",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "documents",
+            "{{documentId}}",
+            "audit"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Submit Document",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "X-USER-ID",
+            "value": "{{userId}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/documents/{{documentId}}/submit",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "documents",
+            "{{documentId}}",
+            "submit"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Move To Under Review",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "X-USER-ID",
+            "value": "{{userId}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"comment\": \"All validations passed.\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/documents/{{documentId}}/under-review",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "documents",
+            "{{documentId}}",
+            "under-review"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Approve Document",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "X-USER-ID",
+            "value": "{{userId}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"comment\": \"Approved for release.\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/documents/{{documentId}}/approve",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "documents",
+            "{{documentId}}",
+            "approve"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Close Document",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "X-USER-ID",
+            "value": "{{userId}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"comment\": \"All obligations met.\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/documents/{{documentId}}/close",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "documents",
+            "{{documentId}}",
+            "close"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "userId",
+      "value": "maker1"
+    },
+    {
+      "key": "uploadFieldsPayload",
+      "value": "{\n  \"type\": \"UPLOAD_FIELDS\",\n  \"version\": 1,\n  \"fields\": [\n    {\n      \"key\": \"customerName\",\n      \"label\": \"Customer Name\",\n      \"type\": \"text\",\n      \"required\": true,\n      \"maxLength\": 120\n    },\n    {\n      \"key\": \"applicationDate\",\n      \"label\": \"Application Date\",\n      \"type\": \"date\",\n      \"required\": true\n    },\n    {\n      \"key\": \"loanAmount\",\n      \"label\": \"Loan Amount\",\n      \"type\": \"number\",\n      \"required\": true,\n      \"min\": 10000,\n      \"step\": 1000\n    },\n    {\n      \"key\": \"productType\",\n      \"label\": \"Product Type\",\n      \"type\": \"select\",\n      \"options\": [\n        \"Home Loan\",\n        \"Auto Loan\",\n        \"Working Capital\"\n      ]\n    },\n    {\n      \"key\": \"riskRating\",\n      \"label\": \"Risk Rating\",\n      \"type\": \"dropdown\",\n      \"options\": [\n        {\n          \"label\": \"Low\",\n          \"value\": \"LOW\"\n        },\n        {\n          \"label\": \"Medium\",\n          \"value\": \"MEDIUM\"\n        },\n        {\n          \"label\": \"High\",\n          \"value\": \"HIGH\"\n        }\n      ]\n    }\n  ]\n}"
+    },
+    {
+      "key": "sampleFilePath",
+      "value": "" 
+    },
+    {
+      "key": "documentId",
+      "value": ""
+    }
+  ]
+}
