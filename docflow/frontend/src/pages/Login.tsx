@@ -6,11 +6,11 @@ import { findUserById, USER_OPTIONS } from '../lib/user';
 export default function Login() {
   const navigate = useNavigate();
   const { user, setUser } = useUser();
-  const [selectedUserId, setSelectedUserId] = useState<string>(user?.id ?? USER_OPTIONS[0].id);
+  const [selectedUserId, setSelectedUserId] = useState<string>(user?.userId ?? USER_OPTIONS[0].userId);
 
   useEffect(() => {
     if (user) {
-      setSelectedUserId(user.id);
+      setSelectedUserId(user.userId);
     }
   }, [user]);
 
@@ -41,8 +41,8 @@ export default function Login() {
               onChange={(event) => setSelectedUserId(event.target.value)}
             >
               {USER_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.id} · {option.role}
+                <option key={option.userId} value={option.userId}>
+                  {option.userId} · {option.role}
                 </option>
               ))}
             </select>

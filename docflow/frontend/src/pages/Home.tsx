@@ -10,7 +10,7 @@ export default function Home() {
         <h1 className="text-2xl font-semibold text-slate-800">Welcome to DocFlow</h1>
         <p className="mt-2 text-sm text-slate-600">
           {user
-            ? `You are signed in as ${user.id} (${user.role}). Use the navigation to manage documents, configure upload fields, or review the audit trail.`
+            ? `You are signed in as ${user.userId} (${user.role}). Use the navigation to manage documents, configure upload fields, or review the audit trail.`
             : 'Choose a user profile to begin. Navigate to the Login page and pick a role to start working with documents.'}
         </p>
       </div>
