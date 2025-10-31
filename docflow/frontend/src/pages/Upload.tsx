@@ -103,51 +103,54 @@ export default function Upload() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="rounded border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-semibold text-slate-800">Upload a new document</h1>
-        <p className="mt-2 text-sm text-slate-600">
+      <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
+        <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Upload a new document</h1>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
           Supply document identifiers and capture metadata using the dynamic upload configuration. The selected user will be
-          stored on each record via the <code className="rounded bg-slate-100 px-1">X-USER-ID</code> header.
+          stored on each record via the <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">X-USER-ID</code> header.
         </p>
       </div>
-      <form className="space-y-6 rounded border border-slate-200 bg-white p-6 shadow-sm" onSubmit={handleSubmit}>
+      <form
+        className="space-y-6 rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900"
+        onSubmit={handleSubmit}
+      >
         <fieldset className="space-y-4" disabled={submitting}>
-          <legend className="text-sm font-semibold uppercase tracking-wide text-slate-500">Document Details</legend>
+          <legend className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">Document Details</legend>
           <label className="block text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">Document Number</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Document Number</span>
             <input
               type="text"
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200"
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
               value={documentNumber}
               onChange={(event) => setDocumentNumber(event.target.value)}
               required
             />
           </label>
           <label className="block text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">Title</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Title</span>
             <input
               type="text"
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200"
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               required
             />
           </label>
           <label className="block text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">File</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">File</span>
             <input
               type="file"
-              className="mt-1 block w-full text-sm text-slate-600"
+              className="mt-1 block w-full text-sm text-slate-600 dark:text-slate-300"
               onChange={(event) => setFile(event.target.files ? event.target.files[0] : null)}
             />
           </label>
         </fieldset>
         <fieldset className="space-y-4" disabled={submitting}>
-          <legend className="text-sm font-semibold uppercase tracking-wide text-slate-500">Metadata</legend>
+          <legend className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">Metadata</legend>
           {loadingConfig ? (
-            <p className="text-sm text-slate-500">Loading metadata fields…</p>
+            <p className="text-sm text-slate-500 dark:text-slate-300">Loading metadata fields…</p>
           ) : availableFields.length === 0 ? (
-            <p className="text-sm text-slate-500">No dynamic metadata fields defined yet.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-300">No dynamic metadata fields defined yet.</p>
           ) : (
             <DynamicForm
               fields={availableFields}
@@ -158,12 +161,12 @@ export default function Upload() {
             />
           )}
         </fieldset>
-        {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
-        {statusMessage ? <p className="text-sm text-green-600">{statusMessage}</p> : null}
+        {errorMessage ? <p className="text-sm text-red-600 dark:text-red-400">{errorMessage}</p> : null}
+        {statusMessage ? <p className="text-sm text-green-600 dark:text-green-400">{statusMessage}</p> : null}
         <button
           type="submit"
           disabled={submitting}
-          className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+          className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-400 dark:disabled:bg-blue-400/50"
         >
           {submitting ? 'Uploading…' : 'Upload Document'}
         </button>
@@ -174,7 +177,7 @@ export default function Upload() {
 
 function AuthRequired() {
   return (
-    <div className="rounded border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
+    <div className="rounded border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300">
       Please sign in via the Login page to upload documents.
     </div>
   );

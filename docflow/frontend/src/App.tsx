@@ -6,23 +6,27 @@ import Review from './pages/Review';
 import Admin from './pages/Admin';
 import Audit from './pages/Audit';
 import { useUser } from './lib/UserContext';
+import ThemeToggle from './components/ThemeToggle';
 
 function App() {
   const navigate = useNavigate();
   const { user, setUser } = useUser();
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-    `rounded px-3 py-2 text-sm font-medium transition hover:bg-white/10 ${
-      isActive ? 'bg-white/20 text-white' : 'text-white/80'
-    }`;
+    [
+      'rounded px-3 py-2 text-sm font-medium transition-colors',
+      isActive
+        ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-100'
+        : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+    ].join(' ');
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="bg-slate-900 text-white shadow">
+    <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
+      <header className="bg-white text-slate-900 shadow transition-colors dark:bg-slate-900 dark:text-slate-100">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-4">
           <button
             type="button"
-            className="text-lg font-semibold"
+            className="text-lg font-semibold transition-colors hover:text-blue-600 dark:hover:text-blue-300"
             onClick={() => navigate('/')}
           >
             DocFlow Portal
@@ -44,10 +48,11 @@ function App() {
               Admin
             </NavLink>
           </nav>
-          <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-3 text-sm">
+            <ThemeToggle />
             {user ? (
               <>
-                <span className="rounded bg-slate-800 px-2 py-1 text-xs uppercase tracking-wide text-slate-100">
+                <span className="rounded bg-slate-200 px-2 py-1 text-xs uppercase tracking-wide text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                   {user.userId} · {user.role}
                 </span>
                 <button
@@ -56,7 +61,7 @@ function App() {
                     setUser(null);
                     navigate('/login');
                   }}
-                  className="rounded bg-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-white/20"
+                  className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400"
                 >
                   Logout
                 </button>
@@ -64,7 +69,7 @@ function App() {
             ) : (
               <button
                 type="button"
-                className="rounded bg-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-white/20"
+                className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400"
                 onClick={() => navigate('/login')}
               >
                 Login

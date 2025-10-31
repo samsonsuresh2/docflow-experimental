@@ -197,9 +197,9 @@ export default function Review() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-semibold text-slate-800">Document review</h1>
-        <p className="mt-2 text-sm text-slate-600">
+      <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
+        <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Document review</h1>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
           Search for a document ID to review metadata, capture maker updates, or drive approval transitions based on your
           current role.
         </p>
@@ -207,13 +207,13 @@ export default function Review() {
           <input
             type="text"
             placeholder="Document ID"
-            className="flex-1 min-w-[180px] rounded border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200"
+            className="flex-1 min-w-[180px] rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
             value={documentIdInput}
             onChange={(event) => setDocumentIdInput(event.target.value)}
           />
           <button
             type="submit"
-            className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700"
+            className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400"
             disabled={loadingDocument}
           >
             {loadingDocument ? 'Loading…' : 'Load Document'}
@@ -221,44 +221,44 @@ export default function Review() {
         </form>
       </div>
 
-      {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
-      {statusMessage ? <p className="text-sm text-green-600">{statusMessage}</p> : null}
+      {errorMessage ? <p className="text-sm text-red-600 dark:text-red-400">{errorMessage}</p> : null}
+      {statusMessage ? <p className="text-sm text-green-600 dark:text-green-400">{statusMessage}</p> : null}
 
       {document ? (
         <div className="space-y-6">
-          <div className="rounded border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-slate-800">{document.title}</h2>
-                <p className="text-sm text-slate-600">Document #{document.documentNumber}</p>
+                <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{document.title}</h2>
+                <p className="text-sm text-slate-600 dark:text-slate-300">Document #{document.documentNumber}</p>
               </div>
               <StatusBadge status={document.status} />
             </div>
             <dl className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
-                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Created By</dt>
-                <dd className="text-sm text-slate-700">{document.createdBy}</dd>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Created By</dt>
+                <dd className="text-sm text-slate-700 dark:text-slate-200">{document.createdBy}</dd>
               </div>
               <div>
-                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Last Updated By</dt>
-                <dd className="text-sm text-slate-700">{document.updatedBy ?? '—'}</dd>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Last Updated By</dt>
+                <dd className="text-sm text-slate-700 dark:text-slate-200">{document.updatedBy ?? '—'}</dd>
               </div>
             </dl>
           </div>
 
-          <div className="rounded border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-800">Metadata</h3>
+              <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Metadata</h3>
               {canEdit ? (
-                <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Editable</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Editable</span>
               ) : (
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Read only</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Read only</span>
               )}
             </div>
             {configLoading && availableFields.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-500">Loading field configuration…</p>
+              <p className="mt-4 text-sm text-slate-500 dark:text-slate-300">Loading field configuration…</p>
             ) : availableFields.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-500">No metadata fields configured for this role.</p>
+              <p className="mt-4 text-sm text-slate-500 dark:text-slate-300">No metadata fields configured for this role.</p>
             ) : (
               <DynamicForm
                 fields={availableFields}
@@ -271,15 +271,15 @@ export default function Review() {
             )}
           </div>
           {availableActions.length > 0 ? (
-            <div className="rounded border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+            <div className="space-y-4 rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
               <div>
-                <h3 className="text-lg font-semibold text-slate-800">Workflow Actions</h3>
-                <p className="mt-1 text-sm text-slate-600">Trigger the next state transition permitted for your role.</p>
+                <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Workflow Actions</h3>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Trigger the next state transition permitted for your role.</p>
               </div>
               <label className="block text-sm">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">Comment (optional)</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Comment (optional)</span>
                 <textarea
-                  className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200"
+                  className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
                   rows={3}
                   value={actionComment}
                   onChange={(event) => setActionComment(event.target.value)}
@@ -290,7 +290,7 @@ export default function Review() {
                   <button
                     key={action.key}
                     type="button"
-                    className="inline-flex items-center rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                    className="inline-flex items-center rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 dark:disabled:bg-slate-700 dark:disabled:text-slate-300"
                     onClick={() => handleWorkflowAction(action.key)}
                     disabled={busy}
                   >
@@ -396,7 +396,7 @@ function buildMetadataPayload(
 
 function AuthRequired() {
   return (
-    <div className="rounded border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
+    <div className="rounded border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300">
       Please sign in via the Login page to review documents.
     </div>
   );
