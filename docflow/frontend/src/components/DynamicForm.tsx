@@ -50,7 +50,7 @@ export default function DynamicForm({
     <div className="space-y-4">
       {effectiveFields.map((field) => (
         <label key={field.name} className="block text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
             {field.label}
             {field.required ? <span className="ml-1 text-red-500">*</span> : null}
           </span>
@@ -61,7 +61,7 @@ export default function DynamicForm({
         <button
           type="submit"
           disabled={disabled}
-          className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+          className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-400 dark:disabled:bg-blue-400/50"
         >
           {submitLabel ?? 'Submit'}
         </button>
@@ -102,7 +102,7 @@ function renderInput(
     onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       onChange(event.target.value),
     className:
-      'mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-100',
+      'mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40 dark:disabled:bg-slate-800',
   };
 
   switch (field.type) {
