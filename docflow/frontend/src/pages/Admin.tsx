@@ -98,19 +98,27 @@ export default function Admin() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div className="rounded border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-semibold text-slate-800">Upload field configuration</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Define dynamic metadata fields in JSON. Each field supports <code>name</code>, <code>label</code>, <code>type</code>,
-          <code>required</code>, optional <code>options</code> for selects, and <code>roles</code> to restrict visibility.
+      <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
+        <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Upload field configuration</h1>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+          Define dynamic metadata fields in JSON. Each field supports{' '}
+          <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">name</code>,{' '}
+          <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">label</code>,{' '}
+          <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">type</code>,{' '}
+          <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">required</code>, optional{' '}
+          <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">options</code> for selects, and{' '}
+          <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">roles</code> to restrict visibility.
         </p>
       </div>
-      <form className="space-y-4 rounded border border-slate-200 bg-white p-6 shadow-sm" onSubmit={handleSave}>
+      <form
+        className="space-y-4 rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900"
+        onSubmit={handleSave}
+      >
         <label className="block text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">Configuration JSON</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Configuration JSON</span>
           <textarea
             rows={18}
-            className="mt-1 w-full rounded border border-slate-300 px-3 py-2 font-mono text-sm focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200"
+            className="mt-1 w-full rounded border border-slate-300 px-3 py-2 font-mono text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
             value={configText}
             onChange={(event) => setConfigText(event.target.value)}
             disabled={loading || saving}
@@ -119,7 +127,7 @@ export default function Admin() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className="inline-flex items-center rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
+            className="inline-flex items-center rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800/80"
             onClick={handlePrettify}
             disabled={loading || saving}
           >
@@ -127,15 +135,15 @@ export default function Admin() {
           </button>
           <button
             type="submit"
-            className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+            className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-400 dark:disabled:bg-blue-400/50"
             disabled={loading || saving}
           >
             {saving ? 'Saving…' : 'Save Configuration'}
           </button>
         </div>
-        {loading ? <p className="text-sm text-slate-500">Loading configuration…</p> : null}
-        {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
-        {statusMessage ? <p className="text-sm text-green-600">{statusMessage}</p> : null}
+        {loading ? <p className="text-sm text-slate-500 dark:text-slate-300">Loading configuration…</p> : null}
+        {errorMessage ? <p className="text-sm text-red-600 dark:text-red-400">{errorMessage}</p> : null}
+        {statusMessage ? <p className="text-sm text-green-600 dark:text-green-400">{statusMessage}</p> : null}
       </form>
     </div>
   );
@@ -143,6 +151,8 @@ export default function Admin() {
 
 function AuthRequired({ message }: { message: string }) {
   return (
-    <div className="rounded border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">{message}</div>
+    <div className="rounded border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300">
+      {message}
+    </div>
   );
 }
