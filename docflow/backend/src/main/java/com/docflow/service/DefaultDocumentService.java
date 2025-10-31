@@ -44,6 +44,7 @@ public class DefaultDocumentService implements DocumentService {
     }
 
     @Override
+    @Transactional
     public DocumentResponse createDocument(DocumentUploadMetadata metadata, MultipartFile file, RequestUser user) {
         validateUniqueDocumentNumber(metadata.getDocumentNumber());
 

@@ -19,12 +19,16 @@ server:
 logging:
   level:
     root: INFO
+    com.docflow: DEBUG   # enables your aspect debug logs
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: ["health", "info", "loggers"]   # expose logger control
+  endpoint:
+    loggers:
+      enabled: true
 
 docflow:
   storage:
