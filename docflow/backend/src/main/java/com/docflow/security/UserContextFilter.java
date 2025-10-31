@@ -8,25 +8,36 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
 public class UserContextFilter extends OncePerRequestFilter {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(UserContextFilter.class);
     private static final String USER_HEADER = "X-USER-ID";
 
     private final RequestUserContext requestUserContext;
     private final UserRoleRepository userRoleRepository;
+    private final boolean devProfileActive;
 
-    public UserContextFilter(RequestUserContext requestUserContext, UserRoleRepository userRoleRepository) {
+    public UserContextFilter(
+            RequestUserContext requestUserContext,
+            UserRoleRepository userRoleRepository,
+            Environment environment
+    ) {
         this.requestUserContext = requestUserContext;
         this.userRoleRepository = userRoleRepository;
+        this.devProfileActive = Arrays.asList(environment.getActiveProfiles()).contains("dev");
     }
 
     @Override
@@ -39,6 +50,19 @@ public class UserContextFilter extends OncePerRequestFilter {
 
         String userId = request.getHeader(USER_HEADER);
         if (userId == null || userId.isBlank()) {
+            if (devProfileActive) {
+                LOGGER.warn(
+                        "Request {} {} missing X-USER-ID header; continuing because 'dev' profile is active",
+                        request.getMethod(),
+                        request.getRequestURI()
+                );
+                try {
+                    filterChain.doFilter(request, response);
+                } finally {
+                    requestUserContext.clear();
+                }
+                return;
+            }
             response.sendError(HttpStatus.UNAUTHORIZED.value(), "Missing X-USER-ID header");
             return;
         }

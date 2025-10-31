@@ -48,7 +48,7 @@ function App() {
             {user ? (
               <>
                 <span className="rounded bg-slate-800 px-2 py-1 text-xs uppercase tracking-wide text-slate-100">
-                  {user.id} · {user.role}
+                  {user.userId} · {user.role}
                 </span>
                 <button
                   type="button"

@@ -9,7 +9,7 @@ client.interceptors.request.use((config) => {
   const user = loadUser();
   if (user) {
     config.headers = config.headers ?? {};
-    config.headers['X-USER-ID'] = user.id;
+    config.headers['X-USER-ID'] = user.userId;
   }
   return config;
 });
