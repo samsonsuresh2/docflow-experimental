@@ -4,23 +4,15 @@ import StatusBadge from '../components/StatusBadge';
 import api from '../lib/api';
 import { fieldsForRole, parseUploadFieldConfig, UploadFieldDefinition } from '../lib/config';
 import { useUser } from '../lib/UserContext';
+import { DocumentStatus, normalizeStatus } from '../lib/documentStatus';
 import type { UserRole } from '../lib/user';
+import type { DocumentResponse } from '../types/documents';
 
 interface ConfigResponse {
   configJson: string | null;
 }
 
-interface DocumentResponse {
-  id: number;
-  documentNumber: string;
-  title: string;
-  status: string;
-  createdBy: string;
-  updatedBy: string | null;
-  metadata: Record<string, unknown> | null;
-}
-
-type WorkflowAction = 'submit' | 'startReview' | 'approve' | 'rework' | 'close';
+type WorkflowAction = 'submit' | 'startReview' | 'approve' | 'reject' | 'rework' | 'close';
 
 export default function Review() {
   const { user } = useUser();
@@ -34,6 +26,8 @@ export default function Review() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [actionComment, setActionComment] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const normalizedStatus = normalizeStatus(document?.status ?? null);
 
   useEffect(() => {
     let isMounted = true;
@@ -70,13 +64,13 @@ export default function Review() {
       .filter((key) => !baseFields.some((field) => field.name === key))
       .map<UploadFieldDefinition>((key) => ({ name: key, label: key, type: 'text' }));
 
-    const editable = canEditMetadata(user?.role ?? null, document?.status ?? null);
+    const editable = canEditMetadata(user?.role ?? null, normalizedStatus);
 
     return [...baseFields, ...extraFields].map((field) => ({
       ...field,
       readOnly: Boolean(field.readOnly) || !editable,
     }));
-  }, [fields, user?.role, document]);
+  }, [fields, user?.role, document, normalizedStatus]);
 
   useEffect(() => {
     if (!document) {
@@ -133,7 +127,7 @@ export default function Review() {
     if (!document) {
       return;
     }
-    const editable = canEditMetadata(user.role, document.status);
+    const editable = canEditMetadata(user.role, normalizedStatus);
     if (!editable) {
       setErrorMessage('You do not have permission to update metadata for this document.');
       return;
@@ -154,8 +148,8 @@ export default function Review() {
     }
   };
 
-  const availableActions = determineActions(user.role, document?.status ?? null);
-  const canEdit = document ? canEditMetadata(user.role, document.status) : false;
+  const availableActions = determineActions(user.role, normalizedStatus);
+  const canEdit = canEditMetadata(user.role, normalizedStatus);
 
   const handleWorkflowAction = async (action: WorkflowAction) => {
     if (!document) {
@@ -175,6 +169,9 @@ export default function Review() {
           break;
         case 'approve':
           await api.put(`/documents/${document.id}/approve`, commentPayload);
+          break;
+        case 'reject':
+          await api.put(`/documents/${document.id}/reject`, commentPayload);
           break;
         case 'rework':
           await api.put(`/documents/${document.id}/rework`, commentPayload);
@@ -306,24 +303,17 @@ export default function Review() {
   );
 }
 
-function canEditMetadata(role: UserRole | null, status: string | null) {
+function canEditMetadata(role: UserRole | null, status: DocumentStatus | null) {
   if (!role || !status) {
     return false;
   }
-  if (role === 'ADMIN') {
-    return true;
+  if (role !== 'MAKER') {
+    return false;
   }
-  switch (role) {
-    case 'MAKER':
-      return status === 'Draft' || status === 'Rework';
-    case 'REVIEWER':
-      return status === 'Under Review';
-    default:
-      return false;
-  }
+  return status === 'DRAFT' || status === 'OPEN';
 }
 
-function determineActions(role: UserRole, status: string | null): { key: WorkflowAction; label: string }[] {
+function determineActions(role: UserRole, status: DocumentStatus | null): { key: WorkflowAction; label: string }[] {
   if (!status) {
     return [];
   }
@@ -333,39 +323,42 @@ function determineActions(role: UserRole, status: string | null): { key: Workflo
 
   switch (role) {
     case 'MAKER':
-      return status === 'Draft' || status === 'Rework'
-        ? [{ key: 'submit', label: 'Submit for Review' }]
-        : [];
+      return status === 'DRAFT' ? [{ key: 'submit', label: 'Submit for Review' }] : [];
     case 'REVIEWER':
-      if (status === 'Submitted') {
+      if (status === 'OPEN') {
         return [{ key: 'startReview', label: 'Start Review' }];
       }
-      if (status === 'Under Review') {
+      if (status === 'UNDER_REVIEW') {
         return [
           { key: 'approve', label: 'Approve' },
-          { key: 'rework', label: 'Request Rework' },
+          { key: 'rework', label: 'Rework' },
+          { key: 'reject', label: 'Reject' },
         ];
       }
       return [];
     case 'CHECKER':
-      return status === 'Approved' ? [{ key: 'close', label: 'Close Document' }] : [];
+      return status === 'APPROVED' ? [{ key: 'close', label: 'Close Document' }] : [];
     default:
       return [];
   }
 }
 
-function buildFullActionList(status: string): { key: WorkflowAction; label: string }[] {
+function buildFullActionList(status: DocumentStatus): { key: WorkflowAction; label: string }[] {
   const actions: { key: WorkflowAction; label: string }[] = [];
-  if (status === 'Draft' || status === 'Rework') {
+  if (status === 'DRAFT') {
     actions.push({ key: 'submit', label: 'Submit for Review' });
   }
-  if (status === 'Submitted') {
+  if (status === 'OPEN') {
     actions.push({ key: 'startReview', label: 'Start Review' });
   }
-  if (status === 'Under Review') {
-    actions.push({ key: 'approve', label: 'Approve' }, { key: 'rework', label: 'Request Rework' });
+  if (status === 'UNDER_REVIEW') {
+    actions.push(
+      { key: 'approve', label: 'Approve' },
+      { key: 'rework', label: 'Rework' },
+      { key: 'reject', label: 'Reject' },
+    );
   }
-  if (status === 'Approved') {
+  if (status === 'APPROVED') {
     actions.push({ key: 'close', label: 'Close Document' });
   }
   return actions;

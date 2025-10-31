@@ -73,7 +73,7 @@ public class DefaultDocumentService implements DocumentService {
 
     @Override
     public DocumentResponse submitDocument(Long id, RequestUser user) {
-        return updateStatus(id, DocumentStatus.SUBMITTED, user, "SUBMIT", null);
+        return updateStatus(id, DocumentStatus.OPEN, user, "SUBMIT", null);
     }
 
     @Override
@@ -117,11 +117,6 @@ public class DefaultDocumentService implements DocumentService {
     }
 
     @Override
-    public DocumentResponse markForRework(Long id, RequestUser user, String comment) {
-        return updateStatus(id, DocumentStatus.REWORK, user, "REWORK", comment);
-    }
-
-    @Override
     public DocumentResponse approve(Long id, RequestUser user, String comment) {
         return updateStatus(id, DocumentStatus.APPROVED, user, "APPROVE", comment);
     }
@@ -138,6 +133,16 @@ public class DefaultDocumentService implements DocumentService {
     @Override
     public DocumentResponse moveToUnderReview(Long id, RequestUser user, String comment) {
         return updateStatus(id, DocumentStatus.UNDER_REVIEW, user, "UNDER_REVIEW", comment);
+    }
+
+    @Override
+    public DocumentResponse reject(Long id, RequestUser user, String comment) {
+        return updateStatus(id, DocumentStatus.OPEN, user, "REJECT", comment);
+    }
+
+    @Override
+    public DocumentResponse rework(Long id, RequestUser user, String comment) {
+        return updateStatus(id, DocumentStatus.OPEN, user, "REWORK", comment);
     }
 
     private void validateUniqueDocumentNumber(String documentNumber) {

@@ -2,9 +2,8 @@ package com.docflow.domain;
 
 public enum DocumentStatus {
     DRAFT,
-    SUBMITTED,
+    OPEN,
     UNDER_REVIEW,
-    REWORK,
     APPROVED,
     CLOSED
 }

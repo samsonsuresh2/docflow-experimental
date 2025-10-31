@@ -33,10 +33,13 @@ public interface DocumentService {
     List<AuditLog> getAuditTrail(Long id);
 
     @Transactional
-    DocumentResponse markForRework(Long id, RequestUser user, String comment);
+    DocumentResponse reject(Long id, RequestUser user, String comment);
 
     @Transactional
     DocumentResponse approve(Long id, RequestUser user, String comment);
+
+    @Transactional
+    DocumentResponse rework(Long id, RequestUser user, String comment);
 
     @Transactional
     DocumentResponse close(Long id, RequestUser user, String comment);
