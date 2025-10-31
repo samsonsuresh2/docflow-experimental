@@ -1,0 +1,6 @@
+jar tf target/docflow-backend-0.1.0.jar | findstr MANIFEST.MF
+jar xf target/docflow-backend-0.1.0.jar META-INF/MANIFEST.MF
+type META-INF\MANIFEST.MF
+
+Oracle dba password:
+SQL> ALTER USER SYS IDENTIFIED BY Welcome1; - Welcome1 is the password
