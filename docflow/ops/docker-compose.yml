@@ -1,20 +1,38 @@
-version: '3.8'
-
 services:
   backend:
     build:
       context: ../backend
+    container_name: ops-backend-1
     environment:
       SPRING_DATASOURCE_URL: jdbc:oracle:thin:@host.docker.internal:1522/XEPDB1
       SPRING_DATASOURCE_USERNAME: DOCFLOW_EXP
       SPRING_DATASOURCE_PASSWORD: docflow_exp
     ports:
       - "8080:8080"
+    networks:
+      - docflow-net
 
   frontend:
     build:
       context: ../frontend
+    container_name: ops-frontend-1
     depends_on:
       - backend
     ports:
       - "3000:80"
+    networks:
+      - docflow-net
+
+# Oracle runs separately (outside this compose file)
+# oracle:
+#   image: gvenzl/oracle-xe:21-slim
+#   container_name: oracle19
+#   ports:
+#     - "1522:1521"
+#   volumes:
+#     - C:\oradata\oracle19:/opt/oracle/oradata
+#   networks:
+#     - docflow-net
+
+networks:
+  docflow-net:
