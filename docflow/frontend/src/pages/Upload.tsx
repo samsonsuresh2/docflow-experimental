@@ -3,6 +3,7 @@ import DynamicForm from '../components/DynamicForm';
 import api from '../lib/api';
 import { fieldsForRole, parseUploadFieldConfig, UploadFieldDefinition } from '../lib/config';
 import { useUser } from '../lib/UserContext';
+import type { DocumentResponse } from '../types/documents';
 
 interface ConfigResponse {
   configJson: string | null;
@@ -19,6 +20,7 @@ export default function Upload() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [activeAction, setActiveAction] = useState<'save' | 'submit' | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -58,8 +60,7 @@ export default function Upload() {
     return <AuthRequired />;
   }
 
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
+  const performUpload = async (intent: 'save' | 'submit') => {
     setStatusMessage(null);
     setErrorMessage(null);
 
@@ -70,6 +71,7 @@ export default function Upload() {
 
     try {
       setSubmitting(true);
+      setActiveAction(intent);
       const metadata = buildMetadataPayload(availableFields, metadataValues);
       const payload = {
         documentNumber: documentNumber.trim(),
@@ -83,13 +85,24 @@ export default function Upload() {
         formData.append('file', file);
       }
 
-      await api.post('/documents/upload', formData, {
+      const response = await api.post<DocumentResponse>('/documents/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
 
-      setStatusMessage('Document uploaded successfully.');
+      if (intent === 'submit') {
+        try {
+          await api.put(`/documents/${response.data.id}/submit`);
+          setStatusMessage('Document submitted and moved to Open status.');
+        } catch (error) {
+          setErrorMessage('Document saved as draft, but submission failed. Please submit from the Review page.');
+          return;
+        }
+      } else {
+        setStatusMessage('Document saved as a draft.');
+      }
+
       setDocumentNumber('');
       setTitle('');
       setMetadataValues({});
@@ -98,7 +111,13 @@ export default function Upload() {
       setErrorMessage('Upload failed. Please verify your inputs and try again.');
     } finally {
       setSubmitting(false);
+      setActiveAction(null);
     }
+  };
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    await performUpload('save');
   };
 
   return (
@@ -163,13 +182,23 @@ export default function Upload() {
         </fieldset>
         {errorMessage ? <p className="text-sm text-red-600 dark:text-red-400">{errorMessage}</p> : null}
         {statusMessage ? <p className="text-sm text-green-600 dark:text-green-400">{statusMessage}</p> : null}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-400 dark:disabled:bg-blue-400/50"
-        >
-          {submitting ? 'Uploading…' : 'Upload Document'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="inline-flex items-center rounded bg-slate-700 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400 dark:bg-slate-600 dark:hover:bg-slate-500 dark:disabled:bg-slate-700/60"
+          >
+            {submitting && activeAction === 'save' ? 'Saving…' : 'Save Draft'}
+          </button>
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={() => performUpload('submit')}
+            className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-400 dark:disabled:bg-blue-400/50"
+          >
+            {submitting && activeAction === 'submit' ? 'Submitting…' : 'Submit to Open'}
+          </button>
+        </div>
       </form>
     </div>
   );

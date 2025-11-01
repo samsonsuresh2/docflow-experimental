@@ -95,18 +95,6 @@ public class DocumentController {
         return ResponseEntity.ok(response);
     }
 
-    // ────────────────────────────── REWORK ──────────────────────────────
-    @PutMapping("/{id}/rework")
-    public ResponseEntity<DocumentResponse> markForRework(
-        @PathVariable Long id,
-        @Valid @RequestBody(required = false) DocumentActionRequest request) {
-
-        RequestUser user = requestUserContext.requireUser();
-        String comment = (request != null) ? request.getComment() : null;
-        DocumentResponse response = documentService.markForRework(id, user, comment);
-        return ResponseEntity.ok(response);
-    }
-
     // ────────────────────────────── APPROVE ──────────────────────────────
     @PutMapping("/{id}/approve")
     public ResponseEntity<DocumentResponse> approve(
@@ -116,6 +104,30 @@ public class DocumentController {
         RequestUser user = requestUserContext.requireUser();
         String comment = (request != null) ? request.getComment() : null;
         DocumentResponse response = documentService.approve(id, user, comment);
+        return ResponseEntity.ok(response);
+    }
+
+    // ────────────────────────────── REJECT ──────────────────────────────
+    @PutMapping("/{id}/reject")
+    public ResponseEntity<DocumentResponse> reject(
+        @PathVariable Long id,
+        @Valid @RequestBody(required = false) DocumentActionRequest request) {
+
+        RequestUser user = requestUserContext.requireUser();
+        String comment = (request != null) ? request.getComment() : null;
+        DocumentResponse response = documentService.reject(id, user, comment);
+        return ResponseEntity.ok(response);
+    }
+
+    // ────────────────────────────── REWORK ──────────────────────────────
+    @PutMapping("/{id}/rework")
+    public ResponseEntity<DocumentResponse> rework(
+        @PathVariable Long id,
+        @Valid @RequestBody(required = false) DocumentActionRequest request) {
+
+        RequestUser user = requestUserContext.requireUser();
+        String comment = (request != null) ? request.getComment() : null;
+        DocumentResponse response = documentService.rework(id, user, comment);
         return ResponseEntity.ok(response);
     }
 
