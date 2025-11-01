@@ -1,8 +1,10 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import DocumentPreviewModal, { PreviewContent } from '../components/DocumentPreviewModal';
 import DynamicForm from '../components/DynamicForm';
 import StatusBadge from '../components/StatusBadge';
 import api from '../lib/api';
 import { fieldsForRole, parseUploadFieldConfig, UploadFieldDefinition } from '../lib/config';
+import { convertDocxToHtml, convertXlsxToHtml } from '../lib/documentPreview';
 import { useUser } from '../lib/UserContext';
 import { DocumentStatus, normalizeStatus } from '../lib/documentStatus';
 import type { UserRole } from '../lib/user';
@@ -26,6 +28,12 @@ export default function Review() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [actionComment, setActionComment] = useState('');
   const [busy, setBusy] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewContent, setPreviewContent] = useState<PreviewContent | null>(null);
+  const [previewDownloadUrl, setPreviewDownloadUrl] = useState<string | null>(null);
+  const [previewFileName, setPreviewFileName] = useState<string | null>(null);
 
   const normalizedStatus = normalizeStatus(document?.status ?? null);
 
@@ -90,6 +98,14 @@ export default function Review() {
     setMetadataValues(initialValues);
   }, [document]);
 
+  useEffect(() => {
+    return () => {
+      if (previewDownloadUrl) {
+        URL.revokeObjectURL(previewDownloadUrl);
+      }
+    };
+  }, [previewDownloadUrl]);
+
   if (!user) {
     return <AuthRequired />;
   }
@@ -150,6 +166,7 @@ export default function Review() {
 
   const availableActions = determineActions(user.role, normalizedStatus);
   const canEdit = canEditMetadata(user.role, normalizedStatus);
+  const canPreview = Boolean(document?.filePath);
 
   const handleWorkflowAction = async (action: WorkflowAction) => {
     if (!document) {
@@ -189,6 +206,88 @@ export default function Review() {
       setErrorMessage('Workflow action failed.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handlePreview = async () => {
+    if (!document || !document.filePath) {
+      return;
+    }
+
+    if (previewDownloadUrl) {
+      URL.revokeObjectURL(previewDownloadUrl);
+      setPreviewDownloadUrl(null);
+    }
+
+    const fileName = extractFileName(document.filePath) ?? `document-${document.id}`;
+    setPreviewFileName(fileName);
+    setPreviewOpen(true);
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewContent(null);
+
+    let objectUrl: string | null = null;
+    try {
+      const response = await api.get<Blob>(`/documents/download/${document.id}`, {
+        responseType: 'blob',
+      });
+      const blob = response.data as Blob;
+      objectUrl = URL.createObjectURL(blob);
+      setPreviewDownloadUrl(objectUrl);
+
+      const extension = determineFileExtension(fileName, response.headers['content-type'] as string | undefined);
+
+      let content: PreviewContent;
+      switch (extension) {
+        case 'pdf':
+          content = { kind: 'pdf', url: objectUrl };
+          break;
+        case 'txt': {
+          const text = await blob.text();
+          content = { kind: 'text', text };
+          break;
+        }
+        case 'docx': {
+          const html = await convertDocxToHtml(await blob.arrayBuffer());
+          content = { kind: 'docx', html: html.html };
+          break;
+        }
+        case 'xlsx': {
+          const html = await convertXlsxToHtml(await blob.arrayBuffer());
+          content = { kind: 'xlsx', html: html.html };
+          break;
+        }
+        default:
+          content = { kind: 'unsupported', message: 'Preview not available — use Download instead.' };
+          break;
+      }
+
+      setPreviewContent(content);
+    } catch (error) {
+      if (objectUrl) {
+        const message =
+          error instanceof Error && error.message.includes('DecompressionStream')
+            ? 'Preview not available in this browser. Please download the file instead.'
+            : 'Preview not available — use Download instead.';
+        setPreviewContent({ kind: 'unsupported', message });
+        setPreviewError(null);
+      } else {
+        setPreviewError('Unable to load document preview.');
+      }
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    setPreviewOpen(false);
+    setPreviewLoading(false);
+    setPreviewError(null);
+    setPreviewContent(null);
+    setPreviewFileName(null);
+    if (previewDownloadUrl) {
+      URL.revokeObjectURL(previewDownloadUrl);
+      setPreviewDownloadUrl(null);
     }
   };
 
@@ -267,22 +366,35 @@ export default function Review() {
               />
             )}
           </div>
-          {availableActions.length > 0 ? (
+          {canPreview || availableActions.length > 0 ? (
             <div className="space-y-4 rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
               <div>
                 <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Workflow Actions</h3>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Trigger the next state transition permitted for your role.</p>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                  Preview the uploaded file or trigger the next state transition permitted for your role.
+                </p>
               </div>
-              <label className="block text-sm">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Comment (optional)</span>
-                <textarea
-                  className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-                  rows={3}
-                  value={actionComment}
-                  onChange={(event) => setActionComment(event.target.value)}
-                />
-              </label>
+              {availableActions.length > 0 ? (
+                <label className="block text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Comment (optional)</span>
+                  <textarea
+                    className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                    rows={3}
+                    value={actionComment}
+                    onChange={(event) => setActionComment(event.target.value)}
+                  />
+                </label>
+              ) : null}
               <div className="flex flex-wrap gap-2">
+                {canPreview ? (
+                  <button
+                    type="button"
+                    className="inline-flex items-center rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
+                    onClick={handlePreview}
+                  >
+                    Preview
+                  </button>
+                ) : null}
                 {availableActions.map((action) => (
                   <button
                     key={action.key}
@@ -299,6 +411,15 @@ export default function Review() {
           ) : null}
         </div>
       ) : null}
+      <DocumentPreviewModal
+        isOpen={previewOpen}
+        onClose={handleClosePreview}
+        loading={previewLoading}
+        error={previewError}
+        content={previewContent}
+        downloadUrl={previewDownloadUrl}
+        fileName={previewFileName}
+      />
     </div>
   );
 }
@@ -376,6 +497,44 @@ function buildFullActionList(status: DocumentStatus): { key: WorkflowAction; lab
     default:
       return [];
   }
+}
+
+function extractFileName(filePath: string): string | null {
+  const trimmed = filePath.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const withoutQuery = trimmed.split('?')[0] ?? trimmed;
+  const segments = withoutQuery.split(/[/\\]/);
+  const lastSegment = segments[segments.length - 1];
+  return lastSegment && lastSegment.length > 0 ? lastSegment : null;
+}
+
+function determineFileExtension(fileName: string, contentType?: string): string | null {
+  const sanitized = fileName.trim();
+  const withoutQuery = sanitized.split('?')[0] ?? sanitized;
+  const lastDot = withoutQuery.lastIndexOf('.');
+  if (lastDot > 0 && lastDot < withoutQuery.length - 1) {
+    return withoutQuery.slice(lastDot + 1).toLowerCase();
+  }
+
+  if (contentType) {
+    const normalizedContentType = contentType.toLowerCase();
+    if (normalizedContentType.includes('application/pdf')) {
+      return 'pdf';
+    }
+    if (normalizedContentType.includes('text/plain')) {
+      return 'txt';
+    }
+    if (normalizedContentType.includes('wordprocessingml')) {
+      return 'docx';
+    }
+    if (normalizedContentType.includes('spreadsheetml')) {
+      return 'xlsx';
+    }
+  }
+
+  return null;
 }
 
 function buildMetadataPayload(

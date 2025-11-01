@@ -8,4 +8,7 @@ export interface DocumentResponse {
   createdBy: string;
   updatedBy: string | null;
   metadata: Record<string, unknown> | null;
+  filePath: string | null;
+  createdAt?: string;
+  updatedAt?: string | null;
 }
