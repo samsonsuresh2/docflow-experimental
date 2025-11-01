@@ -13,6 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -117,6 +120,21 @@ public class DefaultDocumentService implements DocumentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public DocumentFile getDocumentFile(Long id) {
+        DocumentParent document = requireDocument(id);
+        String storedPath = document.getFilePath();
+        if (storedPath == null || storedPath.isBlank()) {
+            throw new NoSuchElementException("File not found");
+        }
+
+        return new DocumentFile(
+            storageAdapter.loadAsResource(storedPath),
+            Paths.get(storedPath).getFileName().toString()
+        );
+    }
+
+    @Override
     public DocumentResponse approve(Long id, RequestUser user, String comment) {
         return updateStatus(id, DocumentStatus.APPROVED, user, "APPROVE", comment);
     }
@@ -160,9 +178,17 @@ public class DefaultDocumentService implements DocumentService {
         if (file == null || file.isEmpty()) {
             return;
         }
-        String filename = document.getDocumentNumber() + "_" + Optional.ofNullable(file.getOriginalFilename()).orElse("document");
-        try {
-            storageAdapter.store(filename, file.getInputStream());
+        String originalFilename = Optional.ofNullable(file.getOriginalFilename()).orElse("document");
+        String sanitizedOriginal = originalFilename.replaceAll("[\\\\/]+", "_");
+        String filename = document.getDocumentNumber() + "_" + sanitizedOriginal;
+        int currentYear = LocalDate.now().getYear();
+        String relativePath = Paths.get(String.valueOf(currentYear), String.valueOf(document.getId()), filename)
+            .toString()
+            .replace('\\', '/');
+        try (InputStream data = file.getInputStream()) {
+            String storedPath = storageAdapter.store(relativePath, data);
+            document.setFilePath(storedPath);
+            documentRepository.save(document);
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to store file", ex);
         }
@@ -179,6 +205,7 @@ public class DefaultDocumentService implements DocumentService {
         response.setCreatedAt(document.getCreatedAt());
         response.setUpdatedBy(document.getUpdatedBy());
         response.setUpdatedAt(document.getUpdatedAt());
+        response.setFilePath(document.getFilePath());
         response.setMetadata(metadataCopy);
         return response;
     }

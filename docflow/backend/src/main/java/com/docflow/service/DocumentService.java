@@ -32,6 +32,9 @@ public interface DocumentService {
     @Transactional(readOnly = true)
     List<AuditLog> getAuditTrail(Long id);
 
+    @Transactional(readOnly = true)
+    DocumentFile getDocumentFile(Long id);
+
     @Transactional
     DocumentResponse reject(Long id, RequestUser user, String comment);
 

@@ -16,6 +16,7 @@ public class DocumentResponse {
     private String updatedBy;
     private OffsetDateTime updatedAt;
     private Map<String, Object> metadata;
+    private String filePath;
 
     public Long getId() {
         return id;
@@ -87,5 +88,13 @@ public class DocumentResponse {
 
     public void setMetadata(Map<String, Object> metadata) {
         this.metadata = metadata;
+    }
+
+    public String getFilePath() {
+        return filePath;
+    }
+
+    public void setFilePath(String filePath) {
+        this.filePath = filePath;
     }
 }

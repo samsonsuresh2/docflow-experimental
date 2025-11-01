@@ -35,6 +35,9 @@ public class DocumentParent {
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 
+    @Column(name = "FILE_PATH")
+    private String filePath;
+
     public Long getId() {
         return id;
     }
@@ -93,5 +96,13 @@ public class DocumentParent {
 
     public void setUpdatedAt(OffsetDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getFilePath() {
+        return filePath;
+    }
+
+    public void setFilePath(String filePath) {
+        this.filePath = filePath;
     }
 }
