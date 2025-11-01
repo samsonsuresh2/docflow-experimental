@@ -310,7 +310,7 @@ function canEditMetadata(role: UserRole | null, status: DocumentStatus | null) {
   if (role !== 'MAKER') {
     return false;
   }
-  return status === 'DRAFT' || status === 'OPEN';
+  return status === 'DRAFT' || status === 'REWORK';
 }
 
 function determineActions(role: UserRole, status: DocumentStatus | null): { key: WorkflowAction; label: string }[] {
@@ -323,45 +323,59 @@ function determineActions(role: UserRole, status: DocumentStatus | null): { key:
 
   switch (role) {
     case 'MAKER':
-      return status === 'DRAFT' ? [{ key: 'submit', label: 'Submit for Review' }] : [];
-    case 'REVIEWER':
-      if (status === 'OPEN') {
-        return [{ key: 'startReview', label: 'Start Review' }];
+      if (status === 'DRAFT') {
+        return [{ key: 'submit', label: 'Submit for Review' }];
       }
-      if (status === 'UNDER_REVIEW') {
-        return [
-          { key: 'approve', label: 'Approve' },
-          { key: 'rework', label: 'Rework' },
-          { key: 'reject', label: 'Reject' },
-        ];
+      if (status === 'REWORK') {
+        return [{ key: 'submit', label: 'Resubmit for Review' }];
       }
       return [];
+    case 'REVIEWER':
     case 'CHECKER':
-      return status === 'APPROVED' ? [{ key: 'close', label: 'Close Document' }] : [];
+      return determineReviewerCheckerActions(status);
+    default:
+      return [];
+  }
+}
+
+function determineReviewerCheckerActions(status: DocumentStatus): { key: WorkflowAction; label: string }[] {
+  switch (status) {
+    case 'SUBMITTED':
+      return [{ key: 'startReview', label: 'Start Review' }];
+    case 'UNDER_REVIEW':
+      return [
+        { key: 'approve', label: 'Approve' },
+        { key: 'rework', label: 'Rework' },
+        { key: 'reject', label: 'Reject' },
+      ];
+    case 'APPROVED':
+    case 'REJECTED':
+      return [{ key: 'close', label: 'Close Document' }];
     default:
       return [];
   }
 }
 
 function buildFullActionList(status: DocumentStatus): { key: WorkflowAction; label: string }[] {
-  const actions: { key: WorkflowAction; label: string }[] = [];
-  if (status === 'DRAFT') {
-    actions.push({ key: 'submit', label: 'Submit for Review' });
+  switch (status) {
+    case 'DRAFT':
+      return [{ key: 'submit', label: 'Submit for Review' }];
+    case 'REWORK':
+      return [{ key: 'submit', label: 'Resubmit for Review' }];
+    case 'SUBMITTED':
+      return [{ key: 'startReview', label: 'Start Review' }];
+    case 'UNDER_REVIEW':
+      return [
+        { key: 'approve', label: 'Approve' },
+        { key: 'rework', label: 'Rework' },
+        { key: 'reject', label: 'Reject' },
+      ];
+    case 'APPROVED':
+    case 'REJECTED':
+      return [{ key: 'close', label: 'Close Document' }];
+    default:
+      return [];
   }
-  if (status === 'OPEN') {
-    actions.push({ key: 'startReview', label: 'Start Review' });
-  }
-  if (status === 'UNDER_REVIEW') {
-    actions.push(
-      { key: 'approve', label: 'Approve' },
-      { key: 'rework', label: 'Rework' },
-      { key: 'reject', label: 'Reject' },
-    );
-  }
-  if (status === 'APPROVED') {
-    actions.push({ key: 'close', label: 'Close Document' });
-  }
-  return actions;
 }
 
 function buildMetadataPayload(
