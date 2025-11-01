@@ -1,11 +1,25 @@
-export type DocumentStatus = 'DRAFT' | 'OPEN' | 'UNDER_REVIEW' | 'APPROVED' | 'CLOSED';
+export type DocumentStatus =
+  | 'DRAFT'
+  | 'SUBMITTED'
+  | 'UNDER_REVIEW'
+  | 'REWORK'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CLOSED';
 
 const LEGACY_STATUS_MAP: Record<string, DocumentStatus> = {
-  SUBMITTED: 'OPEN',
-  REWORK: 'OPEN',
+  OPEN: 'SUBMITTED',
 };
 
-const VALID_STATUSES: DocumentStatus[] = ['DRAFT', 'OPEN', 'UNDER_REVIEW', 'APPROVED', 'CLOSED'];
+const VALID_STATUSES: DocumentStatus[] = [
+  'DRAFT',
+  'SUBMITTED',
+  'UNDER_REVIEW',
+  'REWORK',
+  'APPROVED',
+  'REJECTED',
+  'CLOSED',
+];
 
 export function normalizeStatus(status: string | null | undefined): DocumentStatus | null {
   if (!status) {
