@@ -4,16 +4,22 @@ import com.docflow.api.dto.*;
 import com.docflow.context.RequestUser;
 import com.docflow.context.RequestUserContext;
 import com.docflow.domain.AuditLog;
+import com.docflow.service.DocumentFile;
 import com.docflow.service.DocumentService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
 @RestController
@@ -48,6 +54,23 @@ public class DocumentController {
     public ResponseEntity<DocumentResponse> getDocument(@PathVariable Long id) {
         DocumentResponse response = documentService.getDocument(id);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/download/{id}")
+    public ResponseEntity<Resource> downloadFile(@PathVariable Long id) {
+        try {
+            DocumentFile documentFile = documentService.getDocumentFile(id);
+            ContentDisposition contentDisposition = ContentDisposition.attachment()
+                .filename(documentFile.getFilename(), StandardCharsets.UTF_8)
+                .build();
+
+            return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
+                .body(documentFile.getResource());
+        } catch (NoSuchElementException ex) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     // ────────────────────────────── SUBMIT ──────────────────────────────

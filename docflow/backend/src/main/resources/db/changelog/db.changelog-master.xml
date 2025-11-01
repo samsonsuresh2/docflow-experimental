@@ -223,4 +223,14 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="document-parent-add-file-path" author="docflow">
+        <comment>Add file_path column to document_parent</comment>
+        <addColumn tableName="document_parent">
+            <column name="FILE_PATH" type="VARCHAR2(500)"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="document_parent" columnName="FILE_PATH"/>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>
