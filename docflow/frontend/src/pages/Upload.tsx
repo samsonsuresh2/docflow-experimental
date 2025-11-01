@@ -94,7 +94,9 @@ export default function Upload() {
       if (intent === 'submit') {
         try {
           await api.put(`/documents/${response.data.id}/submit`);
-          setStatusMessage('Document submitted and moved to Open status.');
+          setStatusMessage(
+            `Document submitted and moved to Open status. Document ID: ${response.data.id}.`,
+          );
         } catch (error) {
           setErrorMessage('Document saved as draft, but submission failed. Please submit from the Review page.');
           return;
