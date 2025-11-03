@@ -5,6 +5,11 @@ import StatusBadge from '../components/StatusBadge';
 import api from '../lib/api';
 import { fieldsForRole, parseUploadFieldConfig, UploadFieldDefinition } from '../lib/config';
 import { convertDocxToHtml, convertXlsxToHtml } from '../lib/documentPreview';
+import {
+  DynamicFormValues,
+  isDynamicFormValueEmpty,
+  normaliseValuesForFields,
+} from '../lib/dynamicFormValues';
 import { useUser } from '../lib/UserContext';
 import { DocumentStatus, normalizeStatus } from '../lib/documentStatus';
 import type { UserRole } from '../lib/user';
@@ -22,7 +27,7 @@ export default function Review() {
   const [fields, setFields] = useState<UploadFieldDefinition[]>([]);
   const [documentIdInput, setDocumentIdInput] = useState('');
   const [document, setDocument] = useState<DocumentResponse | null>(null);
-  const [metadataValues, setMetadataValues] = useState<Record<string, string>>({});
+  const [metadataValues, setMetadataValues] = useState<DynamicFormValues>({});
   const [loadingDocument, setLoadingDocument] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -85,18 +90,9 @@ export default function Review() {
       setMetadataValues({});
       return;
     }
-    const initialValues: Record<string, string> = {};
-    Object.entries(document.metadata ?? {}).forEach(([key, value]) => {
-      if (value === null || value === undefined) {
-        initialValues[key] = '';
-      } else if (value instanceof Date) {
-        initialValues[key] = value.toISOString();
-      } else {
-        initialValues[key] = String(value);
-      }
-    });
+    const initialValues = normaliseValuesForFields(availableFields, document.metadata ?? {});
     setMetadataValues(initialValues);
-  }, [document]);
+  }, [document, availableFields]);
 
   useEffect(() => {
     return () => {
@@ -139,7 +135,7 @@ export default function Review() {
     }
   };
 
-  const handleMetadataUpdate = async (values: Record<string, string>) => {
+  const handleMetadataUpdate = async (values: DynamicFormValues) => {
     if (!document) {
       return;
     }
@@ -539,18 +535,40 @@ function determineFileExtension(fileName: string, contentType?: string): string 
 
 function buildMetadataPayload(
   fields: UploadFieldDefinition[],
-  values: Record<string, string>,
+  values: DynamicFormValues,
 ): Record<string, unknown> {
   const metadata: Record<string, unknown> = {};
   fields.forEach((field) => {
     const rawValue = values[field.name];
-    if (rawValue === undefined || rawValue === '') {
+    if (rawValue === undefined) {
+      return;
+    }
+    if (typeof rawValue !== 'boolean' && isDynamicFormValueEmpty(rawValue)) {
       return;
     }
     switch (field.type) {
       case 'number': {
-        const parsed = Number(rawValue);
-        metadata[field.name] = Number.isNaN(parsed) ? rawValue : parsed;
+        if (typeof rawValue === 'string') {
+          const parsed = Number(rawValue);
+          metadata[field.name] = Number.isNaN(parsed) ? rawValue : parsed;
+        } else {
+          metadata[field.name] = rawValue;
+        }
+        break;
+      }
+      case 'checkbox': {
+        metadata[field.name] = Boolean(rawValue);
+        break;
+      }
+      case 'multiselect':
+      case 'checkbox-group': {
+        if (Array.isArray(rawValue)) {
+          if (rawValue.length > 0) {
+            metadata[field.name] = rawValue;
+          }
+        } else if (typeof rawValue === 'string' && rawValue) {
+          metadata[field.name] = [rawValue];
+        }
         break;
       }
       default:
