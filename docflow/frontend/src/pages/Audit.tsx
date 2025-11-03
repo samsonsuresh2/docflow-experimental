@@ -14,7 +14,7 @@ interface AuditEntryResponse {
 
 export default function Audit() {
   const { user } = useUser();
-  const [documentIdInput, setDocumentIdInput] = useState('');
+  const [documentNumberInput, setDocumentNumberInput] = useState('');
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -26,15 +26,17 @@ export default function Audit() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setErrorMessage(null);
-    const id = Number(documentIdInput.trim());
-    if (!documentIdInput.trim() || Number.isNaN(id)) {
-      setErrorMessage('Please enter a numeric document ID.');
+    const trimmedDocumentNumber = documentNumberInput.trim();
+    if (!trimmedDocumentNumber) {
+      setErrorMessage('Please enter a document ID.');
       return;
     }
 
     try {
       setLoading(true);
-      const response = await api.get<AuditEntryResponse[]>(`/documents/${id}/audit`);
+      const response = await api.get<AuditEntryResponse[]>(
+        `/documents/by-number/${encodeURIComponent(trimmedDocumentNumber)}/audit`,
+      );
       const mapped = response.data.map<AuditEvent>((entry, index) => ({
         id: `${entry.fieldKey}-${index}`,
         action: `${entry.changeType} · ${entry.fieldKey}`,
@@ -62,10 +64,10 @@ export default function Audit() {
         <form className="mt-4 flex flex-wrap gap-2" onSubmit={handleSubmit}>
           <input
             type="text"
-            placeholder="Document ID"
+            placeholder="Document ID (e.g. DOC-2025-000123)"
             className="flex-1 min-w-[180px] rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-            value={documentIdInput}
-            onChange={(event) => setDocumentIdInput(event.target.value)}
+            value={documentNumberInput}
+            onChange={(event) => setDocumentNumberInput(event.target.value)}
           />
           <button
             type="submit"
