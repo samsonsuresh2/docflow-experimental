@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import DocumentPreviewModal, { PreviewContent } from '../components/DocumentPreviewModal';
 import DynamicForm from '../components/DynamicForm';
 import StatusBadge from '../components/StatusBadge';
@@ -134,6 +134,10 @@ export default function Review() {
       setLoadingDocument(false);
     }
   };
+
+  const handleMetadataChange = useCallback((values: DynamicFormValues) => {
+    setMetadataValues(values);
+  }, []);
 
   const handleMetadataUpdate = async (values: DynamicFormValues) => {
     if (!document) {
@@ -356,7 +360,7 @@ export default function Review() {
               <DynamicForm
                 fields={availableFields}
                 initialValues={metadataValues}
-                onChange={(values) => setMetadataValues(values)}
+                onChange={handleMetadataChange}
                 onSubmit={canEdit ? handleMetadataUpdate : undefined}
                 submitLabel={canEdit ? 'Save Metadata' : null}
                 disabled={busy || !canEdit}
