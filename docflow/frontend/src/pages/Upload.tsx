@@ -92,18 +92,20 @@ export default function Upload() {
         },
       });
 
+      const documentIdentifier = response.data.documentNumber ?? response.data.id;
+
       if (intent === 'submit') {
         try {
           await api.put(`/documents/${response.data.id}/submit`);
           setStatusMessage(
-            `Document submitted and moved to Open status. Document ID: ${response.data.id}.`,
+            `Document submitted and moved to Open status. Document ID: ${documentIdentifier}.`,
           );
         } catch (error) {
           setErrorMessage('Document saved as draft, but submission failed. Please submit from the Review page.');
           return;
         }
       } else {
-        setStatusMessage('Document saved as a draft.');
+        setStatusMessage(`Document saved as a draft. Document ID: ${documentIdentifier}.`);
       }
 
       setDocumentNumber('');

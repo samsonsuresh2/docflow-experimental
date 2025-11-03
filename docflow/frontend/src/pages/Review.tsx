@@ -25,7 +25,7 @@ export default function Review() {
   const { user } = useUser();
   const [configLoading, setConfigLoading] = useState(false);
   const [fields, setFields] = useState<UploadFieldDefinition[]>([]);
-  const [documentIdInput, setDocumentIdInput] = useState('');
+  const [documentNumberInput, setDocumentNumberInput] = useState('');
   const [document, setDocument] = useState<DocumentResponse | null>(null);
   const [metadataValues, setMetadataValues] = useState<DynamicFormValues>({});
   const [loadingDocument, setLoadingDocument] = useState(false);
@@ -108,24 +108,24 @@ export default function Review() {
 
   const handleDocumentSearch = async (event: FormEvent) => {
     event.preventDefault();
-    if (!documentIdInput.trim()) {
-      return;
-    }
-    const id = Number(documentIdInput.trim());
-    if (Number.isNaN(id)) {
-      setErrorMessage('Document ID must be numeric.');
+    const trimmedDocumentNumber = documentNumberInput.trim();
+
+    if (!trimmedDocumentNumber) {
+      setErrorMessage('Please enter a document ID.');
       return;
     }
 
-    await loadDocument(id);
+    await loadDocument(trimmedDocumentNumber);
   };
 
-  const loadDocument = async (id: number) => {
+  const loadDocument = async (documentNumber: string) => {
     setLoadingDocument(true);
     setErrorMessage(null);
     setStatusMessage(null);
     try {
-      const response = await api.get<DocumentResponse>(`/documents/${id}`);
+      const response = await api.get<DocumentResponse>(
+        `/documents/by-number/${encodeURIComponent(documentNumber)}`,
+      );
       setDocument(response.data);
     } catch (error) {
       setDocument(null);
@@ -152,7 +152,7 @@ export default function Review() {
       const metadata = buildMetadataPayload(availableFields, values);
       await api.put(`/documents/${document.id}/metadata`, { metadata });
       setStatusMessage('Metadata updated successfully.');
-      await loadDocument(document.id);
+      await loadDocument(document.documentNumber);
     } catch (error) {
       setErrorMessage('Unable to update metadata.');
     } finally {
@@ -197,7 +197,7 @@ export default function Review() {
       }
       setStatusMessage('Workflow updated successfully.');
       setActionComment('');
-      await loadDocument(document.id);
+      await loadDocument(document.documentNumber);
     } catch (error) {
       setErrorMessage('Workflow action failed.');
     } finally {
@@ -215,7 +215,8 @@ export default function Review() {
       setPreviewDownloadUrl(null);
     }
 
-    const fileName = extractFileName(document.filePath) ?? `document-${document.id}`;
+    const fileName =
+      extractFileName(document.filePath) ?? `document-${document.documentNumber}`;
     setPreviewFileName(fileName);
     setPreviewOpen(true);
     setPreviewLoading(true);
@@ -298,10 +299,10 @@ export default function Review() {
         <form className="mt-4 flex flex-wrap gap-2" onSubmit={handleDocumentSearch}>
           <input
             type="text"
-            placeholder="Document ID"
+            placeholder="Document ID (e.g. DOC-2025-000123)"
             className="flex-1 min-w-[180px] rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-            value={documentIdInput}
-            onChange={(event) => setDocumentIdInput(event.target.value)}
+            value={documentNumberInput}
+            onChange={(event) => setDocumentNumberInput(event.target.value)}
           />
           <button
             type="submit"

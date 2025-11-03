@@ -20,6 +20,9 @@ public interface DocumentService {
     @Transactional(readOnly = true)
     DocumentResponse getDocument(Long id);
 
+    @Transactional(readOnly = true)
+    DocumentResponse getDocumentByNumber(String documentNumber);
+
     @Transactional
     DocumentResponse submitDocument(Long id, RequestUser user);
 
@@ -31,6 +34,9 @@ public interface DocumentService {
 
     @Transactional(readOnly = true)
     List<AuditLog> getAuditTrail(Long id);
+
+    @Transactional(readOnly = true)
+    List<AuditLog> getAuditTrailByDocumentNumber(String documentNumber);
 
     @Transactional(readOnly = true)
     DocumentFile getDocumentFile(Long id);

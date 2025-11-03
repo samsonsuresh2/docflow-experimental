@@ -75,6 +75,14 @@ public class DefaultDocumentService implements DocumentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public DocumentResponse getDocumentByNumber(String documentNumber) {
+        DocumentParent document = requireDocumentByNumber(documentNumber);
+        Map<String, Object> metadata = metadataService.getMetadata(document);
+        return mapToResponse(document, metadata);
+    }
+
+    @Override
     public DocumentResponse submitDocument(Long id, RequestUser user) {
         return updateStatus(id, DocumentStatus.OPEN, user, "SUBMIT", null);
     }
@@ -117,6 +125,13 @@ public class DefaultDocumentService implements DocumentService {
     public List<AuditLog> getAuditTrail(Long id) {
         requireDocument(id);
         return auditService.getAuditTrail(id);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AuditLog> getAuditTrailByDocumentNumber(String documentNumber) {
+        DocumentParent document = requireDocumentByNumber(documentNumber);
+        return auditService.getAuditTrail(document.getId());
     }
 
     @Override
@@ -171,6 +186,11 @@ public class DefaultDocumentService implements DocumentService {
 
     private DocumentParent requireDocument(Long id) {
         return documentRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Document not found"));
+    }
+
+    private DocumentParent requireDocumentByNumber(String documentNumber) {
+        return documentRepository.findByDocumentNumber(documentNumber)
                 .orElseThrow(() -> new NoSuchElementException("Document not found"));
     }
 

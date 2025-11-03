@@ -56,6 +56,12 @@ public class DocumentController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/by-number/{documentNumber}")
+    public ResponseEntity<DocumentResponse> getDocumentByNumber(@PathVariable String documentNumber) {
+        DocumentResponse response = documentService.getDocumentByNumber(documentNumber);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/download/{id}")
     public ResponseEntity<Resource> downloadFile(@PathVariable Long id) {
         try {
@@ -112,6 +118,15 @@ public class DocumentController {
     @GetMapping("/{id}/audit")
     public ResponseEntity<List<AuditEntryResponse>> getAuditTrail(@PathVariable Long id) {
         List<AuditLog> entries = documentService.getAuditTrail(id);
+        List<AuditEntryResponse> response = entries.stream()
+            .map(this::mapAuditLog)
+            .collect(Collectors.toList());
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/by-number/{documentNumber}/audit")
+    public ResponseEntity<List<AuditEntryResponse>> getAuditTrailByNumber(@PathVariable String documentNumber) {
+        List<AuditLog> entries = documentService.getAuditTrailByDocumentNumber(documentNumber);
         List<AuditEntryResponse> response = entries.stream()
             .map(this::mapAuditLog)
             .collect(Collectors.toList());
