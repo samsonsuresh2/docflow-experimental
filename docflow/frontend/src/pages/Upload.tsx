@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import DynamicForm from '../components/DynamicForm';
 import api from '../lib/api';
 import { fieldsForRole, parseUploadFieldConfig, UploadFieldDefinition } from '../lib/config';
@@ -60,6 +60,10 @@ export default function Upload() {
   if (!user) {
     return <AuthRequired />;
   }
+
+  const handleMetadataChange = useCallback((values: DynamicFormValues) => {
+    setMetadataValues(values);
+  }, []);
 
   const performUpload = async (intent: 'save' | 'submit') => {
     setStatusMessage(null);
@@ -179,7 +183,7 @@ export default function Upload() {
             <DynamicForm
               fields={availableFields}
               initialValues={metadataValues}
-              onChange={(values) => setMetadataValues(values)}
+              onChange={handleMetadataChange}
               submitLabel={null}
               disabled={submitting || loadingConfig}
             />
