@@ -69,9 +69,15 @@ function normaliseField(candidate: unknown): UploadFieldDefinition | null {
   }
 
   const label = typeof obj.label === 'string' ? obj.label : name;
-  const typeValue = typeof obj.type === 'string' ? obj.type.toLowerCase() : 'text';
+  const typeValue =
+    typeof obj.type === 'string' ? obj.type.trim().toLowerCase() : 'text';
   const typeAliases: Record<string, UploadFieldType> = {
     select: 'dropdown',
+    'select-one': 'dropdown',
+    'single-select': 'dropdown',
+    'single_select': 'dropdown',
+    'drop-down': 'dropdown',
+    'drop_down': 'dropdown',
     'multi-select': 'multiselect',
     'multi_select': 'multiselect',
     'checkboxes': 'checkbox-group',
@@ -106,16 +112,24 @@ function normaliseField(candidate: unknown): UploadFieldDefinition | null {
   const options = Array.isArray(obj.options)
     ? obj.options
         .map((option) => {
-          if (!option || typeof option !== 'object') {
+          if (option === null || option === undefined) {
             return null;
           }
-          const optionObj = option as Record<string, unknown>;
-          if (optionObj.value === undefined) {
-            return null;
+          if (typeof option === 'string' || typeof option === 'number' || typeof option === 'boolean') {
+            const value = String(option);
+            return { label: value, value };
           }
-          const value = String(optionObj.value);
-          const labelValue = optionObj.label !== undefined ? String(optionObj.label) : value;
-          return { label: labelValue, value };
+          if (typeof option === 'object') {
+            const optionObj = option as Record<string, unknown>;
+            const rawValue = optionObj.value ?? optionObj.id ?? optionObj.key ?? optionObj.name;
+            if (rawValue === undefined) {
+              return null;
+            }
+            const value = String(rawValue);
+            const labelValue = optionObj.label ?? optionObj.title ?? optionObj.name ?? value;
+            return { label: String(labelValue), value };
+          }
+          return null;
         })
         .filter((option): option is FieldOption => Boolean(option))
     : undefined;
