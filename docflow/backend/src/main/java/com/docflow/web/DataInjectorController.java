@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
-@RequestMapping("/api/documents/data-injector")
+@RequestMapping("/api/documents")
 public class DataInjectorController {
 
     private final DataInjectorService dataInjectorService;
@@ -25,7 +25,7 @@ public class DataInjectorController {
         this.requestUserContext = requestUserContext;
     }
 
-    @PostMapping(path = "/uploadexcel", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(path = "/data-injector/uploadexcel", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<DataInjectorResponse> uploadExcel(@RequestPart("file") MultipartFile file) {
         RequestUser user = requestUserContext.requireUser();
         DataInjectorResponse response = dataInjectorService.uploadExcel(file, user);
