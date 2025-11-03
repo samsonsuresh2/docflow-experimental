@@ -35,3 +35,10 @@ docflow:
     type: filesystem
     filesystem:
       root: uploads
+  security:
+    anonymous-user-id: system
+    anonymous-roles:
+      - SYSTEM
+    anonymous-paths:
+      - /api/documents/upload
+      - /api/documents/data-injector/uploadexcel

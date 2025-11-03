@@ -17,6 +17,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -28,15 +29,18 @@ public class UserContextFilter extends OncePerRequestFilter {
 
     private final RequestUserContext requestUserContext;
     private final UserRoleRepository userRoleRepository;
+    private final SecurityProperties securityProperties;
     private final boolean devProfileActive;
 
     public UserContextFilter(
             RequestUserContext requestUserContext,
             UserRoleRepository userRoleRepository,
-            Environment environment
+            Environment environment,
+            SecurityProperties securityProperties
     ) {
         this.requestUserContext = requestUserContext;
         this.userRoleRepository = userRoleRepository;
+        this.securityProperties = securityProperties;
         this.devProfileActive = Arrays.asList(environment.getActiveProfiles()).contains("dev");
     }
 
@@ -48,8 +52,22 @@ public class UserContextFilter extends OncePerRequestFilter {
             return;
         }
 
+        String requestUri = request.getRequestURI();
         String userId = request.getHeader(USER_HEADER);
+
         if (userId == null || userId.isBlank()) {
+            Optional<RequestUser> anonymousUser = securityProperties.resolveAnonymousUser(requestUri);
+            if (anonymousUser.isPresent()) {
+                LOGGER.debug("Using anonymous user '{}' for request {} {}", anonymousUser.get().userId(), request.getMethod(), requestUri);
+                try {
+                    requestUserContext.setCurrentUser(anonymousUser.get());
+                    filterChain.doFilter(request, response);
+                } finally {
+                    requestUserContext.clear();
+                }
+                return;
+            }
+
             if (devProfileActive) {
                 LOGGER.warn(
                         "Request {} {} missing X-USER-ID header; continuing because 'dev' profile is active",
