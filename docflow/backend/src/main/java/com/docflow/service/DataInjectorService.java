@@ -8,5 +8,6 @@ import org.springframework.web.multipart.MultipartFile;
 @Transactional
 public interface DataInjectorService {
 
+    @Transactional
     DataInjectorResponse uploadExcel(MultipartFile file, RequestUser user);
 }

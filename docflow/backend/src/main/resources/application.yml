@@ -42,3 +42,16 @@ docflow:
     anonymous-paths:
       - /api/documents/upload
       - /api/documents/data-injector/uploadexcel
+
+excel:
+  target-table: loan_data
+  primary-key: loan_no
+  mappings:
+    "LoanNo": "loan_no"
+    "Amount": "amount"
+    "Start Date": "start_date"
+    "End Date": "end_date"
+    "Monthly EMI": "monthly_emi"
+    "Branch": "branch"
+    "Total Installment": "total_installment"
+    "User ID": "user_id"

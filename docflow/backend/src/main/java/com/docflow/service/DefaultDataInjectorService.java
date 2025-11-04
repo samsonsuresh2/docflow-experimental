@@ -13,18 +13,26 @@ import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.sql.*;
 import java.io.IOException;
 import java.io.InputStream;
+import java.sql.*;
+import java.sql.DatabaseMetaData;
 import java.time.OffsetDateTime;
 import java.util.*;
 
 @Service
 @Transactional
 public class DefaultDataInjectorService implements DataInjectorService {
+
+    private final DataSource dataSource;   // 👈 reference to Spring’s connection pool
+
+
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DefaultDataInjectorService.class);
 
@@ -38,20 +46,44 @@ public class DefaultDataInjectorService implements DataInjectorService {
                                       MetadataService metadataService,
                                       AuditService auditService,
                                       DataInjectorProperties properties,
-                                      ExcelHeaderMappingResolver headerMappingResolver) {
+                                      ExcelHeaderMappingResolver headerMappingResolver,DataSource dataSource) {
         this.documentRepository = documentRepository;
         this.metadataService = metadataService;
         this.auditService = auditService;
         this.properties = properties;
         this.headerMappingResolver = headerMappingResolver;
+        this.dataSource = dataSource;
     }
 
+
     @Override
+    @Transactional
     public DataInjectorResponse uploadExcel(MultipartFile file, RequestUser user) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Uploaded file must contain data");
         }
+        LOGGER.trace("Entering upload hehe");
 
+        try (Connection conn = dataSource.getConnection()) {
+            DatabaseMetaData meta = conn.getMetaData();
+            LOGGER.trace("🧭 DataInjector Diagnostic");
+            LOGGER.warn("    URL      : {}", meta.getURL());
+            LOGGER.warn("    UserName : {}", meta.getUserName());
+            LOGGER.warn("    Catalog  : {}", conn.getCatalog());
+            LOGGER.warn("    Schema   : {}", conn.getSchema());
+
+            // confirm table existence
+            try (ResultSet rs = meta.getTables(null, null, "%", new String[]{"TABLE"})) {
+                LOGGER.warn("    --- Visible Tables ---");
+                int c = 0;
+                while (rs.next() && c < 15) {  // limit output
+                    LOGGER.warn("       {}", rs.getString("TABLE_NAME"));
+                    c++;
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("Datasource inspection failed", e);
+        }
         LOGGER.info("Starting data injector upload for file: {}", file.getOriginalFilename());
 
         try (InputStream inputStream = file.getInputStream(); Workbook workbook = WorkbookFactory.create(inputStream)) {
