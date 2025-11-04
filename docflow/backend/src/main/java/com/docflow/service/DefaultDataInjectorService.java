@@ -2,25 +2,37 @@ package com.docflow.service;
 
 import com.docflow.api.dto.DataInjectorResponse;
 import com.docflow.context.RequestUser;
-import com.docflow.domain.DocumentParent;
-import com.docflow.domain.DocumentStatus;
-import com.docflow.domain.repository.DocumentRepository;
 import com.docflow.service.config.DataInjectorProperties;
 import com.docflow.service.config.ExcelHeaderMappingResolver;
 import com.docflow.service.config.ExcelHeaderMappingResolver.ColumnBinding;
 import com.docflow.service.config.ExcelHeaderMappingResolver.HeaderDescriptor;
-import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.time.OffsetDateTime;
-import java.util.*;
+import java.math.BigDecimal;
+import java.sql.Date;
+import java.sql.Time;
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 @Service
 @Transactional
@@ -28,20 +40,14 @@ public class DefaultDataInjectorService implements DataInjectorService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DefaultDataInjectorService.class);
 
-    private final DocumentRepository documentRepository;
-    private final MetadataService metadataService;
-    private final AuditService auditService;
+    private final JdbcTemplate jdbcTemplate;
     private final DataInjectorProperties properties;
     private final ExcelHeaderMappingResolver headerMappingResolver;
 
-    public DefaultDataInjectorService(DocumentRepository documentRepository,
-                                      MetadataService metadataService,
-                                      AuditService auditService,
+    public DefaultDataInjectorService(JdbcTemplate jdbcTemplate,
                                       DataInjectorProperties properties,
                                       ExcelHeaderMappingResolver headerMappingResolver) {
-        this.documentRepository = documentRepository;
-        this.metadataService = metadataService;
-        this.auditService = auditService;
+        this.jdbcTemplate = jdbcTemplate;
         this.properties = properties;
         this.headerMappingResolver = headerMappingResolver;
     }
@@ -52,7 +58,12 @@ public class DefaultDataInjectorService implements DataInjectorService {
             throw new IllegalArgumentException("Uploaded file must contain data");
         }
 
-        LOGGER.info("Starting data injector upload for file: {}", file.getOriginalFilename());
+        String targetTable = sqlTableName(properties.getTargetTable());
+        String configuredPrimaryKey = requirePrimaryKey();
+        String primaryKeyColumn = sqlColumnName(configuredPrimaryKey);
+
+        LOGGER.info("Starting data injector upload for file: {} (target table: {}, primary key: {})",
+            file.getOriginalFilename(), targetTable, primaryKeyColumn);
 
         try (InputStream inputStream = file.getInputStream(); Workbook workbook = WorkbookFactory.create(inputStream)) {
             Sheet sheet = workbook.getNumberOfSheets() > 0 ? workbook.getSheetAt(0) : null;
@@ -60,14 +71,10 @@ public class DefaultDataInjectorService implements DataInjectorService {
                 throw new IllegalArgumentException("Uploaded Excel file does not contain any sheets");
             }
 
-            String primaryKey = properties.getPrimaryKey();
-            if (primaryKey == null || primaryKey.isBlank()) {
-                throw new IllegalStateException("excel.primaryKey must be configured");
-            }
-
             HeaderDescriptor headerDescriptor = headerMappingResolver.resolve(sheet.getRow(0));
-            if (!headerDescriptor.hasColumn(primaryKey)) {
-                throw new IllegalArgumentException("Header must include a column mapped to primary key: " + primaryKey);
+            if (!headerDescriptor.hasColumn(configuredPrimaryKey)) {
+                throw new IllegalArgumentException(
+                    "Header must include a column mapped to primary key: " + configuredPrimaryKey);
             }
 
             DataInjectorResponse response = new DataInjectorResponse();
@@ -86,25 +93,33 @@ public class DefaultDataInjectorService implements DataInjectorService {
 
                 RowPayload payload = readRowPayload(row, headerDescriptor.mappedColumns());
                 if (!payload.hasValues()) {
-                    LOGGER.trace("Row {} is empty; skipping", rowIndex + 1);
                     continue;
                 }
 
                 totalRows++;
 
-                if (payload.documentNumber() == null || payload.documentNumber().isBlank()) {
-                    LOGGER.trace("Row {} missing document number; marking as skipped", rowIndex + 1);
+                if (isMissingPrimaryKey(payload.primaryKeyValue())) {
+                    LOGGER.trace("Row {} missing primary key; marking as skipped", rowIndex + 1);
                     skipped++;
                     continue;
                 }
 
-                Optional<DocumentParent> existing = documentRepository.findByDocumentNumber(payload.documentNumber().trim());
-                if (existing.isEmpty()) {
-                    insertDocument(payload, user);
+                if (payload.columnValues().isEmpty()) {
+                    LOGGER.trace("Row {} contains no mappable columns; marking as skipped", rowIndex + 1);
+                    skipped++;
+                    continue;
+                }
+
+                if (!existsByPrimaryKey(targetTable, primaryKeyColumn, payload.primaryKeyValue())) {
+                    insertRow(targetTable, payload);
                     inserted++;
                 } else {
-                    updateDocument(existing.get(), payload, user);
-                    updated++;
+                    boolean updatedRow = updateRow(targetTable, primaryKeyColumn, payload);
+                    if (updatedRow) {
+                        updated++;
+                    } else {
+                        skipped++;
+                    }
                 }
             }
 
@@ -125,74 +140,70 @@ public class DefaultDataInjectorService implements DataInjectorService {
         }
     }
 
-    private void insertDocument(RowPayload payload, RequestUser user) {
-        LOGGER.trace("Inserting document {}", payload.documentNumber());
-        OffsetDateTime now = OffsetDateTime.now();
-        DocumentParent document = new DocumentParent();
-        document.setDocumentNumber(payload.documentNumber().trim());
-        document.setTitle(resolveTitle(payload));
-        DocumentStatus status = parseStatus(payload.status());
-        document.setStatus(status != null ? status : DocumentStatus.DRAFT);
-        document.setCreatedBy(user.userId());
-        document.setCreatedAt(now);
-        DocumentParent saved = documentRepository.save(document);
-
-        auditService.logFieldUpdate(saved, "title", null, saved.getTitle(), "DATA_INJECTOR_UPLOAD", user, now);
-        auditService.logStatusChange(saved, null, saved.getStatus(), "DATA_INJECTOR_UPLOAD", null, user, now);
-
-        if (!payload.metadata().isEmpty()) {
-            metadataService.persistMetadata(saved, payload.metadata(), user);
-        }
+    private boolean existsByPrimaryKey(String tableName, String primaryKeyColumn, Object primaryKeyValue) {
+        String sql = "SELECT COUNT(1) FROM " + tableName + " WHERE " + primaryKeyColumn + " = ?";
+        Object value = convertValueForSql(primaryKeyValue);
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, value);
+        return count != null && count > 0;
     }
 
-    private void updateDocument(DocumentParent document, RowPayload payload, RequestUser user) {
-        LOGGER.trace("Updating document {}", payload.documentNumber());
-        OffsetDateTime now = OffsetDateTime.now();
+    private void insertRow(String tableName, RowPayload payload) {
+        Map<String, Object> values = payload.columnValues();
+        List<String> columns = new ArrayList<>();
+        List<Object> parameters = new ArrayList<>();
 
-        String title = resolveTitle(payload);
-        if (title != null && !title.isBlank() && !Objects.equals(document.getTitle(), title)) {
-            auditService.logFieldUpdate(document, "title", document.getTitle(), title, "DATA_INJECTOR_UPLOAD", user, now);
-            document.setTitle(title);
+        for (Map.Entry<String, Object> entry : values.entrySet()) {
+            String columnName = sqlColumnName(entry.getKey());
+            columns.add(columnName);
+            parameters.add(convertValueForSql(entry.getValue()));
         }
 
-        DocumentStatus desiredStatus = parseStatus(payload.status());
-        if (desiredStatus != null && !Objects.equals(document.getStatus(), desiredStatus)) {
-            auditService.logStatusChange(document, document.getStatus(), desiredStatus, "DATA_INJECTOR_UPLOAD", null, user, now);
-            document.setStatus(desiredStatus);
+        if (columns.isEmpty()) {
+            LOGGER.trace("Row for primary key {} has no columns to insert; skipping", payload.primaryKeyValue());
+            return;
         }
 
-        document.setUpdatedBy(user.userId());
-        document.setUpdatedAt(now);
-        documentRepository.save(document);
-
-        if (!payload.metadata().isEmpty()) {
-            metadataService.persistMetadata(document, payload.metadata(), user);
-        }
+        String placeholders = String.join(", ", columns.stream().map(column -> "?").toList());
+        String joinedColumns = String.join(", ", columns);
+        String sql = "INSERT INTO " + tableName + " (" + joinedColumns + ") VALUES (" + placeholders + ")";
+        jdbcTemplate.update(sql, parameters.toArray());
     }
 
-    private String resolveTitle(RowPayload payload) {
-        if (payload.title() != null && !payload.title().isBlank()) {
-            return payload.title().trim();
+    private boolean updateRow(String tableName, String primaryKeyColumn, RowPayload payload) {
+        Map<String, Object> values = payload.columnValues();
+        Object primaryKeyValue = findValue(values, primaryKeyColumn);
+        if (primaryKeyValue == null) {
+            primaryKeyValue = payload.primaryKeyValue();
         }
-        return payload.documentNumber() != null ? payload.documentNumber().trim() : null;
-    }
 
-    private DocumentStatus parseStatus(String statusValue) {
-        if (statusValue == null || statusValue.isBlank()) {
-            return null;
+        List<String> assignments = new ArrayList<>();
+        List<Object> parameters = new ArrayList<>();
+
+        for (Map.Entry<String, Object> entry : values.entrySet()) {
+            if (matches(entry.getKey(), primaryKeyColumn)) {
+                continue;
+            }
+            String columnName = sqlColumnName(entry.getKey());
+            assignments.add(columnName + " = ?");
+            parameters.add(convertValueForSql(entry.getValue()));
         }
-        try {
-            return DocumentStatus.valueOf(statusValue.trim().toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("Unknown document status: " + statusValue, ex);
+
+        if (assignments.isEmpty()) {
+            LOGGER.trace("No columns to update for primary key {}; skipping update", payload.primaryKeyValue());
+            return false;
         }
+
+        parameters.add(convertValueForSql(primaryKeyValue));
+
+        String setClause = String.join(", ", assignments);
+        String sql = "UPDATE " + tableName + " SET " + setClause + " WHERE " + primaryKeyColumn + " = ?";
+        int affected = jdbcTemplate.update(sql, parameters.toArray());
+        return affected > 0;
     }
 
     private RowPayload readRowPayload(Row row, Map<Integer, ColumnBinding> headers) {
-        String documentNumber = null;
-        String title = null;
-        String status = null;
-        Map<String, Object> metadata = new LinkedHashMap<>();
+        Map<String, Object> values = new LinkedHashMap<>();
+        Object primaryKeyValue = null;
         boolean hasValues = false;
 
         for (Map.Entry<Integer, ColumnBinding> entry : headers.entrySet()) {
@@ -204,27 +215,29 @@ public class DefaultDataInjectorService implements DataInjectorService {
                 continue;
             }
 
-            hasValues = true;
-
             Object resolvedValue = applyExtractor(binding, value);
+            if (resolvedValue == null) {
+                continue;
+            }
+
+            if (resolvedValue instanceof String stringValue && stringValue.isBlank()) {
+                continue;
+            }
 
             String target = binding.targetColumn();
             if (target == null) {
                 continue;
             }
 
+            hasValues = true;
+            values.put(target, resolvedValue);
+
             if (matches(target, properties.getPrimaryKey())) {
-                documentNumber = Objects.toString(resolvedValue, null);
-            } else if (matches(target, "title")) {
-                title = Objects.toString(resolvedValue, null);
-            } else if (matches(target, "status")) {
-                status = Objects.toString(resolvedValue, null);
-            } else {
-                metadata.put(target, resolvedValue);
+                primaryKeyValue = resolvedValue;
             }
         }
 
-        return new RowPayload(documentNumber, title, status, metadata, hasValues);
+        return new RowPayload(primaryKeyValue, values, hasValues);
     }
 
     private Object applyExtractor(ColumnBinding binding, Object value) {
@@ -237,7 +250,7 @@ public class DefaultDataInjectorService implements DataInjectorService {
         }
 
         if (binding.extractorPattern() == null) {
-            return stringValue;
+            return stringValue.trim();
         }
 
         var matcher = binding.extractorPattern().matcher(stringValue);
@@ -247,18 +260,7 @@ public class DefaultDataInjectorService implements DataInjectorService {
         }
 
         LOGGER.warn("Extractor pattern for column '{}' did not match value '{}'", binding.targetColumn(), stringValue);
-        return stringValue;
-    }
-
-    private boolean matches(String left, String right) {
-        if (left == null || right == null) {
-            return false;
-        }
-        return normalize(left).equals(normalize(right));
-    }
-
-    private String normalize(String value) {
-        return value.replaceAll("[^A-Za-z0-9]", "").toLowerCase(Locale.ROOT);
+        return stringValue.trim();
     }
 
     private Object readCellValue(Cell cell) {
@@ -304,11 +306,101 @@ public class DefaultDataInjectorService implements DataInjectorService {
         };
     }
 
-    private record RowPayload(String documentNumber, String title, String status,
-                              Map<String, Object> metadata, boolean hasValues) {
+    private Object convertValueForSql(Object value) {
+        if (value instanceof LocalDateTime localDateTime) {
+            return Timestamp.valueOf(localDateTime);
+        }
+        if (value instanceof LocalDate localDate) {
+            return Date.valueOf(localDate);
+        }
+        if (value instanceof LocalTime localTime) {
+            return Time.valueOf(localTime);
+        }
+        if (value instanceof Double doubleValue) {
+            return BigDecimal.valueOf(doubleValue);
+        }
+        if (value instanceof Float floatValue) {
+            return BigDecimal.valueOf(floatValue.doubleValue());
+        }
+        if (value instanceof String stringValue) {
+            return stringValue.trim();
+        }
+        return value;
+    }
 
-        RowPayload {
-            metadata = metadata != null ? new LinkedHashMap<>(metadata) : new LinkedHashMap<>();
+    private Object findValue(Map<String, Object> values, String columnName) {
+        return values.entrySet().stream()
+            .filter(entry -> matches(entry.getKey(), columnName))
+            .map(Map.Entry::getValue)
+            .findFirst()
+            .orElse(null);
+    }
+
+    private boolean matches(String left, String right) {
+        if (left == null || right == null) {
+            return false;
+        }
+        return normalize(left).equals(normalize(right));
+    }
+
+    private boolean isMissingPrimaryKey(Object primaryKeyValue) {
+        if (primaryKeyValue == null) {
+            return true;
+        }
+        if (primaryKeyValue instanceof String stringValue) {
+            return stringValue.trim().isEmpty();
+        }
+        return false;
+    }
+
+    private String normalize(String value) {
+        return value.replaceAll("[^A-Za-z0-9]", "").toLowerCase(Locale.ROOT);
+    }
+
+    private String sqlTableName(String tableName) {
+        if (tableName == null || tableName.isBlank()) {
+            throw new IllegalStateException("excel.target-table must be configured");
+        }
+        if (!tableName.matches("[A-Za-z0-9_.]+")) {
+            throw new IllegalArgumentException("Invalid table name configured for excel.target-table: " + tableName);
+        }
+        return tableName;
+    }
+
+    private String requirePrimaryKey() {
+        String primaryKey = properties.getPrimaryKey();
+        if (primaryKey == null || primaryKey.isBlank()) {
+            throw new IllegalStateException("excel.primary-key must be configured");
+        }
+        return primaryKey;
+    }
+
+    private String sqlColumnName(String columnName) {
+        if (columnName == null || columnName.isBlank()) {
+            throw new IllegalArgumentException("Column name cannot be blank");
+        }
+        if (!columnName.matches("[A-Za-z0-9_]+")) {
+            throw new IllegalArgumentException("Invalid column name: " + columnName);
+        }
+        return columnName;
+    }
+
+    private record RowPayload(Object primaryKeyValue, Map<String, Object> columnValues, boolean hasValues) {
+
+        private RowPayload {
+            columnValues = columnValues != null ? new LinkedHashMap<>(columnValues) : new LinkedHashMap<>();
+        }
+
+        public Object primaryKeyValue() {
+            return primaryKeyValue;
+        }
+
+        public Map<String, Object> columnValues() {
+            return columnValues;
+        }
+
+        public boolean hasValues() {
+            return hasValues;
         }
     }
 }
