@@ -15,7 +15,6 @@ export default function Upload() {
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [fields, setFields] = useState<UploadFieldDefinition[]>([]);
   const [metadataValues, setMetadataValues] = useState<DynamicFormValues>({});
-  const [documentNumber, setDocumentNumber] = useState('');
   const [title, setTitle] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -69,8 +68,8 @@ export default function Upload() {
     setStatusMessage(null);
     setErrorMessage(null);
 
-    if (!documentNumber.trim() || !title.trim()) {
-      setErrorMessage('Document number and title are required.');
+    if (!title.trim()) {
+      setErrorMessage('Title is required.');
       return;
     }
 
@@ -79,7 +78,6 @@ export default function Upload() {
       setActiveAction(intent);
       const metadata = buildMetadataPayload(availableFields, metadataValues);
       const payload = {
-        documentNumber: documentNumber.trim(),
         title: title.trim(),
         metadata,
       };
@@ -112,7 +110,6 @@ export default function Upload() {
         setStatusMessage(`Document saved as a draft. Document ID: ${documentIdentifier}.`);
       }
 
-      setDocumentNumber('');
       setTitle('');
       setMetadataValues({});
       setFile(null);
@@ -144,16 +141,6 @@ export default function Upload() {
       >
         <fieldset className="space-y-4" disabled={submitting}>
           <legend className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">Document Details</legend>
-          <label className="block text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Document Number</span>
-            <input
-              type="text"
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-              value={documentNumber}
-              onChange={(event) => setDocumentNumber(event.target.value)}
-              required
-            />
-          </label>
           <label className="block text-sm">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Title</span>
             <input

@@ -49,21 +49,22 @@ public class DefaultDocumentService implements DocumentService {
     @Override
     @Transactional
     public DocumentResponse createDocument(DocumentUploadMetadata metadata, MultipartFile file, RequestUser user) {
-        validateUniqueDocumentNumber(metadata.getDocumentNumber());
-
         OffsetDateTime now = OffsetDateTime.now();
         DocumentParent document = new DocumentParent();
-        document.setDocumentNumber(metadata.getDocumentNumber());
+        document.setDocumentNumber(generateTemporaryDocumentNumber());
         document.setTitle(metadata.getTitle());
         document.setStatus(DocumentStatus.DRAFT);
         document.setCreatedBy(user.userId());
         document.setCreatedAt(now);
         DocumentParent saved = documentRepository.save(document);
 
-        Map<String, Object> storedMetadata = metadataService.persistMetadata(saved, metadata.getMetadata(), user);
-        storeFileIfPresent(saved, file);
+        saved.setDocumentNumber(generateDocumentNumber(saved.getId()));
+        DocumentParent numberedDocument = documentRepository.save(saved);
 
-        return mapToResponse(saved, storedMetadata);
+        Map<String, Object> storedMetadata = metadataService.persistMetadata(numberedDocument, metadata.getMetadata(), user);
+        storeFileIfPresent(numberedDocument, file);
+
+        return mapToResponse(numberedDocument, storedMetadata);
     }
 
     @Override
@@ -178,12 +179,6 @@ public class DefaultDocumentService implements DocumentService {
         return updateStatus(id, DocumentStatus.OPEN, user, "REWORK", comment);
     }
 
-    private void validateUniqueDocumentNumber(String documentNumber) {
-        documentRepository.findByDocumentNumber(documentNumber).ifPresent(doc -> {
-            throw new IllegalStateException("Document number already exists");
-        });
-    }
-
     private DocumentParent requireDocument(Long id) {
         return documentRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Document not found"));
@@ -228,5 +223,13 @@ public class DefaultDocumentService implements DocumentService {
         response.setFilePath(document.getFilePath());
         response.setMetadata(metadataCopy);
         return response;
+    }
+
+    private String generateTemporaryDocumentNumber() {
+        return "TMP-" + System.nanoTime();
+    }
+
+    private String generateDocumentNumber(Long id) {
+        return String.valueOf(id);
     }
 }
