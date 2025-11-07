@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DocumentPreviewModal, { PreviewContent } from '../components/DocumentPreviewModal';
 import DynamicForm from '../components/DynamicForm';
 import StatusBadge from '../components/StatusBadge';
@@ -63,6 +63,7 @@ export default function Review() {
   const [previewContent, setPreviewContent] = useState<PreviewContent | null>(null);
   const [previewDownloadUrl, setPreviewDownloadUrl] = useState<string | null>(null);
   const [previewFileName, setPreviewFileName] = useState<string | null>(null);
+  const documentDetailsRef = useRef<HTMLDivElement | null>(null);
 
   const normalizedStatus = normalizeStatus(document?.status ?? null);
 
@@ -126,6 +127,12 @@ export default function Review() {
     };
   }, [previewDownloadUrl]);
 
+  useEffect(() => {
+    if (document && documentDetailsRef.current) {
+      documentDetailsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [document]);
+
   if (!user) {
     return <AuthRequired />;
   }
@@ -135,10 +142,21 @@ export default function Review() {
       page,
       sort,
       direction,
-    }: { page?: number; sort?: SortColumn; direction?: 'asc' | 'desc' } = {}) => {
+      resetSelection,
+    }: {
+      page?: number;
+      sort?: SortColumn;
+      direction?: 'asc' | 'desc';
+      resetSelection?: boolean;
+    } = {}) => {
       const pageToLoad = page ?? currentPage;
       const sortToUse = sort ?? sortBy;
       const directionToUse = direction ?? sortDirection;
+
+      if (resetSelection) {
+        setSelectedDocumentId(null);
+        setDocument(null);
+      }
 
       setDocumentsLoading(true);
       setTableError(null);
@@ -175,7 +193,7 @@ export default function Review() {
   const handleFilterSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      fetchDocuments({ page: 0 });
+      fetchDocuments({ page: 0, resetSelection: true });
     },
     [fetchDocuments],
   );
@@ -637,7 +655,7 @@ export default function Review() {
       {statusMessage ? <p className="text-sm text-green-600 dark:text-green-400">{statusMessage}</p> : null}
 
       {document ? (
-        <div className="space-y-6">
+        <div ref={documentDetailsRef} className="space-y-6">
           <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
