@@ -21,13 +21,21 @@ interface ConfigResponse {
 
 type WorkflowAction = 'submit' | 'startReview' | 'approve' | 'reject' | 'rework' | 'close';
 
-type StatusFilter = 'ALL' | 'OPEN' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'CLOSED';
+type StatusFilter =
+  | 'ALL'
+  | 'DRAFT'
+  | 'OPEN'
+  | 'UNDER_REVIEW'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CLOSED';
 type SortColumn = 'id' | 'documentNumber' | 'title' | 'status' | 'createdBy' | 'updatedBy' | 'updatedAt';
 
 const PAGE_SIZE = 10;
 
 const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: 'ALL', label: 'All' },
+  { value: 'DRAFT', label: 'Draft' },
   { value: 'OPEN', label: 'Open' },
   { value: 'UNDER_REVIEW', label: 'Under Review' },
   { value: 'APPROVED', label: 'Approved' },
