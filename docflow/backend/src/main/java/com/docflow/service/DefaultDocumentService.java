@@ -1,6 +1,7 @@
 package com.docflow.service;
 
 import com.docflow.api.dto.DocumentResponse;
+import com.docflow.api.dto.DocumentSummary;
 import com.docflow.api.dto.DocumentUploadMetadata;
 import com.docflow.context.RequestUser;
 import com.docflow.domain.AuditLog;
@@ -8,6 +9,8 @@ import com.docflow.domain.DocumentParent;
 import com.docflow.domain.DocumentStatus;
 import com.docflow.domain.repository.DocumentRepository;
 import com.docflow.storage.StorageAdapter;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -81,6 +84,25 @@ public class DefaultDocumentService implements DocumentService {
         DocumentParent document = requireDocumentByNumber(documentNumber);
         Map<String, Object> metadata = metadataService.getMetadata(document);
         return mapToResponse(document, metadata);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<DocumentSummary> searchDocuments(
+        String documentNumber,
+        DocumentStatus status,
+        String metadataKey,
+        String metadataValue,
+        Pageable pageable
+    ) {
+        Page<DocumentParent> documents = documentRepository.searchDocuments(
+            sanitize(documentNumber),
+            status,
+            pageable
+        );
+
+        // Metadata filters reserved for future implementation.
+        return documents.map(this::mapToSummary);
     }
 
     @Override
@@ -171,12 +193,12 @@ public class DefaultDocumentService implements DocumentService {
 
     @Override
     public DocumentResponse reject(Long id, RequestUser user, String comment) {
-        return updateStatus(id, DocumentStatus.OPEN, user, "REJECT", comment);
+        return updateStatus(id, DocumentStatus.REJECTED, user, "REJECT", comment);
     }
 
     @Override
     public DocumentResponse rework(Long id, RequestUser user, String comment) {
-        return updateStatus(id, DocumentStatus.OPEN, user, "REWORK", comment);
+        return updateStatus(id, DocumentStatus.REWORK, user, "REWORK", comment);
     }
 
     private DocumentParent requireDocument(Long id) {
@@ -187,6 +209,14 @@ public class DefaultDocumentService implements DocumentService {
     private DocumentParent requireDocumentByNumber(String documentNumber) {
         return documentRepository.findByDocumentNumber(documentNumber)
                 .orElseThrow(() -> new NoSuchElementException("Document not found"));
+    }
+
+    private String sanitize(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private void storeFileIfPresent(DocumentParent document, MultipartFile file) {
@@ -223,6 +253,19 @@ public class DefaultDocumentService implements DocumentService {
         response.setFilePath(document.getFilePath());
         response.setMetadata(metadataCopy);
         return response;
+    }
+
+    private DocumentSummary mapToSummary(DocumentParent document) {
+        DocumentSummary summary = new DocumentSummary();
+        summary.setId(document.getId());
+        summary.setDocumentNumber(document.getDocumentNumber());
+        summary.setTitle(document.getTitle());
+        summary.setStatus(document.getStatus());
+        summary.setCreatedBy(document.getCreatedBy());
+        summary.setCreatedAt(document.getCreatedAt());
+        summary.setUpdatedBy(document.getUpdatedBy());
+        summary.setUpdatedAt(document.getUpdatedAt());
+        return summary;
     }
 
     private String generateTemporaryDocumentNumber() {
