@@ -13,6 +13,8 @@ import com.docflow.domain.AuditLog;
 import com.docflow.domain.DocumentStatus;
 import com.docflow.service.DocumentFile;
 import com.docflow.service.DocumentService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import org.springframework.core.io.Resource;
@@ -33,6 +35,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -86,17 +89,20 @@ public class DocumentController {
         @RequestParam(value = "page", defaultValue = "0") int page,
         @RequestParam(value = "size", defaultValue = "10") int size,
         @RequestParam(value = "sortBy", defaultValue = "id") String sortBy,
-        @RequestParam(value = "direction", defaultValue = "asc") String direction
+        @RequestParam(value = "direction", defaultValue = "asc") String direction,
+        @RequestParam(value = "filters", required = false) String filtersJson
     ) {
         Sort.Direction sortDirection = parseDirection(direction);
         String sortProperty = resolveSortProperty(sortBy);
         Pageable pageable = PageRequest.of(page, size, Sort.by(sortDirection, sortProperty));
 
+        Map<String, Object> dynamicFilters = parseFilters(filtersJson);
         Page<DocumentSummary> results = documentService.searchDocuments(
             documentNumber,
             parseStatus(status),
             metadataKey,
             metadataValue,
+            dynamicFilters,
             pageable
         );
 
@@ -295,6 +301,18 @@ public class DocumentController {
             return DocumentStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status value");
+        }
+    }
+
+    private Map<String, Object> parseFilters(String filtersJson) {
+        if (filtersJson == null || filtersJson.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(filtersJson, new TypeReference<Map<String, Object>>() {
+            });
+        } catch (JsonProcessingException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid filters payload");
         }
     }
 }

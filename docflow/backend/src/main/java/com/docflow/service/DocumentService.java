@@ -32,6 +32,7 @@ public interface DocumentService {
         DocumentStatus status,
         String metadataKey,
         String metadataValue,
+        Map<String, Object> dynamicFilters,
         Pageable pageable
     );
 

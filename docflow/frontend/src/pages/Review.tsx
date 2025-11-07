@@ -4,6 +4,7 @@ import DynamicForm from '../components/DynamicForm';
 import StatusBadge from '../components/StatusBadge';
 import api from '../lib/api';
 import { fieldsForRole, parseUploadFieldConfig, UploadFieldDefinition } from '../lib/config';
+import { parseReviewFilterConfig, ReviewFilterDefinition } from '../lib/reviewFilters';
 import { convertDocxToHtml, convertXlsxToHtml } from '../lib/documentPreview';
 import {
   DynamicFormValues,
@@ -49,6 +50,10 @@ export default function Review() {
   const [fields, setFields] = useState<UploadFieldDefinition[]>([]);
   const [documentIdFilter, setDocumentIdFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [reviewFilters, setReviewFilters] = useState<ReviewFilterDefinition[]>([]);
+  const [reviewFilterValues, setReviewFilterValues] = useState<Record<string, string>>({});
+  const [reviewFiltersLoading, setReviewFiltersLoading] = useState(false);
+  const [reviewFilterError, setReviewFilterError] = useState<string | null>(null);
   // const [metadataKeyFilter, setMetadataKeyFilter] = useState('');
   // const [metadataValueFilter, setMetadataValueFilter] = useState('');
   const [documentsPage, setDocumentsPage] = useState<PageResponse<DocumentSummary> | null>(null);
@@ -103,6 +108,46 @@ export default function Review() {
     };
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+    const loadFilters = async () => {
+      try {
+        setReviewFiltersLoading(true);
+        setReviewFilterError(null);
+        const response = await api.get<ConfigResponse>('/admin/config/review-filters');
+        if (!isMounted) {
+          return;
+        }
+        const definitions = parseReviewFilterConfig(response.data.configJson);
+        setReviewFilters(definitions);
+        setReviewFilterValues((current) => {
+          const nextValues: Record<string, string> = {};
+          definitions.forEach((definition) => {
+            const existing = current[definition.key];
+            nextValues[definition.key] = typeof existing === 'string' ? existing : '';
+          });
+          return nextValues;
+        });
+      } catch (error) {
+        if (isMounted) {
+          setReviewFilters([]);
+          setReviewFilterValues({});
+          setReviewFilterError('Failed to load review filter configuration.');
+        }
+      } finally {
+        if (isMounted) {
+          setReviewFiltersLoading(false);
+        }
+      }
+    };
+
+    loadFilters();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const availableFields = useMemo(() => {
     const baseFields = fieldsForRole(fields, user?.role);
     const existingMetadata = document?.metadata ?? {};
@@ -145,6 +190,25 @@ export default function Review() {
     return <AuthRequired />;
   }
 
+  const collectFilterPayload = useCallback(() => {
+    const payload: Record<string, string> = {};
+    reviewFilters.forEach((definition) => {
+      const rawValue = reviewFilterValues[definition.key];
+      if (typeof rawValue !== 'string') {
+        return;
+      }
+      const trimmed = rawValue.trim();
+      if (trimmed) {
+        if (definition.type === 'date' && !/^[<>~=]/.test(trimmed)) {
+          payload[definition.key] = `>${trimmed}`;
+        } else {
+          payload[definition.key] = trimmed;
+        }
+      }
+    });
+    return payload;
+  }, [reviewFilters, reviewFilterValues]);
+
   const fetchDocuments = useCallback(
     async ({
       page,
@@ -172,8 +236,8 @@ export default function Review() {
         const trimmedDocumentId = documentIdFilter.trim();
         // const trimmedMetadataKey = metadataKeyFilter.trim();
         // const trimmedMetadataValue = metadataValueFilter.trim();
-        const response = await api.get<PageResponse<DocumentSummary>>('/documents/search', {
-          params: {
+        const filtersPayload = collectFilterPayload();
+        const params: Record<string, unknown> = {
             status: statusFilter === 'ALL' ? '' : statusFilter,
             id: trimmedDocumentId,
             page: pageToLoad,
@@ -182,7 +246,12 @@ export default function Review() {
             direction: directionToUse,
             // metadataKey: trimmedMetadataKey,
             // metadataValue: trimmedMetadataValue,
-          },
+        };
+        if (Object.keys(filtersPayload).length > 0) {
+          params.filters = JSON.stringify(filtersPayload);
+        }
+        const response = await api.get<PageResponse<DocumentSummary>>('/documents/search', {
+          params,
         });
         const data = response.data;
         setDocumentsPage(data);
@@ -195,7 +264,7 @@ export default function Review() {
         setDocumentsLoading(false);
       }
     },
-    [currentPage, sortBy, sortDirection, documentIdFilter, statusFilter],
+    [collectFilterPayload, currentPage, sortBy, sortDirection, documentIdFilter, statusFilter],
   );
 
   const handleFilterSubmit = useCallback(
@@ -476,27 +545,36 @@ export default function Review() {
               ))}
             </select>
           </div>
-          {/* Future metadata filters will be enabled in a subsequent update. */}
-          {/**
-           * <div className="flex flex-col gap-1">
-           *   <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Metadata Key</span>
-           *   <input
-           *     type="text"
-           *     className="rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-           *     value={metadataKeyFilter}
-           *     onChange={(event) => setMetadataKeyFilter(event.target.value)}
-           *   />
-           * </div>
-           * <div className="flex flex-col gap-1">
-           *   <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Metadata Value</span>
-           *   <input
-           *     type="text"
-           *     className="rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-           *     value={metadataValueFilter}
-           *     onChange={(event) => setMetadataValueFilter(event.target.value)}
-           *   />
-           * </div>
-           */}
+          {reviewFilters.map((filter) => (
+            <div key={filter.key} className="flex flex-col gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                {filter.label}
+              </span>
+              {filter.type === 'dropdown' ? (
+                <select
+                  className="rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                  value={reviewFilterValues[filter.key] ?? ''}
+                  onChange={(event) => handleDynamicFilterChange(filter.key, event.target.value)}
+                  disabled={documentsLoading || reviewFiltersLoading}
+                >
+                  <option value="">All</option>
+                  {(filter.options ?? []).map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type={filter.type === 'date' ? 'date' : 'text'}
+                  className="rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                  value={reviewFilterValues[filter.key] ?? ''}
+                  onChange={(event) => handleDynamicFilterChange(filter.key, event.target.value)}
+                  disabled={documentsLoading || reviewFiltersLoading}
+                />
+              )}
+            </div>
+          ))}
           <div className="flex items-end gap-2 md:col-span-4">
             <button
               type="submit"
@@ -505,6 +583,12 @@ export default function Review() {
             >
               {documentsLoading ? 'Loading…' : 'Load Documents'}
             </button>
+            {reviewFiltersLoading ? (
+              <span className="text-xs text-slate-500 dark:text-slate-300">Loading filters…</span>
+            ) : null}
+            {reviewFilterError ? (
+              <span className="text-xs text-red-600 dark:text-red-400">{reviewFilterError}</span>
+            ) : null}
           </div>
         </form>
       </div>
@@ -939,3 +1023,10 @@ function AuthRequired() {
     </div>
   );
 }
+  const handleDynamicFilterChange = useCallback((key: string, value: string) => {
+    setReviewFilterValues((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }, []);
+
