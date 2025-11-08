@@ -185,16 +185,47 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
 
         String loweredValue = rawValue.toLowerCase(Locale.ROOT);
         Expression<String> lhs = cb.lower(valuePath.as(String.class));
-        Expression<String> rhs = cb.literal(loweredValue);
+        Expression<String> unquotedLiteral = cb.literal(loweredValue);
+        Expression<String> quotedLiteral = cb.literal("\"" + loweredValue + "\"");
 
         return switch (filter.getOperation()) {
             case LIKE -> {
                 String pattern = loweredValue.contains("%") ? loweredValue : "%" + loweredValue + "%";
-                yield cb.like(lhs, cb.literal(pattern));
+
+                boolean leadingWildcard = pattern.startsWith("%");
+                boolean trailingWildcard = pattern.endsWith("%");
+                String corePattern = pattern;
+                if (leadingWildcard) {
+                    corePattern = corePattern.substring(1);
+                }
+                if (trailingWildcard && !corePattern.isEmpty()) {
+                    corePattern = corePattern.substring(0, corePattern.length() - 1);
+                }
+
+                String quotedPattern = corePattern;
+                if (!quotedPattern.isEmpty()) {
+                    quotedPattern = "\"" + quotedPattern + "\"";
+                } else {
+                    quotedPattern = "\"\"";
+                }
+                if (leadingWildcard) {
+                    quotedPattern = "%" + quotedPattern;
+                }
+                if (trailingWildcard) {
+                    quotedPattern = quotedPattern + "%";
+                }
+
+                Predicate unquotedLike = cb.like(lhs, cb.literal(pattern));
+                Predicate quotedLike = cb.like(lhs, cb.literal(quotedPattern));
+                yield cb.or(unquotedLike, quotedLike);
             }
-            case GREATER_THAN -> cb.greaterThan(lhs, rhs);
-            case LESS_THAN -> cb.lessThan(lhs, rhs);
-            case EQUALS -> cb.equal(lhs, rhs);
+            case GREATER_THAN -> cb.greaterThan(lhs, unquotedLiteral);
+            case LESS_THAN -> cb.lessThan(lhs, unquotedLiteral);
+            case EQUALS -> {
+                Predicate unquotedEquals = cb.equal(lhs, unquotedLiteral);
+                Predicate quotedEquals = cb.equal(lhs, quotedLiteral);
+                yield cb.or(unquotedEquals, quotedEquals);
+            }
         };
     }
 
