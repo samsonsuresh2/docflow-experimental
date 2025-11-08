@@ -167,9 +167,7 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
         subquery.select(metadataRoot.get("document").get("id"));
 
         Predicate matchDocument = cb.equal(metadataRoot.get("document").get("id"), root.get("id"));
-        Expression<String> keyExpr = cb.lower(metadataRoot.get("fieldKey"));
-        Expression<String> keyValue = cb.literal(filter.getKey().toLowerCase(Locale.ROOT));
-        Predicate matchKey = cb.equal(keyExpr, keyValue);
+        Predicate matchKey = cb.equal(metadataRoot.get("fieldKey"), filter.getKey());
         Predicate valuePredicate = buildMetadataValuePredicate(cb, metadataRoot.get("fieldValue"), filter);
         if (valuePredicate == null) return Optional.empty();
 
@@ -185,19 +183,18 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
             return null;
         }
 
-        String lowered = rawValue.toLowerCase(Locale.ROOT);
-        // Force Hibernate to know the argument type explicitly
-        Expression<String> expression = cb.lower(valuePath.as(String.class));
-        Expression<String> literal = cb.literal(lowered);
+        String loweredValue = rawValue.toLowerCase(Locale.ROOT);
+        Expression<String> lhs = cb.lower(valuePath.as(String.class));
+        Expression<String> rhs = cb.literal(loweredValue);
 
         return switch (filter.getOperation()) {
             case LIKE -> {
-                String pattern = lowered.contains("%") ? lowered : "%" + lowered + "%";
-                yield cb.like(expression, cb.literal(pattern));
+                String pattern = loweredValue.contains("%") ? loweredValue : "%" + loweredValue + "%";
+                yield cb.like(lhs, cb.literal(pattern));
             }
-            case GREATER_THAN -> cb.greaterThan(expression, literal);
-            case LESS_THAN -> cb.lessThan(expression, literal);
-            case EQUALS -> cb.equal(expression, literal);
+            case GREATER_THAN -> cb.greaterThan(lhs, rhs);
+            case LESS_THAN -> cb.lessThan(lhs, rhs);
+            case EQUALS -> cb.equal(lhs, rhs);
         };
     }
 
