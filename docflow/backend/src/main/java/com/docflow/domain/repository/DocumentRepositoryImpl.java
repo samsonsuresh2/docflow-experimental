@@ -7,12 +7,7 @@ import com.docflow.service.search.DocumentSearchFilter;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
-import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.CriteriaQuery;
-import jakarta.persistence.criteria.Expression;
-import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.criteria.Root;
-import jakarta.persistence.criteria.Subquery;
+import jakarta.persistence.criteria.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -55,7 +50,6 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
         List<DocumentParent> content = typedQuery.getResultList();
 
         long total = count(documentNumber, status, dynamicFilters);
-
         return new PageImpl<>(content, pageable, total);
     }
 
@@ -69,7 +63,6 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
         if (!predicates.isEmpty()) {
             countQuery.where(predicates.toArray(Predicate[]::new));
         }
-
         return entityManager.createQuery(countQuery).getSingleResult();
     }
 
@@ -80,6 +73,7 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
                                             DocumentStatus status,
                                             List<DocumentSearchFilter> dynamicFilters) {
         List<Predicate> predicates = new ArrayList<>();
+
         if (documentNumber != null && !documentNumber.isBlank()) {
             String likePattern = "%" + documentNumber.toLowerCase(Locale.ROOT) + "%";
             predicates.add(cb.like(cb.lower(root.get("documentNumber")), likePattern));
@@ -90,14 +84,11 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
 
         if (dynamicFilters != null) {
             for (DocumentSearchFilter filter : dynamicFilters) {
-                if (filter == null || filter.getRawValue() == null) {
-                    continue;
-                }
+                if (filter == null || filter.getRawValue() == null) continue;
                 switch (filter.getSource()) {
                     case DOCUMENT_PARENT -> buildDocumentPredicate(cb, root, filter).ifPresent(predicates::add);
                     case META_DATA -> buildMetadataPredicate(cb, query, root, filter).ifPresent(predicates::add);
-                    default -> {
-                    }
+                    default -> { }
                 }
             }
         }
@@ -107,7 +98,7 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
     private Optional<Predicate> buildDocumentPredicate(CriteriaBuilder cb,
                                                        Root<DocumentParent> root,
                                                        DocumentSearchFilter filter) {
-        javax.persistence.criteria.Path<?> path;
+        Path<?> path;
         try {
             path = root.get(filter.getKey());
         } catch (IllegalArgumentException ex) {
@@ -116,9 +107,7 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
 
         Class<?> javaType = path.getJavaType();
         String rawValue = filter.getRawValue();
-        if (rawValue == null || rawValue.isBlank()) {
-            return Optional.empty();
-        }
+        if (rawValue == null || rawValue.isBlank()) return Optional.empty();
 
         return switch (filter.getOperation()) {
             case LIKE -> buildLikePredicate(cb, path.as(String.class), rawValue);
@@ -129,13 +118,12 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
     }
 
     private Optional<Predicate> buildEqualsPredicate(CriteriaBuilder cb,
-                                                     javax.persistence.criteria.Path<?> path,
+                                                     Path<?> path,
                                                      Class<?> javaType,
                                                      String rawValue) {
         Object converted = convertValue(rawValue, javaType, false);
-        if (converted == null) {
-            return Optional.empty();
-        }
+        if (converted == null) return Optional.empty();
+
         if (converted instanceof String stringValue) {
             Expression<String> expression = cb.lower(path.as(String.class));
             return Optional.of(cb.equal(expression, stringValue.toLowerCase(Locale.ROOT)));
@@ -151,22 +139,23 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
         return Optional.of(cb.like(cb.lower(expression), pattern));
     }
 
+    // ✅ Option 3 implementation — Expression<Comparable> version
+    @SuppressWarnings("unchecked")
     private Optional<Predicate> buildComparisonPredicate(CriteriaBuilder cb,
-                                                         javax.persistence.criteria.Path<?> path,
+                                                         Path<?> path,
                                                          Class<?> javaType,
                                                          String rawValue,
                                                          boolean greaterThan) {
         Object converted = convertValue(rawValue, javaType, true);
-        if (!(converted instanceof Comparable<?> comparable)) {
-            return Optional.empty();
-        }
-        @SuppressWarnings("unchecked")
-        javax.persistence.criteria.Path<? extends Comparable<Object>> comparablePath =
-            (javax.persistence.criteria.Path<? extends Comparable<Object>>) path;
-        if (greaterThan) {
-            return Optional.of(cb.greaterThan(comparablePath, comparable));
-        }
-        return Optional.of(cb.lessThan(comparablePath, comparable));
+        if (!(converted instanceof Comparable<?> value)) return Optional.empty();
+
+        Expression<Comparable> expr = (Expression<Comparable>) path;
+
+        Predicate predicate = greaterThan
+            ? cb.greaterThan(expr, (Comparable) value)
+            : cb.lessThan(expr, (Comparable) value);
+
+        return Optional.of(predicate);
     }
 
     private Optional<Predicate> buildMetadataPredicate(CriteriaBuilder cb,
@@ -178,42 +167,45 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
         subquery.select(metadataRoot.get("document").get("id"));
 
         Predicate matchDocument = cb.equal(metadataRoot.get("document").get("id"), root.get("id"));
-        Predicate matchKey = cb.equal(cb.lower(metadataRoot.get("fieldKey")), filter.getKey().toLowerCase(Locale.ROOT));
-
+        Expression<String> keyExpr = cb.lower(metadataRoot.get("fieldKey"));
+        Expression<String> keyValue = cb.literal(filter.getKey().toLowerCase(Locale.ROOT));
+        Predicate matchKey = cb.equal(keyExpr, keyValue);
         Predicate valuePredicate = buildMetadataValuePredicate(cb, metadataRoot.get("fieldValue"), filter);
-        if (valuePredicate == null) {
-            return Optional.empty();
-        }
+        if (valuePredicate == null) return Optional.empty();
 
         subquery.where(matchDocument, matchKey, valuePredicate);
         return Optional.of(cb.exists(subquery));
     }
 
     private Predicate buildMetadataValuePredicate(CriteriaBuilder cb,
-                                                  javax.persistence.criteria.Path<String> valuePath,
+                                                  Path<String> valuePath,
                                                   DocumentSearchFilter filter) {
         String rawValue = filter.getRawValue();
         if (rawValue == null || rawValue.isBlank()) {
             return null;
         }
+
         String lowered = rawValue.toLowerCase(Locale.ROOT);
-        Expression<String> expression = cb.lower(valuePath);
+        // Force Hibernate to know the argument type explicitly
+        Expression<String> expression = cb.lower(valuePath.as(String.class));
+        Expression<String> literal = cb.literal(lowered);
+
         return switch (filter.getOperation()) {
             case LIKE -> {
                 String pattern = lowered.contains("%") ? lowered : "%" + lowered + "%";
-                yield cb.like(expression, pattern);
+                yield cb.like(expression, cb.literal(pattern));
             }
-            case GREATER_THAN -> cb.greaterThan(expression, lowered);
-            case LESS_THAN -> cb.lessThan(expression, lowered);
-            case EQUALS -> cb.equal(expression, lowered);
+            case GREATER_THAN -> cb.greaterThan(expression, literal);
+            case LESS_THAN -> cb.lessThan(expression, literal);
+            case EQUALS -> cb.equal(expression, literal);
         };
     }
 
+
     private Object convertValue(String rawValue, Class<?> javaType, boolean truncateToStartOfDay) {
         String trimmed = rawValue.trim();
-        if (trimmed.isEmpty()) {
-            return null;
-        }
+        if (trimmed.isEmpty()) return null;
+
         if (OffsetDateTime.class.isAssignableFrom(javaType)) {
             try {
                 OffsetDateTime parsed = OffsetDateTime.parse(trimmed);
@@ -258,27 +250,20 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
                               CriteriaQuery<DocumentParent> query,
                               Root<DocumentParent> root,
                               Sort sort) {
-        if (sort == null || sort.isUnsorted()) {
-            return;
-        }
-        List<jakarta.persistence.criteria.Order> orders = new ArrayList<>();
+        if (sort == null || sort.isUnsorted()) return;
+
+        List<Order> orders = new ArrayList<>();
         for (Sort.Order order : sort) {
-            if (!order.isIgnoreCase()) {
-                try {
-                    jakarta.persistence.criteria.Path<?> path = root.get(order.getProperty());
+            try {
+                if (!order.isIgnoreCase()) {
+                    Path<?> path = root.get(order.getProperty());
                     orders.add(order.isAscending() ? cb.asc(path) : cb.desc(path));
-                } catch (IllegalArgumentException ignored) {
-                }
-            } else {
-                try {
+                } else {
                     Expression<String> expression = cb.lower(root.get(order.getProperty()));
                     orders.add(order.isAscending() ? cb.asc(expression) : cb.desc(expression));
-                } catch (IllegalArgumentException ignored) {
                 }
-            }
+            } catch (IllegalArgumentException ignored) { }
         }
-        if (!orders.isEmpty()) {
-            query.orderBy(orders);
-        }
+        if (!orders.isEmpty()) query.orderBy(orders);
     }
 }
