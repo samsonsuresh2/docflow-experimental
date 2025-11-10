@@ -14,7 +14,7 @@ export default function Home() {
             : 'Choose a user profile to begin. Navigate to the Login page and pick a role to start working with documents.'}
         </p>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <FeatureCard
           title="Upload Documents"
           description="Submit new documents with metadata captured from the configurable upload form."
@@ -34,6 +34,16 @@ export default function Home() {
           title="Audit Trail"
           description="Inspect field-level changes recorded throughout the document lifecycle."
           to="/audit"
+        />
+        <FeatureCard
+          title="Reports"
+          description="Build ad-hoc reports across DocFlow data using the dynamic report designer."
+          to="/reports"
+        />
+        <FeatureCard
+          title="Data Ingestor"
+          description="Bulk import or update records via spreadsheet uploads to accelerate onboarding."
+          to="/data-ingestor"
         />
       </div>
     </div>
