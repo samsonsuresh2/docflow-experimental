@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import api from '../lib/api';
 import { useUser } from '../lib/UserContext';
 
@@ -6,23 +6,77 @@ interface ConfigResponse {
   configJson: string | null;
 }
 
+type AdminConfigView = 'upload' | 'reviewFilters';
+
+const UPLOAD_DEFAULT_TEMPLATE = `[
+  {
+    "name": "customerId",
+    "label": "Customer ID",
+    "type": "text",
+    "required": true
+  }
+]`;
+
+const REVIEW_FILTER_DEFAULT_TEMPLATE = `[
+  {
+    "key": "uploaded_date",
+    "type": "date",
+    "label": "Uploaded After",
+    "source": "DOCUMENT_PARENT"
+  },
+  {
+    "key": "customer_id",
+    "type": "text",
+    "label": "Customer ID",
+    "source": "META_DATA"
+  },
+  {
+    "key": "branch_code",
+    "type": "dropdown",
+    "label": "Branch",
+    "source": "META_DATA",
+    "options": ["BR001", "BR002", "BR003"]
+  }
+]`;
+
+const ADMIN_CONFIG_OPTIONS: Record<AdminConfigView, { label: string; description: string; endpoint: string; defaultTemplate: string }> = {
+  upload: {
+    label: 'Upload Screen Config',
+    description:
+      'Define dynamic metadata fields in JSON. Each field supports name, label, type, required, optional options for selects, and roles to restrict visibility.',
+    endpoint: '/admin/config/upload',
+    defaultTemplate: UPLOAD_DEFAULT_TEMPLATE,
+  },
+  reviewFilters: {
+    label: 'Review Filter Config',
+    description:
+      'Configure the dynamic filters shown on the Review screen. Provide key, label, type, and source (DOCUMENT_PARENT or META_DATA); dropdown filters may include an options array.',
+    endpoint: '/admin/config/review-filters',
+    defaultTemplate: REVIEW_FILTER_DEFAULT_TEMPLATE,
+  },
+};
+
 export default function Admin() {
   const { user } = useUser();
+  const [activeConfig, setActiveConfig] = useState<AdminConfigView>('upload');
   const [configText, setConfigText] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const currentOption = useMemo(() => ADMIN_CONFIG_OPTIONS[activeConfig], [activeConfig]);
+
   useEffect(() => {
     if (!user || user.role !== 'ADMIN') {
       return;
     }
+
     let isMounted = true;
     const loadConfig = async () => {
       try {
         setLoading(true);
-        const response = await api.get<ConfigResponse>('/config/upload-fields');
+        const response = await api.get<ConfigResponse>(currentOption.endpoint);
         if (!isMounted) {
           return;
         }
@@ -34,11 +88,12 @@ export default function Admin() {
             setConfigText(raw);
           }
         } else {
-          setConfigText('[\n  {\n    "name": "customerId",\n    "label": "Customer ID",\n    "type": "text",\n    "required": true\n  }\n]');
+          setConfigText(JSON.stringify(JSON.parse(currentOption.defaultTemplate), null, 2));
         }
       } catch (error) {
         if (isMounted) {
-          setErrorMessage('Failed to load upload configuration.');
+          setErrorMessage('Failed to load configuration.');
+          setConfigText(JSON.stringify(JSON.parse(currentOption.defaultTemplate), null, 2));
         }
       } finally {
         if (isMounted) {
@@ -52,14 +107,14 @@ export default function Admin() {
     return () => {
       isMounted = false;
     };
-  }, [user]);
+  }, [currentOption, user]);
 
   if (!user) {
     return <AuthRequired message="Please sign in to administer configuration." />;
   }
 
   if (user.role !== 'ADMIN') {
-    return <AuthRequired message="Only administrators can manage upload field configuration." />;
+    return <AuthRequired message="Only administrators can manage configuration." />;
   }
 
   const handleSave = async (event: FormEvent) => {
@@ -71,7 +126,7 @@ export default function Admin() {
       const parsed = JSON.parse(configText);
       const formatted = JSON.stringify(parsed);
       setSaving(true);
-      await api.post('/config/upload-fields', { configJson: formatted });
+      await api.post(currentOption.endpoint, { configJson: formatted });
       setStatusMessage('Configuration saved successfully.');
       setConfigText(JSON.stringify(parsed, null, 2));
     } catch (error) {
@@ -99,23 +154,43 @@ export default function Admin() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
-        <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Upload field configuration</h1>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-          Define dynamic metadata fields in JSON. Each field supports{' '}
-          <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">name</code>,{' '}
-          <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">label</code>,{' '}
-          <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">type</code>,{' '}
-          <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">required</code>, optional{' '}
-          <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">options</code> for selects, and{' '}
-          <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">roles</code> to restrict visibility.
-        </p>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100">{currentOption.label}</h1>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{currentOption.description}</p>
+          </div>
+          <div className="flex flex-col text-sm">
+            <label
+              htmlFor="config-view"
+              className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300"
+            >
+              Configuration
+            </label>
+            <select
+              id="config-view"
+              className="mt-1 rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+              value={activeConfig}
+              onChange={(event) => {
+                setActiveConfig(event.target.value as AdminConfigView);
+                setStatusMessage(null);
+                setErrorMessage(null);
+              }}
+              disabled={loading || saving}
+            >
+              <option value="upload">Upload Screen Config</option>
+              <option value="reviewFilters">Review Filter Config</option>
+            </select>
+          </div>
+        </div>
       </div>
       <form
         className="space-y-4 rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900"
         onSubmit={handleSave}
       >
         <label className="block text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Configuration JSON</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+            Configuration JSON
+          </span>
           <textarea
             rows={18}
             className="mt-1 w-full rounded border border-slate-300 px-3 py-2 font-mono text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"

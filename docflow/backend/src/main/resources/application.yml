@@ -10,6 +10,7 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.OracleDialect
+        format_sql: true    
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.xml
 
@@ -20,6 +21,11 @@ logging:
   level:
     root: INFO
     com.docflow: DEBUG   # enables your aspect debug logs
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.springframework.jdbc.core: DEBUG
+    org.springframework.jdbc.core.JdbcTemplate: DEBUG
+    org.springframework.jdbc.datasource.DataSourceUtils: DEBUG
 
 management:
   endpoints:
@@ -35,3 +41,15 @@ docflow:
     type: filesystem
     filesystem:
       root: uploads
+excel:
+  target-table: loan_data
+  primary-key: loan_no
+  mappings:
+    "LoanNo": "loan_no"
+    "Amount": "amount"
+    "Start Date": "start_date"
+    "End Date": "end_date"
+    "Monthly EMI": "monthly_emi"
+    "Branch": "branch"
+    "Total Installment": "total_installment"
+    "User ID": "user_id"

@@ -1,10 +1,13 @@
 package com.docflow.service;
 
 import com.docflow.api.dto.DocumentResponse;
+import com.docflow.api.dto.DocumentSummary;
 import com.docflow.api.dto.DocumentUploadMetadata;
 import com.docflow.context.RequestUser;
 import com.docflow.domain.AuditLog;
 import com.docflow.domain.DocumentStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,6 +23,19 @@ public interface DocumentService {
     @Transactional(readOnly = true)
     DocumentResponse getDocument(Long id);
 
+    @Transactional(readOnly = true)
+    DocumentResponse getDocumentByNumber(String documentNumber);
+
+    @Transactional(readOnly = true)
+    Page<DocumentSummary> searchDocuments(
+        String documentNumber,
+        DocumentStatus status,
+        String metadataKey,
+        String metadataValue,
+        Map<String, Object> dynamicFilters,
+        Pageable pageable
+    );
+
     @Transactional
     DocumentResponse submitDocument(Long id, RequestUser user);
 
@@ -31,6 +47,9 @@ public interface DocumentService {
 
     @Transactional(readOnly = true)
     List<AuditLog> getAuditTrail(Long id);
+
+    @Transactional(readOnly = true)
+    List<AuditLog> getAuditTrailByDocumentNumber(String documentNumber);
 
     @Transactional(readOnly = true)
     DocumentFile getDocumentFile(Long id);

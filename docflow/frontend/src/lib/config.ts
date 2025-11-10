@@ -1,6 +1,21 @@
 import { UserRole } from './user';
 
-export type UploadFieldType = 'text' | 'number' | 'date' | 'select' | 'textarea';
+export type UploadFieldType =
+  | 'text'
+  | 'number'
+  | 'textarea'
+  | 'email'
+  | 'password'
+  | 'readonly'
+  | 'dropdown'
+  | 'multiselect'
+  | 'radio'
+  | 'checkbox'
+  | 'checkbox-group'
+  | 'date'
+  | 'datetime'
+  | 'time'
+  | 'month';
 
 export interface FieldOption {
   label: string;
@@ -16,6 +31,8 @@ export interface UploadFieldDefinition {
   options?: FieldOption[];
   roles?: UserRole[];
   readOnly?: boolean;
+  defaultValue?: unknown;
+  rows?: number;
 }
 
 export function parseUploadFieldConfig(raw: string | null | undefined): UploadFieldDefinition[] {
@@ -52,26 +69,67 @@ function normaliseField(candidate: unknown): UploadFieldDefinition | null {
   }
 
   const label = typeof obj.label === 'string' ? obj.label : name;
-  const typeValue = typeof obj.type === 'string' ? obj.type.toLowerCase() : 'text';
-  const allowedTypes: UploadFieldType[] = ['text', 'number', 'date', 'select', 'textarea'];
-  const type = (allowedTypes.includes(typeValue as UploadFieldType) ? typeValue : 'text') as UploadFieldType;
+  const typeValue =
+    typeof obj.type === 'string' ? obj.type.trim().toLowerCase() : 'text';
+  const typeAliases: Record<string, UploadFieldType> = {
+    select: 'dropdown',
+    'select-one': 'dropdown',
+    'single-select': 'dropdown',
+    'single_select': 'dropdown',
+    'drop-down': 'dropdown',
+    'drop_down': 'dropdown',
+    'multi-select': 'multiselect',
+    'multi_select': 'multiselect',
+    'checkboxes': 'checkbox-group',
+    'checkbox_list': 'checkbox-group',
+    'datetime-local': 'datetime',
+  };
+  const allowedTypes: UploadFieldType[] = [
+    'text',
+    'number',
+    'textarea',
+    'email',
+    'password',
+    'readonly',
+    'dropdown',
+    'multiselect',
+    'radio',
+    'checkbox',
+    'checkbox-group',
+    'date',
+    'datetime',
+    'time',
+    'month',
+  ];
+  const canonicalType = (typeAliases[typeValue] ?? typeValue) as UploadFieldType;
+  const type = allowedTypes.includes(canonicalType) ? canonicalType : 'text';
   const required = Boolean(obj.required);
   const placeholder = typeof obj.placeholder === 'string' ? obj.placeholder : undefined;
   const readOnly = Boolean(obj.readOnly);
+  const rows =
+    typeof obj.rows === 'number' && Number.isFinite(obj.rows) ? Math.max(1, Math.floor(obj.rows)) : undefined;
 
   const options = Array.isArray(obj.options)
     ? obj.options
         .map((option) => {
-          if (!option || typeof option !== 'object') {
+          if (option === null || option === undefined) {
             return null;
           }
-          const optionObj = option as Record<string, unknown>;
-          if (optionObj.value === undefined) {
-            return null;
+          if (typeof option === 'string' || typeof option === 'number' || typeof option === 'boolean') {
+            const value = String(option);
+            return { label: value, value };
           }
-          const value = String(optionObj.value);
-          const labelValue = optionObj.label !== undefined ? String(optionObj.label) : value;
-          return { label: labelValue, value };
+          if (typeof option === 'object') {
+            const optionObj = option as Record<string, unknown>;
+            const rawValue = optionObj.value ?? optionObj.id ?? optionObj.key ?? optionObj.name;
+            if (rawValue === undefined) {
+              return null;
+            }
+            const value = String(rawValue);
+            const labelValue = optionObj.label ?? optionObj.title ?? optionObj.name ?? value;
+            return { label: String(labelValue), value };
+          }
+          return null;
         })
         .filter((option): option is FieldOption => Boolean(option))
     : undefined;
@@ -82,6 +140,8 @@ function normaliseField(candidate: unknown): UploadFieldDefinition | null {
         .filter((role): role is UserRole => role === 'ADMIN' || role === 'MAKER' || role === 'REVIEWER' || role === 'CHECKER'))
     : undefined;
 
+  const defaultValue = obj.defaultValue;
+
   return {
     name,
     label,
@@ -91,6 +151,8 @@ function normaliseField(candidate: unknown): UploadFieldDefinition | null {
     readOnly,
     options,
     roles,
+    defaultValue,
+    rows,
   };
 }
 

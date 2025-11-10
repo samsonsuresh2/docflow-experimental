@@ -1,7 +1,8 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import DynamicForm from '../components/DynamicForm';
 import api from '../lib/api';
 import { fieldsForRole, parseUploadFieldConfig, UploadFieldDefinition } from '../lib/config';
+import { DynamicFormValues, isDynamicFormValueEmpty } from '../lib/dynamicFormValues';
 import { useUser } from '../lib/UserContext';
 import type { DocumentResponse } from '../types/documents';
 
@@ -13,8 +14,7 @@ export default function Upload() {
   const { user } = useUser();
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [fields, setFields] = useState<UploadFieldDefinition[]>([]);
-  const [metadataValues, setMetadataValues] = useState<Record<string, string>>({});
-  const [documentNumber, setDocumentNumber] = useState('');
+  const [metadataValues, setMetadataValues] = useState<DynamicFormValues>({});
   const [title, setTitle] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -60,12 +60,16 @@ export default function Upload() {
     return <AuthRequired />;
   }
 
+  const handleMetadataChange = useCallback((values: DynamicFormValues) => {
+    setMetadataValues(values);
+  }, []);
+
   const performUpload = async (intent: 'save' | 'submit') => {
     setStatusMessage(null);
     setErrorMessage(null);
 
-    if (!documentNumber.trim() || !title.trim()) {
-      setErrorMessage('Document number and title are required.');
+    if (!title.trim()) {
+      setErrorMessage('Title is required.');
       return;
     }
 
@@ -74,7 +78,6 @@ export default function Upload() {
       setActiveAction(intent);
       const metadata = buildMetadataPayload(availableFields, metadataValues);
       const payload = {
-        documentNumber: documentNumber.trim(),
         title: title.trim(),
         metadata,
       };
@@ -91,21 +94,22 @@ export default function Upload() {
         },
       });
 
+      const documentIdentifier = response.data.documentNumber ?? response.data.id;
+
       if (intent === 'submit') {
         try {
           await api.put(`/documents/${response.data.id}/submit`);
           setStatusMessage(
-            `Document submitted and moved to Open status. Document ID: ${response.data.id}.`,
+            `Document submitted and moved to Open status. Document ID: ${documentIdentifier}.`,
           );
         } catch (error) {
           setErrorMessage('Document saved as draft, but submission failed. Please submit from the Review page.');
           return;
         }
       } else {
-        setStatusMessage('Document saved as a draft.');
+        setStatusMessage(`Document saved as a draft. Document ID: ${documentIdentifier}.`);
       }
 
-      setDocumentNumber('');
       setTitle('');
       setMetadataValues({});
       setFile(null);
@@ -138,16 +142,6 @@ export default function Upload() {
         <fieldset className="space-y-4" disabled={submitting}>
           <legend className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">Document Details</legend>
           <label className="block text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Document Number</span>
-            <input
-              type="text"
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-              value={documentNumber}
-              onChange={(event) => setDocumentNumber(event.target.value)}
-              required
-            />
-          </label>
-          <label className="block text-sm">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Title</span>
             <input
               type="text"
@@ -176,7 +170,7 @@ export default function Upload() {
             <DynamicForm
               fields={availableFields}
               initialValues={metadataValues}
-              onChange={(values) => setMetadataValues(values)}
+              onChange={handleMetadataChange}
               submitLabel={null}
               disabled={submitting || loadingConfig}
             />
@@ -216,19 +210,42 @@ function AuthRequired() {
 
 function buildMetadataPayload(
   fields: UploadFieldDefinition[],
-  values: Record<string, string>,
+  values: DynamicFormValues,
 ): Record<string, unknown> {
   const metadata: Record<string, unknown> = {};
   fields.forEach((field) => {
     const rawValue = values[field.name];
-    if (rawValue === undefined || rawValue === '') {
+    if (rawValue === undefined) {
+      return;
+    }
+
+    if (typeof rawValue !== 'boolean' && isDynamicFormValueEmpty(rawValue)) {
       return;
     }
 
     switch (field.type) {
       case 'number': {
-        const parsed = Number(rawValue);
-        metadata[field.name] = Number.isNaN(parsed) ? rawValue : parsed;
+        if (typeof rawValue === 'string') {
+          const parsed = Number(rawValue);
+          metadata[field.name] = Number.isNaN(parsed) ? rawValue : parsed;
+        } else {
+          metadata[field.name] = rawValue;
+        }
+        break;
+      }
+      case 'checkbox': {
+        metadata[field.name] = Boolean(rawValue);
+        break;
+      }
+      case 'multiselect':
+      case 'checkbox-group': {
+        if (Array.isArray(rawValue)) {
+          if (rawValue.length > 0) {
+            metadata[field.name] = rawValue;
+          }
+        } else if (typeof rawValue === 'string' && rawValue) {
+          metadata[field.name] = [rawValue];
+        }
         break;
       }
       default:

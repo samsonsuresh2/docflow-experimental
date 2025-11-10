@@ -12,23 +12,11 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 public class DocumentUploadMetadata {
 
     @NotBlank
-    @Size(max = 100)
-    private String documentNumber;
-
-    @NotBlank
     @Size(max = 255)
     private String title;
 
     @NotEmpty
     private Map<String, Object> metadata;
-
-    public String getDocumentNumber() {
-        return documentNumber;
-    }
-
-    public void setDocumentNumber(String documentNumber) {
-        this.documentNumber = documentNumber;
-    }
 
     public String getTitle() {
         return title;
