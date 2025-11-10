@@ -58,7 +58,7 @@ export default function DataInjector() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
-        <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Data Injector</h1>
+        <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Data Ingestor</h1>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
           Upload a prepared Excel workbook to bulk insert or update document records. Each row should include a
           <span className="mx-1 rounded bg-slate-100 px-1 font-mono text-xs dark:bg-slate-800">DocumentNumber</span>
@@ -144,7 +144,7 @@ export default function DataInjector() {
 function AuthRequired() {
   return (
     <div className="rounded border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200">
-      Please sign in to access the Data Injector.
+      Please sign in to access the Data Ingestor.
     </div>
   );
 }
