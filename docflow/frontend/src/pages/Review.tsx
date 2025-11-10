@@ -1,9 +1,10 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DocumentPreviewModal, { PreviewContent } from '../components/DocumentPreviewModal';
 import DynamicForm from '../components/DynamicForm';
 import StatusBadge from '../components/StatusBadge';
 import api from '../lib/api';
 import { fieldsForRole, parseUploadFieldConfig, UploadFieldDefinition } from '../lib/config';
+import { parseReviewFilterConfig, ReviewFilterDefinition } from '../lib/reviewFilters';
 import { convertDocxToHtml, convertXlsxToHtml } from '../lib/documentPreview';
 import {
   DynamicFormValues,
@@ -13,7 +14,7 @@ import {
 import { useUser } from '../lib/UserContext';
 import { DocumentStatus, normalizeStatus } from '../lib/documentStatus';
 import type { UserRole } from '../lib/user';
-import type { DocumentResponse } from '../types/documents';
+import type { DocumentResponse, DocumentSummary, PageResponse } from '../types/documents';
 
 interface ConfigResponse {
   configJson: string | null;
@@ -21,11 +22,47 @@ interface ConfigResponse {
 
 type WorkflowAction = 'submit' | 'startReview' | 'approve' | 'reject' | 'rework' | 'close';
 
+type StatusFilter =
+  | 'ALL'
+  | 'DRAFT'
+  | 'OPEN'
+  | 'UNDER_REVIEW'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CLOSED';
+type SortColumn = 'id' | 'documentNumber' | 'title' | 'status' | 'createdBy' | 'updatedBy' | 'updatedAt';
+
+const PAGE_SIZE = 10;
+
+const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
+  { value: 'ALL', label: 'All' },
+  { value: 'DRAFT', label: 'Draft' },
+  { value: 'OPEN', label: 'Open' },
+  { value: 'UNDER_REVIEW', label: 'Under Review' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'REJECTED', label: 'Rejected' },
+  { value: 'CLOSED', label: 'Closed' },
+];
+
 export default function Review() {
   const { user } = useUser();
   const [configLoading, setConfigLoading] = useState(false);
   const [fields, setFields] = useState<UploadFieldDefinition[]>([]);
-  const [documentNumberInput, setDocumentNumberInput] = useState('');
+  const [documentIdFilter, setDocumentIdFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [reviewFilters, setReviewFilters] = useState<ReviewFilterDefinition[]>([]);
+  const [reviewFilterValues, setReviewFilterValues] = useState<Record<string, string>>({});
+  const [reviewFiltersLoading, setReviewFiltersLoading] = useState(false);
+  const [reviewFilterError, setReviewFilterError] = useState<string | null>(null);
+  // const [metadataKeyFilter, setMetadataKeyFilter] = useState('');
+  // const [metadataValueFilter, setMetadataValueFilter] = useState('');
+  const [documentsPage, setDocumentsPage] = useState<PageResponse<DocumentSummary> | null>(null);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [sortBy, setSortBy] = useState<SortColumn>('id');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [tableError, setTableError] = useState<string | null>(null);
   const [document, setDocument] = useState<DocumentResponse | null>(null);
   const [metadataValues, setMetadataValues] = useState<DynamicFormValues>({});
   const [loadingDocument, setLoadingDocument] = useState(false);
@@ -39,6 +76,7 @@ export default function Review() {
   const [previewContent, setPreviewContent] = useState<PreviewContent | null>(null);
   const [previewDownloadUrl, setPreviewDownloadUrl] = useState<string | null>(null);
   const [previewFileName, setPreviewFileName] = useState<string | null>(null);
+  const documentDetailsRef = useRef<HTMLDivElement | null>(null);
 
   const normalizedStatus = normalizeStatus(document?.status ?? null);
 
@@ -64,6 +102,46 @@ export default function Review() {
     };
 
     loadConfig();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadFilters = async () => {
+      try {
+        setReviewFiltersLoading(true);
+        setReviewFilterError(null);
+        const response = await api.get<ConfigResponse>('/admin/config/review-filters');
+        if (!isMounted) {
+          return;
+        }
+        const definitions = parseReviewFilterConfig(response.data.configJson);
+        setReviewFilters(definitions);
+        setReviewFilterValues((current) => {
+          const nextValues: Record<string, string> = {};
+          definitions.forEach((definition) => {
+            const existing = current[definition.key];
+            nextValues[definition.key] = typeof existing === 'string' ? existing : '';
+          });
+          return nextValues;
+        });
+      } catch (error) {
+        if (isMounted) {
+          setReviewFilters([]);
+          setReviewFilterValues({});
+          setReviewFilterError('Failed to load review filter configuration.');
+        }
+      } finally {
+        if (isMounted) {
+          setReviewFiltersLoading(false);
+        }
+      }
+    };
+
+    loadFilters();
 
     return () => {
       isMounted = false;
@@ -102,41 +180,188 @@ export default function Review() {
     };
   }, [previewDownloadUrl]);
 
+  useEffect(() => {
+    if (document && documentDetailsRef.current) {
+      documentDetailsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [document]);
+
   if (!user) {
     return <AuthRequired />;
   }
 
-  const handleDocumentSearch = async (event: FormEvent) => {
-    event.preventDefault();
-    const trimmedDocumentNumber = documentNumberInput.trim();
+  const collectFilterPayload = useCallback(() => {
+    const payload: Record<string, string> = {};
+    reviewFilters.forEach((definition) => {
+      const rawValue = reviewFilterValues[definition.key];
+      if (typeof rawValue !== 'string') {
+        return;
+      }
+      const trimmed = rawValue.trim();
+      if (trimmed) {
+        if (definition.type === 'date' && !/^[<>~=]/.test(trimmed)) {
+          payload[definition.key] = `>${trimmed}`;
+        } else {
+          payload[definition.key] = trimmed;
+        }
+      }
+    });
+    return payload;
+  }, [reviewFilters, reviewFilterValues]);
 
-    if (!trimmedDocumentNumber) {
-      setErrorMessage('Please enter a document ID.');
+  const fetchDocuments = useCallback(
+    async ({
+      page,
+      sort,
+      direction,
+      resetSelection,
+    }: {
+      page?: number;
+      sort?: SortColumn;
+      direction?: 'asc' | 'desc';
+      resetSelection?: boolean;
+    } = {}) => {
+      const pageToLoad = page ?? currentPage;
+      const sortToUse = sort ?? sortBy;
+      const directionToUse = direction ?? sortDirection;
+
+      if (resetSelection) {
+        setSelectedDocumentId(null);
+        setDocument(null);
+      }
+
+      setDocumentsLoading(true);
+      setTableError(null);
+      try {
+        const trimmedDocumentId = documentIdFilter.trim();
+        // const trimmedMetadataKey = metadataKeyFilter.trim();
+        // const trimmedMetadataValue = metadataValueFilter.trim();
+        const filtersPayload = collectFilterPayload();
+        const params: Record<string, unknown> = {
+            status: statusFilter === 'ALL' ? '' : statusFilter,
+            id: trimmedDocumentId,
+            page: pageToLoad,
+            size: PAGE_SIZE,
+            sortBy: sortToUse,
+            direction: directionToUse,
+            // metadataKey: trimmedMetadataKey,
+            // metadataValue: trimmedMetadataValue,
+        };
+        if (Object.keys(filtersPayload).length > 0) {
+          params.filters = JSON.stringify(filtersPayload);
+        }
+        const response = await api.get<PageResponse<DocumentSummary>>('/documents/search', {
+          params,
+        });
+        const data = response.data;
+        setDocumentsPage(data);
+        setCurrentPage(data.number ?? pageToLoad);
+        setSortBy(sortToUse);
+        setSortDirection(directionToUse);
+      } catch (error) {
+        setTableError('Unable to load documents.');
+      } finally {
+        setDocumentsLoading(false);
+      }
+    },
+    [collectFilterPayload, currentPage, sortBy, sortDirection, documentIdFilter, statusFilter],
+  );
+
+  const handleFilterSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      fetchDocuments({ page: 0, resetSelection: true });
+    },
+    [fetchDocuments],
+  );
+
+  const loadDocument = useCallback(
+    async (documentId: number) => {
+      setLoadingDocument(true);
+      setErrorMessage(null);
+      setStatusMessage(null);
+      try {
+        const response = await api.get<DocumentResponse>(`/documents/${documentId}`);
+        setDocument(response.data);
+        setSelectedDocumentId(response.data.id);
+      } catch (error) {
+        setDocument(null);
+        setSelectedDocumentId(null);
+        setErrorMessage('Document not found.');
+      } finally {
+        setLoadingDocument(false);
+      }
+    },
+    [],
+  );
+
+  const handleRowClick = useCallback(
+    (summary: DocumentSummary) => {
+      setSelectedDocumentId(summary.id);
+      setStatusMessage(null);
+      setErrorMessage(null);
+      void loadDocument(summary.id);
+    },
+    [loadDocument],
+  );
+
+  const handleSort = useCallback(
+    (column: SortColumn) => {
+      const nextDirection = sortBy === column && sortDirection === 'asc' ? 'desc' : 'asc';
+      fetchDocuments({ page: 0, sort: column, direction: nextDirection });
+    },
+    [fetchDocuments, sortBy, sortDirection],
+  );
+
+  const handlePreviousPage = useCallback(() => {
+    if (!documentsPage || documentsLoading || currentPage === 0) {
       return;
     }
+    fetchDocuments({ page: currentPage - 1 });
+  }, [documentsPage, documentsLoading, currentPage, fetchDocuments]);
 
-    await loadDocument(trimmedDocumentNumber);
-  };
-
-  const loadDocument = async (documentNumber: string) => {
-    setLoadingDocument(true);
-    setErrorMessage(null);
-    setStatusMessage(null);
-    try {
-      const response = await api.get<DocumentResponse>(
-        `/documents/by-number/${encodeURIComponent(documentNumber)}`,
-      );
-      setDocument(response.data);
-    } catch (error) {
-      setDocument(null);
-      setErrorMessage('Document not found.');
-    } finally {
-      setLoadingDocument(false);
+  const handleNextPage = useCallback(() => {
+    if (!documentsPage || documentsLoading) {
+      return;
     }
-  };
+    const nextPage = currentPage + 1;
+    if (nextPage >= documentsPage.totalPages) {
+      return;
+    }
+    fetchDocuments({ page: nextPage });
+  }, [documentsPage, documentsLoading, currentPage, fetchDocuments]);
+
+  const paginationSummary = useMemo(() => {
+    if (!documentsPage || documentsPage.totalElements === 0) {
+      return { start: 0, end: 0, total: documentsPage?.totalElements ?? 0 };
+    }
+    const start = documentsPage.number * documentsPage.size + 1;
+    const end = start + documentsPage.content.length - 1;
+    return { start, end, total: documentsPage.totalElements };
+  }, [documentsPage]);
+
+  const canGoPrevious = documentsPage !== null && currentPage > 0;
+  const canGoNext = documentsPage !== null && currentPage + 1 < documentsPage.totalPages;
+
+  const renderSortIndicator = useCallback(
+    (column: SortColumn) => {
+      if (sortBy !== column) {
+        return '↕';
+      }
+      return sortDirection === 'asc' ? '↑' : '↓';
+    },
+    [sortBy, sortDirection],
+  );
 
   const handleMetadataChange = useCallback((values: DynamicFormValues) => {
     setMetadataValues(values);
+  }, []);
+
+  const handleDynamicFilterChange = useCallback((key: string, value: string) => {
+    setReviewFilterValues((current) => ({
+      ...current,
+      [key]: value,
+    }));
   }, []);
 
   const handleMetadataUpdate = async (values: DynamicFormValues) => {
@@ -156,7 +381,8 @@ export default function Review() {
       const metadata = buildMetadataPayload(availableFields, values);
       await api.put(`/documents/${document.id}/metadata`, { metadata });
       setStatusMessage('Metadata updated successfully.');
-      await loadDocument(document.documentNumber);
+      await loadDocument(document.id);
+      await fetchDocuments();
     } catch (error) {
       setErrorMessage('Unable to update metadata.');
     } finally {
@@ -201,7 +427,8 @@ export default function Review() {
       }
       setStatusMessage('Workflow updated successfully.');
       setActionComment('');
-      await loadDocument(document.documentNumber);
+      await loadDocument(document.id);
+      await fetchDocuments();
     } catch (error) {
       setErrorMessage('Workflow action failed.');
     } finally {
@@ -297,32 +524,237 @@ export default function Review() {
       <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
         <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Document review</h1>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-          Search for a document ID to review metadata, capture maker updates, or drive approval transitions based on your
-          current role.
+          Filter the document queue and load results to review metadata, capture maker updates, or drive workflow transitions
+          based on your role.
         </p>
-        <form className="mt-4 flex flex-wrap gap-2" onSubmit={handleDocumentSearch}>
-          <input
-            type="text"
-            placeholder="Document ID (e.g. DOC-2025-000123)"
-            className="flex-1 min-w-[180px] rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-            value={documentNumberInput}
-            onChange={(event) => setDocumentNumberInput(event.target.value)}
-          />
-          <button
-            type="submit"
-            className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400"
-            disabled={loadingDocument}
-          >
-            {loadingDocument ? 'Loading…' : 'Load Document'}
-          </button>
+        <form className="mt-4 grid gap-4 md:grid-cols-4" onSubmit={handleFilterSubmit}>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Document ID</span>
+            <input
+              type="text"
+              placeholder="Document ID (e.g. DOC-2025-000123)"
+              className="rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+              value={documentIdFilter}
+              onChange={(event) => setDocumentIdFilter(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Status</span>
+            <select
+              className="rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+            >
+              {STATUS_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {reviewFilters.map((filter) => (
+            <div key={filter.key} className="flex flex-col gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                {filter.label}
+              </span>
+              {filter.type === 'dropdown' ? (
+                <select
+                  className="rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                  value={reviewFilterValues[filter.key] ?? ''}
+                  onChange={(event) => handleDynamicFilterChange(filter.key, event.target.value)}
+                  disabled={documentsLoading || reviewFiltersLoading}
+                >
+                  <option value="">All</option>
+                  {(filter.options ?? []).map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type={filter.type === 'date' ? 'date' : 'text'}
+                  className="rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                  value={reviewFilterValues[filter.key] ?? ''}
+                  onChange={(event) => handleDynamicFilterChange(filter.key, event.target.value)}
+                  disabled={documentsLoading || reviewFiltersLoading}
+                />
+              )}
+            </div>
+          ))}
+          <div className="flex items-end gap-2 md:col-span-4">
+            <button
+              type="submit"
+              className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-400 dark:disabled:bg-blue-400/60"
+              disabled={documentsLoading}
+            >
+              {documentsLoading ? 'Loading…' : 'Load Documents'}
+            </button>
+            {reviewFiltersLoading ? (
+              <span className="text-xs text-slate-500 dark:text-slate-300">Loading filters…</span>
+            ) : null}
+            {reviewFilterError ? (
+              <span className="text-xs text-red-600 dark:text-red-400">{reviewFilterError}</span>
+            ) : null}
+          </div>
         </form>
+      </div>
+
+      <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Results</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              {tableError
+                ? tableError
+                : documentsPage
+                ? `Showing ${paginationSummary.start}–${paginationSummary.end} of ${paginationSummary.total} results`
+                : 'Load documents to view the review queue.'}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center rounded border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
+              onClick={handlePreviousPage}
+              disabled={!canGoPrevious || documentsLoading}
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center rounded border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
+              onClick={handleNextPage}
+              disabled={!canGoNext || documentsLoading}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+            <thead className="bg-slate-50 dark:bg-slate-800/60">
+              <tr>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-left text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                    onClick={() => handleSort('documentNumber')}
+                  >
+                    Document ID
+                    <span className="text-xs">{renderSortIndicator('documentNumber')}</span>
+                  </button>
+                </th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-left text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                    onClick={() => handleSort('title')}
+                  >
+                    Name
+                    <span className="text-xs">{renderSortIndicator('title')}</span>
+                  </button>
+                </th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-left text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                    onClick={() => handleSort('status')}
+                  >
+                    Status
+                    <span className="text-xs">{renderSortIndicator('status')}</span>
+                  </button>
+                </th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-left text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                    onClick={() => handleSort('createdBy')}
+                  >
+                    Created By
+                    <span className="text-xs">{renderSortIndicator('createdBy')}</span>
+                  </button>
+                </th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-left text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                    onClick={() => handleSort('updatedBy')}
+                  >
+                    Last Updated By
+                    <span className="text-xs">{renderSortIndicator('updatedBy')}</span>
+                  </button>
+                </th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-left text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                    onClick={() => handleSort('updatedAt')}
+                  >
+                    Last Updated At
+                    <span className="text-xs">{renderSortIndicator('updatedAt')}</span>
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+              {tableError ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-red-600 dark:text-red-400">
+                    {tableError}
+                  </td>
+                </tr>
+              ) : documentsLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                    Loading documents…
+                  </td>
+                </tr>
+              ) : documentsPage && documentsPage.content.length > 0 ? (
+                documentsPage.content.map((summary) => {
+                  const isSelected = selectedDocumentId === summary.id;
+                  return (
+                    <tr
+                      key={summary.id}
+                      onClick={() => handleRowClick(summary)}
+                      className={`cursor-pointer transition hover:bg-slate-50 dark:hover:bg-slate-800 ${
+                        isSelected
+                          ? 'bg-blue-50 hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20'
+                          : 'bg-white dark:bg-slate-900'
+                      }`}
+                    >
+                      <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-200">
+                        {summary.documentNumber}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-200">{summary.title}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-200">
+                        <StatusBadge status={summary.status} />
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-200">{summary.createdBy}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-200">{summary.updatedBy ?? '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-200">
+                        {formatTimestamp(summary.updatedAt ?? summary.createdAt ?? null)}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                    {documentsPage ? 'No documents match your filters.' : 'Use the filters above and load documents to begin.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {errorMessage ? <p className="text-sm text-red-600 dark:text-red-400">{errorMessage}</p> : null}
       {statusMessage ? <p className="text-sm text-green-600 dark:text-green-400">{statusMessage}</p> : null}
 
       {document ? (
-        <div className="space-y-6">
+        <div ref={documentDetailsRef} className="space-y-6">
           <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
@@ -500,6 +932,14 @@ function buildFullActionList(status: DocumentStatus): { key: WorkflowAction; lab
   }
 }
 
+function formatTimestamp(value: string | null | undefined): string {
+  if (!value) {
+    return '—';
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
 function extractFileName(filePath: string): string | null {
   const trimmed = filePath.trim();
   if (!trimmed) {
@@ -590,3 +1030,4 @@ function AuthRequired() {
     </div>
   );
 }
+
