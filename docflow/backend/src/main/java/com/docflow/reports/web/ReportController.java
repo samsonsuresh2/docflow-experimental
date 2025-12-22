@@ -1,5 +1,6 @@
 package com.docflow.reports.web;
 
+import com.docflow.reports.config.ReportProperties;
 import com.docflow.reports.dto.DynamicReportRequest;
 import com.docflow.reports.dto.ReportTemplateRequest;
 import com.docflow.reports.dto.ReportTemplateResponse;
@@ -13,14 +14,14 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/reports")
@@ -31,23 +32,29 @@ public class ReportController {
     private final DynamicReportBuilder builder;
     private final DynamicReportExecutor executor;
     private final ReportTemplateService templateService;
+    private final ReportProperties properties;
 
     public ReportController(ReportMetadataService metadataService,
                             DynamicReportBuilder builder,
                             DynamicReportExecutor executor,
-                            ReportTemplateService templateService) {
+                            ReportTemplateService templateService,
+                            ReportProperties properties) {
         this.metadataService = metadataService;
         this.builder = builder;
         this.executor = executor;
         this.templateService = templateService;
+        this.properties = properties;
     }
 
-    @GetMapping("/meta")
-    public Object metadata(@RequestParam(value = "entity", required = false) String entity) {
-        if (entity == null || entity.isBlank()) {
-            return new EntityListResponse(metadataService.listEntities());
-        }
-        return metadataService.getMetadata(entity);
+    @GetMapping("/admin/scope")
+    public AdminScopeResponse adminScope(@RequestParam(value = "baseEntity", required = false) String baseEntity) {
+        List<ReportMetadataService.BaseEntity> baseEntities = metadataService.listBaseEntities();
+        List<String> baseColumns = baseEntity != null && !baseEntity.isBlank()
+                ? metadataService.getColumns(baseEntity).columns()
+                : List.of();
+        List<String> documentColumns = metadataService.getColumns(properties.getDocumentTable().getName()).columns();
+        List<String> metadataKeys = metadataService.listMetadataKeys();
+        return new AdminScopeResponse(baseEntities, baseColumns, documentColumns, metadataKeys);
     }
 
     @PostMapping("/run")
@@ -73,8 +80,11 @@ public class ReportController {
     }
 }
 
-record EntityListResponse(java.util.List<String> entities) {
+record TemplateListResponse(java.util.List<ReportTemplateResponse> templates) {
 }
 
-record TemplateListResponse(java.util.List<ReportTemplateResponse> templates) {
+record AdminScopeResponse(List<ReportMetadataService.BaseEntity> entities,
+                          List<String> baseColumns,
+                          List<String> documentColumns,
+                          List<String> metadataKeys) {
 }

@@ -29,7 +29,7 @@ public class DynamicReportExecutor {
 
         List<Map<String, Object>> rows = jdbcTemplate.query(paginatedSql, params, (rs, rowNum) -> {
             Map<String, Object> row = new LinkedHashMap<>();
-            for (DynamicReportBuilder.ColumnSelection column : report.columns()) {
+            for (DynamicReportBuilder.SelectColumn column : report.columns()) {
                 Object value = rs.getObject(column.label());
                 row.put(column.displayName(), value);
             }
@@ -37,7 +37,7 @@ public class DynamicReportExecutor {
         });
 
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put("columns", report.columns().stream().map(DynamicReportBuilder.ColumnSelection::displayName).toList());
+        response.put("columns", report.columns().stream().map(DynamicReportBuilder.SelectColumn::displayName).toList());
         response.put("rows", rows);
         return response;
     }

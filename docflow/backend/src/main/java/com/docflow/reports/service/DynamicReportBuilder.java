@@ -1,10 +1,11 @@
 package com.docflow.reports.service;
 
+import com.docflow.reports.config.ReportProperties;
 import com.docflow.reports.dto.DynamicReportRequest;
 import com.docflow.reports.dto.ReportFilter;
-import com.docflow.reports.dto.ReportJoin;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
@@ -15,258 +16,150 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class DynamicReportBuilder {
 
     private static final Set<String> ALLOWED_OPERATORS = Set.of("=", "<", ">", "<=", ">=", "like", "between");
 
+    private final ReportMetadataService metadataService;
+    private final ReportProperties properties;
+
+    public DynamicReportBuilder(ReportMetadataService metadataService, ReportProperties properties) {
+        this.metadataService = metadataService;
+        this.properties = properties;
+    }
+
     public BuiltReport build(DynamicReportRequest request) {
         if (request == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Request required");
         }
-        String baseEntity = requireEntity(request.getBaseEntity(), "baseEntity is required");
+        RequestContext ctx = RequestContext.from(request, properties, metadataService);
 
-        Map<String, EntityPlan> plans = new LinkedHashMap<>();
-        EntityPlan basePlan = new EntityPlan(baseEntity, "b");
-        plans.put(baseEntity, basePlan);
+        ParameterCollector params = new ParameterCollector();
+        List<SelectColumn> selectColumns = buildSelectColumns(ctx, params);
+        List<String> whereClauses = buildWhereClauses(ctx, params);
+        String metadataPivot = buildMetadataPivot(ctx, params);
 
-        List<JoinPlan> joinPlans = buildJoinPlans(request.getJoins(), basePlan, plans);
-        List<ColumnProjection> projections = collectColumns(request.getColumns(), basePlan, plans);
-        collectFilters(request.getFilters(), basePlan, plans);
-
-        ParameterCollector parameters = new ParameterCollector();
-        Map<String, EntityQuery> queries = new LinkedHashMap<>();
-        for (EntityPlan plan : plans.values()) {
-            queries.put(plan.entity(), buildEntityQuery(plan, parameters));
-        }
-
-        List<ColumnSelection> selections = buildSelections(projections);
-        String sql = assembleSql(queries, basePlan, joinPlans, selections);
-
-        return new BuiltReport(sql, parameters.asMap(), selections);
-    }
-
-    private List<JoinPlan> buildJoinPlans(List<ReportJoin> joins,
-                                          EntityPlan basePlan,
-                                          Map<String, EntityPlan> plans) {
-        List<JoinPlan> joinPlans = new ArrayList<>();
-        if (joins == null) {
-            return joinPlans;
-        }
-        int index = 0;
-        for (ReportJoin join : joins) {
-            String rightEntity = requireEntity(join.getRightEntity(), "Join entity required");
-            if (plans.containsKey(rightEntity)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duplicate join entity: " + rightEntity);
-            }
-            EntityPlan rightPlan = new EntityPlan(rightEntity, "j" + index++);
-            plans.put(rightEntity, rightPlan);
-
-            String on = Objects.requireNonNullElse(join.getOn(), "").trim();
-            if (on.isEmpty() || !on.contains("=")) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Join condition must be left=right");
-            }
-            String[] parts = on.split("=", 2);
-            Reference left = resolveReference(parts[0].trim(), basePlan.entity(), plans);
-            Reference right = resolveReference(parts[1].trim(), rightPlan.entity(), plans);
-            if (!right.plan().equals(rightPlan)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Join right side must reference " + rightPlan.entity());
-            }
-
-            left.plan().ensureKey(left.key());
-            right.plan().ensureKey(right.key());
-            joinPlans.add(new JoinPlan(left, right));
-        }
-        return joinPlans;
-    }
-
-    private List<ColumnProjection> collectColumns(List<String> columns,
-                                                  EntityPlan basePlan,
-                                                  Map<String, EntityPlan> plans) {
-        List<ColumnProjection> projections = new ArrayList<>();
-        projections.add(new ColumnProjection(basePlan, "entity_id", "entity_id"));
-        if (columns == null) {
-            return projections;
-        }
-        Set<String> seen = new LinkedHashSet<>();
-        seen.add(identifier(basePlan, "entity_id"));
-        for (String raw : columns) {
-            if (raw == null || raw.isBlank()) {
-                continue;
-            }
-            Reference ref = resolveReference(raw.trim(), basePlan.entity(), plans);
-            ref.plan().ensureKey(ref.key());
-            String display = raw.contains(".") ? raw.trim() :
-                    (ref.plan().equals(basePlan) ? ref.key() : ref.plan().entity() + "." + ref.key());
-            if (seen.add(identifier(ref.plan(), ref.key()))) {
-                projections.add(new ColumnProjection(ref.plan(), ref.key(), display));
-            }
-        }
-        return projections;
-    }
-
-    private void collectFilters(List<ReportFilter> filters,
-                                EntityPlan basePlan,
-                                Map<String, EntityPlan> plans) {
-        if (filters == null) {
-            return;
-        }
-        for (ReportFilter filter : filters) {
-            Reference ref = resolveReference(filter.getKey(), basePlan.entity(), plans);
-            String op = normalizeOperator(filter.getOp());
-            if (!ALLOWED_OPERATORS.contains(op)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed: " + filter.getOp());
-            }
-            ref.plan().ensureKey(ref.key());
-            ref.plan().filters().add(new FilterSpec(ref.key(), op, Objects.toString(filter.getValue(), null)));
-        }
-    }
-
-    private EntityQuery buildEntityQuery(EntityPlan plan, ParameterCollector parameters) {
-        String tableAlias = plan.alias() + "_src";
-        StringBuilder select = new StringBuilder("SELECT ")
-                .append(tableAlias).append(".entity_id AS entity_id");
-        Map<String, String> aliasMap = new LinkedHashMap<>();
-        int idx = 0;
-        for (String key : plan.keys()) {
-            String alias = plan.alias() + "_c" + idx++;
-            String keyParam = parameters.add(key);
-            select.append(", MAX(CASE WHEN ")
-                    .append(tableAlias).append(".column_key = :").append(keyParam)
-                    .append(" THEN ").append(tableAlias).append(".column_value END) AS ")
-                    .append(alias);
-            aliasMap.put(key, alias);
-        }
-        select.append(" FROM ").append(plan.entity()).append(" ").append(tableAlias);
-        select.append(" GROUP BY ").append(tableAlias).append(".entity_id");
-
-        List<String> having = new ArrayList<>();
-        for (FilterSpec filter : plan.filters()) {
-            if ("entity_id".equals(filter.key())) {
-                String valueParam = parameters.add(filter.value());
-                having.add(tableAlias + ".entity_id " + toSqlOperator(filter, valueParam));
-                continue;
-            }
-            String alias = aliasMap.get(filter.key());
-            if (alias == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown key for filtering: " + filter.key());
-            }
-            having.add(alias + " " + toSqlOperator(filter, parameters));
-        }
-        if (!having.isEmpty()) {
-            select.append(" HAVING ").append(String.join(" AND ", having));
-        }
-        plan.aliases(aliasMap);
-        return new EntityQuery(plan.alias(), select.toString(), aliasMap);
-    }
-
-    private List<ColumnSelection> buildSelections(List<ColumnProjection> projections) {
-        List<ColumnSelection> selections = new ArrayList<>();
-        int idx = 0;
-        for (ColumnProjection projection : projections) {
-            EntityPlan plan = projection.plan();
-            String label;
-            if (projection.key().equals("entity_id") && selections.isEmpty()) {
-                label = "entity_id";
-            } else {
-                label = "col" + idx++;
-            }
-            selections.add(new ColumnSelection(plan.alias(), plan.entity(), projection.key(), label, projection.display()));
-        }
-        return selections;
-    }
-
-    private String assembleSql(Map<String, EntityQuery> queries,
-                               EntityPlan basePlan,
-                               List<JoinPlan> joinPlans,
-                               List<ColumnSelection> selections) {
         StringBuilder sql = new StringBuilder("SELECT ");
-        List<String> selectParts = new ArrayList<>();
-        for (ColumnSelection selection : selections) {
-            String expression = buildColumnExpression(selection, queries);
-            selectParts.add(expression + " AS " + selection.label());
-        }
-        sql.append(String.join(", ", selectParts));
-        sql.append(" FROM (").append(queries.get(basePlan.entity()).sql()).append(") ")
-                .append(basePlan.alias());
+        sql.append(selectColumns.stream()
+                .map(sc -> sc.expression() + " AS " + sc.label())
+                .collect(Collectors.joining(", ")));
 
-        for (JoinPlan join : joinPlans) {
-            EntityQuery rightQuery = queries.get(join.right().plan().entity());
-            sql.append(" LEFT JOIN (").append(rightQuery.sql()).append(") ")
-                    .append(join.right().plan().alias())
+        sql.append(" FROM ").append(ctx.baseTable()).append(" ").append(ctx.baseAlias());
+        if (!ctx.baseTable().equals(ctx.documentTable())) {
+            sql.append(" JOIN ").append(ctx.documentTable()).append(" ").append(ctx.documentAlias())
                     .append(" ON ")
-                    .append(buildJoinExpression(join.left(), queries))
-                    .append(" = ")
-                    .append(buildJoinExpression(join.right(), queries));
+                    .append(ctx.baseAlias()).append(".").append(ctx.businessFkColumn())
+                    .append(" = ").append(ctx.documentAlias()).append(".").append(ctx.documentBusinessKey());
         }
-        return sql.toString();
+
+        if (StringUtils.hasText(metadataPivot)) {
+            sql.append(" LEFT JOIN (").append(metadataPivot).append(") md ON md.")
+                    .append(ctx.documentIdColumn()).append(" = ").append(ctx.documentAlias()).append(".").append(ctx.documentInternalPk());
+        }
+
+        if (!whereClauses.isEmpty()) {
+            sql.append(" WHERE ").append(String.join(" AND ", whereClauses));
+        }
+
+        BuiltReport built = new BuiltReport(sql.toString(), params.asMap(), selectColumns);
+        System.out.println("Generated SQL: " + built.sql());
+        return built;
     }
 
-    private String buildColumnExpression(ColumnSelection selection, Map<String, EntityQuery> queries) {
-        EntityQuery query = queries.get(selection.entityName());
-        if (selection.key().equals("entity_id")) {
-            return selection.entityAlias() + ".entity_id";
+    private List<SelectColumn> buildSelectColumns(RequestContext ctx, ParameterCollector params) {
+        List<SelectColumn> selectColumns = new ArrayList<>();
+        int idx = 0;
+        for (RequestedColumn requested : ctx.requestedColumns()) {
+            String label = "c" + idx++;
+            String display = requested.original();
+            String expression = switch (requested.type()) {
+                case BASE -> ctx.baseAlias() + "." + requested.column();
+                case DOCUMENT -> ctx.documentAlias() + "." + requested.column();
+                case METADATA -> "md." + ctx.metadataAlias(requested.column());
+            };
+            selectColumns.add(new SelectColumn(label, display, expression));
         }
-        String alias = query.aliases().get(selection.key());
-        if (alias == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Column not available: " + selection.key());
+
+        // ensure document number is always available for downstream usage
+        if (selectColumns.stream().noneMatch(c -> c.displayName().equalsIgnoreCase(ctx.documentBusinessKey()))) {
+            selectColumns.add(0, new SelectColumn("doc_number", ctx.documentBusinessKey(), ctx.documentAlias() + "." + ctx.documentBusinessKey()));
         }
-        return selection.entityAlias() + "." + alias;
+
+        return selectColumns;
     }
 
-    private String buildJoinExpression(Reference ref, Map<String, EntityQuery> queries) {
-        if ("entity_id".equals(ref.key())) {
-            return ref.plan().alias() + ".entity_id";
-        }
-        EntityQuery query = queries.get(ref.plan().entity());
-        String alias = query.aliases().get(ref.key());
-        if (alias == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Join column not available: " + ref.key());
-        }
-        return ref.plan().alias() + "." + alias;
-    }
-
-    private Reference resolveReference(String value, String defaultEntity, Map<String, EntityPlan> plans) {
-        String normalized = Objects.requireNonNullElse(value, "").trim();
-        if (normalized.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reference required");
-        }
-        String entity = defaultEntity;
-        String key = normalized;
-        if (normalized.contains(".")) {
-            int idx = normalized.indexOf('.');
-            entity = normalized.substring(0, idx);
-            key = normalized.substring(idx + 1);
-        }
-        EntityPlan plan = plans.get(entity);
-        if (plan == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown entity: " + entity);
-        }
-        return new Reference(plan, key);
-    }
-
-    private String toSqlOperator(FilterSpec filter, ParameterCollector collector) {
-        return switch (filter.operator()) {
-            case "like" -> "LIKE :" + collector.add(filter.value());
-            case "between" -> {
-                String[] parts = splitBetweenValues(filter.value());
-                String first = collector.add(parts[0]);
-                String second = collector.add(parts[1]);
-                yield "BETWEEN :" + first + " AND :" + second;
+    private List<String> buildWhereClauses(RequestContext ctx, ParameterCollector params) {
+        List<String> clauses = new ArrayList<>();
+        for (RequestedFilter filter : ctx.filters()) {
+            String op = normalizeOperator(filter.operator());
+            if (!ALLOWED_OPERATORS.contains(op)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed: " + filter.operator());
             }
-            default -> filter.operator().toUpperCase(Locale.ROOT) + " :" + collector.add(filter.value());
-        };
+
+            switch (filter.type()) {
+                case BASE -> clauses.add(columnPredicate(ctx.baseAlias() + "." + filter.column(), op, filter.value(), filter.dataType(), params));
+                case DOCUMENT -> clauses.add(columnPredicate(ctx.documentAlias() + "." + filter.column(), op, filter.value(), filter.dataType(), params));
+                case METADATA -> clauses.add(buildMetadataExists(ctx, filter, op, params));
+            }
+        }
+        return clauses;
     }
 
-    private String toSqlOperator(FilterSpec filter, String parameter) {
-        if ("between".equals(filter.operator())) {
-            throw new IllegalStateException("Between operator requires collector");
+    private String buildMetadataPivot(RequestContext ctx, ParameterCollector params) {
+        if (ctx.selectedMetadataKeys().isEmpty()) {
+            return "";
         }
-        if ("like".equals(filter.operator())) {
-            return "LIKE :" + parameter;
+        String valueExpr = metadataValueExpression("dm", ctx.clobLimit(), ctx.valueIsClob(), false);
+        List<String> projections = new ArrayList<>();
+        int idx = 0;
+        for (String key : ctx.selectedMetadataKeys()) {
+            String alias = ctx.metadataAlias(key);
+            String param = params.add(key);
+            projections.add("MAX(CASE WHEN dm." + ctx.metadataKeyColumn() + " = :" + param + " THEN " + valueExpr + " END) AS " + alias);
+            idx++;
         }
-        return filter.operator().toUpperCase(Locale.ROOT) + " :" + parameter;
+        String keyListParam = params.add(ctx.selectedMetadataKeys());
+        return "SELECT dm." + ctx.documentIdColumn() + ", " + String.join(", ", projections)
+                + " FROM " + ctx.metadataTable() + " dm"
+                + " WHERE dm." + ctx.metadataKeyColumn() + " IN (:" + keyListParam + ")"
+                + " GROUP BY dm." + ctx.documentIdColumn();
+    }
+
+    private String buildMetadataExists(RequestContext ctx, RequestedFilter filter, String op, ParameterCollector params) {
+        StringBuilder exists = new StringBuilder("EXISTS (SELECT 1 FROM ")
+                .append(ctx.metadataTable()).append(" dm WHERE dm.")
+                .append(ctx.documentIdColumn()).append(" = ")
+                .append(ctx.documentAlias()).append(".").append(ctx.documentInternalPk())
+                .append(" AND dm.").append(ctx.metadataKeyColumn()).append(" = :").append(params.add(filter.column()));
+
+        String valueExpr = metadataValueExpression("dm", ctx.clobLimit(), ctx.valueIsClob(), "number".equalsIgnoreCase(filter.dataType()));
+        exists.append(" AND ").append(valueExpr).append(" ").append(toSqlOperator(op, filter.value(), params));
+        exists.append(")");
+        return exists.toString();
+    }
+
+    private String columnPredicate(String columnExpression, String op, String value, String dataType, ParameterCollector params) {
+        String left = columnExpression;
+        if ("number".equalsIgnoreCase(dataType)) {
+            left = "TO_NUMBER(" + columnExpression + ")";
+        }
+        return left + " " + toSqlOperator(op, value, params);
+    }
+
+    private String toSqlOperator(String op, String value, ParameterCollector params) {
+        return switch (op) {
+            case "like" -> "LIKE :" + params.add(value);
+            case "between" -> {
+                String[] parts = splitBetweenValues(value);
+                String p1 = params.add(parts[0]);
+                String p2 = params.add(parts[1]);
+                yield "BETWEEN :" + p1 + " AND :" + p2;
+            }
+            default -> op.toUpperCase(Locale.ROOT) + " :" + params.add(value);
+        };
     }
 
     private String[] splitBetweenValues(String value) {
@@ -281,79 +174,352 @@ public class DynamicReportBuilder {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
-    private String requireEntity(String value, String message) {
-        if (value == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+    private String metadataValueExpression(String alias, int clobLimit, boolean valueIsClob, boolean numeric) {
+        String base = valueIsClob
+                ? "DBMS_LOB.SUBSTR(" + alias + "." + properties.getMetadataTable().getValueColumn() + ", " + clobLimit + ", 1)"
+                : alias + "." + properties.getMetadataTable().getValueColumn();
+        if (numeric) {
+            return "TO_NUMBER(" + base + ")";
         }
-        String trimmed = value.trim();
-        if (trimmed.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
-        }
-        return trimmed;
+        return base;
     }
 
-    public record BuiltReport(String sql, Map<String, Object> parameters, List<ColumnSelection> columns) {
+    public record BuiltReport(String sql, Map<String, Object> parameters, List<SelectColumn> columns) {
     }
 
-    public record ColumnSelection(String entityAlias, String entityName, String key, String label, String displayName) {
+    public record SelectColumn(String label, String displayName, String expression) {
     }
 
-    private record EntityQuery(String alias, String sql, Map<String, String> aliases) {
-    }
+    private static class RequestContext {
+        private final String baseTable;
+        private final String baseAlias;
+        private final String documentTable;
+        private final String documentAlias;
+        private final String documentInternalPk;
+        private final String documentBusinessKey;
+        private final String businessFkColumn;
+        private final String metadataTable;
+        private final String metadataKeyColumn;
+        private final String metadataValueColumn;
+        private final String documentIdColumn;
+        private final boolean valueIsClob;
+        private final int clobLimit;
+        private final List<RequestedColumn> requestedColumns;
+        private final List<RequestedFilter> filters;
+        private final Map<String, String> metadataAliases = new LinkedHashMap<>();
 
-    private record JoinPlan(Reference left, Reference right) {
-    }
-
-    private record ColumnProjection(EntityPlan plan, String key, String display) {
-    }
-
-    private record FilterSpec(String key, String operator, String value) {
-    }
-
-    private record Reference(EntityPlan plan, String key) {
-    }
-
-    private static class EntityPlan {
-        private final String entity;
-        private final String alias;
-        private final Set<String> keys = new LinkedHashSet<>();
-        private final List<FilterSpec> filters = new ArrayList<>();
-        private Map<String, String> aliases = Map.of();
-
-        EntityPlan(String entity, String alias) {
-            this.entity = entity;
-            this.alias = alias;
-        }
-
-        String entity() {
-            return entity;
-        }
-
-        String alias() {
-            return alias;
-        }
-
-        Set<String> keys() {
-            return keys;
-        }
-
-        List<FilterSpec> filters() {
-            return filters;
-        }
-
-        void ensureKey(String key) {
-            if (key != null && !key.isBlank() && !"entity_id".equals(key)) {
-                keys.add(key);
+        private RequestContext(String baseTable, String documentTable, String documentInternalPk, String documentBusinessKey,
+                               String businessFkColumn, String metadataTable, String metadataKeyColumn, String metadataValueColumn,
+                               String documentIdColumn, boolean valueIsClob, int clobLimit,
+                               List<RequestedColumn> requestedColumns, List<RequestedFilter> filters) {
+            this.baseTable = baseTable;
+            this.documentTable = documentTable;
+            this.baseAlias = baseTable.equalsIgnoreCase(documentTable) ? "dp" : "b";
+            this.documentAlias = this.baseTable.equalsIgnoreCase(this.documentTable) ? this.baseAlias : "dp";
+            this.documentInternalPk = documentInternalPk;
+            this.documentBusinessKey = documentBusinessKey;
+            this.businessFkColumn = businessFkColumn.toUpperCase(Locale.ROOT);
+            this.metadataTable = metadataTable;
+            this.metadataKeyColumn = metadataKeyColumn;
+            this.metadataValueColumn = metadataValueColumn;
+            this.documentIdColumn = documentIdColumn;
+            this.valueIsClob = valueIsClob;
+            this.clobLimit = clobLimit;
+            this.requestedColumns = requestedColumns;
+            this.filters = filters;
+            int idx = 0;
+            for (RequestedColumn col : requestedColumns) {
+                if (col.type() == ColumnType.METADATA) {
+                    metadataAliases.put(col.column(), "m" + idx++);
+                }
             }
         }
 
-        void aliases(Map<String, String> aliases) {
-            this.aliases = aliases;
+        static RequestContext from(DynamicReportRequest request, ReportProperties properties, ReportMetadataService metadataService) {
+            String base = requireEntity(request.getBaseEntity());
+            validateBaseEntity(base, properties, metadataService);
+
+            ReportProperties.DocumentTableProperties dp = properties.getDocumentTable();
+            ReportProperties.MetadataTableProperties meta = properties.getMetadataTable();
+            String businessFk = resolveBusinessFk(base, properties, metadataService);
+
+            Set<String> baseColumns = new LinkedHashSet<>(metadataService.getColumns(base).columns());
+            Set<String> documentColumns = new LinkedHashSet<>(metadataService.getColumns(dp.getName()).columns());
+            List<String> metadataKeys = metadataService.listMetadataKeys();
+
+            List<RequestedColumn> columns = parseColumns(request.getColumns(), base, dp.getName(), dp.getBusinessKey(), baseColumns, documentColumns, metadataKeys);
+            List<RequestedFilter> filters = parseFilters(request.getFilters(), base, dp.getName(), baseColumns, documentColumns, metadataKeys);
+
+            return new RequestContext(
+                    base,
+                    dp.getName().toUpperCase(Locale.ROOT),
+                    dp.getInternalPk().toUpperCase(Locale.ROOT),
+                    dp.getBusinessKey().toUpperCase(Locale.ROOT),
+                    businessFk,
+                    meta.getName().toUpperCase(Locale.ROOT),
+                    meta.getKeyColumn().toUpperCase(Locale.ROOT),
+                    meta.getValueColumn().toUpperCase(Locale.ROOT),
+                    meta.getDocumentIdColumn().toUpperCase(Locale.ROOT),
+                    meta.isValueIsClob(),
+                    meta.getClobSelectLimit(),
+                    columns,
+                    filters
+            );
         }
 
-        Map<String, String> aliases() {
-            return aliases;
+        private static String resolveBusinessFk(String base, ReportProperties properties, ReportMetadataService metadataService) {
+            if (base.equalsIgnoreCase(properties.getDocumentTable().getName())) {
+                return properties.getDocumentTable().getBusinessKey();
+            }
+            for (ReportProperties.EntityProperties entity : properties.getEnabledEntities()) {
+                if (base.equalsIgnoreCase(entity.getName())) {
+                    if (entity.getJoinToDocument() == null || !entity.getJoinToDocument().isEnabled()) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Join to document is required for base entity");
+                    }
+                    String fk = entity.getJoinToDocument().getBusinessFkColumn();
+                    if (!metadataService.getColumns(base).columns().contains(fk.toUpperCase(Locale.ROOT))) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Join column not found on base entity: " + fk);
+                    }
+                    return fk.toUpperCase(Locale.ROOT);
+                }
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Entity not permitted: " + base);
         }
+
+        private static void validateBaseEntity(String base, ReportProperties properties, ReportMetadataService metadataService) {
+            if (base.equalsIgnoreCase(properties.getDocumentTable().getName())) {
+                return;
+            }
+            boolean allowed = properties.getEnabledEntities().stream()
+                    .anyMatch(e -> base.equalsIgnoreCase(e.getName()));
+            if (!allowed) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Entity not permitted: " + base);
+            }
+            metadataService.getColumns(base); // ensure exists
+        }
+
+        private static List<RequestedColumn> parseColumns(List<String> rawColumns,
+                                                          String base,
+                                                          String documentTable,
+                                                          String documentBusinessKey,
+                                                          Set<String> baseColumns,
+                                                          Set<String> documentColumns,
+                                                          List<String> metadataKeys) {
+            List<RequestedColumn> parsed = new ArrayList<>();
+            if (rawColumns != null) {
+                for (String raw : rawColumns) {
+                    if (!StringUtils.hasText(raw)) {
+                        continue;
+                    }
+                    parsed.add(parseColumn(raw.trim(), base, documentTable, baseColumns, documentColumns, metadataKeys));
+                }
+            }
+            if (parsed.isEmpty()) {
+                parsed.add(new RequestedColumn(ColumnType.DOCUMENT, documentTable, documentBusinessKey.toUpperCase(Locale.ROOT), documentBusinessKey));
+            }
+            return parsed;
+        }
+
+        private static RequestedColumn parseColumn(String value,
+                                                   String base,
+                                                   String documentTable,
+                                                   Set<String> baseColumns,
+                                                   Set<String> documentColumns,
+                                                   List<String> metadataKeys) {
+            if (value.toLowerCase(Locale.ROOT).startsWith("meta:")) {
+                String key = value.substring(5);
+                if (metadataKeys.stream().noneMatch(k -> k.equalsIgnoreCase(key))) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown metadata key: " + key);
+                }
+                return new RequestedColumn(ColumnType.METADATA, "META", key, value);
+            }
+            String entity = base;
+            String column = value;
+            if (value.contains(".")) {
+                String[] parts = value.split("\\.", 2);
+                entity = parts[0];
+                column = parts[1];
+            }
+            ColumnType type;
+            if (entity.equalsIgnoreCase(base)) {
+                type = ColumnType.BASE;
+                ensureColumn(baseColumns, column, base);
+            } else if (entity.equalsIgnoreCase(documentTable) || entity.equalsIgnoreCase("DOCUMENT") || entity.equalsIgnoreCase("DOCUMENT_PARENT")) {
+                type = ColumnType.DOCUMENT;
+                ensureColumn(documentColumns, column, "document");
+            } else {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid column entity: " + entity);
+            }
+            return new RequestedColumn(type, entity, column.toUpperCase(Locale.ROOT), value);
+        }
+
+        private static List<RequestedFilter> parseFilters(List<ReportFilter> filters,
+                                                          String base,
+                                                          String documentTable,
+                                                          Set<String> baseColumns,
+                                                          Set<String> documentColumns,
+                                                          List<String> metadataKeys) {
+            List<RequestedFilter> parsed = new ArrayList<>();
+            if (filters == null) {
+                return parsed;
+            }
+            for (ReportFilter filter : filters) {
+                if (filter == null || !StringUtils.hasText(filter.getKey())) {
+                    continue;
+                }
+                parsed.add(parseFilter(filter, base, documentTable, baseColumns, documentColumns, metadataKeys));
+            }
+            return parsed;
+        }
+
+        private static RequestedFilter parseFilter(ReportFilter filter,
+                                                   String base,
+                                                   String documentTable,
+                                                   Set<String> baseColumns,
+                                                   Set<String> documentColumns,
+                                                   List<String> metadataKeys) {
+            String key = filter.getKey();
+            String op = filter.getOp();
+            String value = filter.getValue();
+            if (!StringUtils.hasText(op)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Filter operator required");
+            }
+            if (!StringUtils.hasText(value)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Filter value required for key " + key);
+            }
+
+            if (key.toLowerCase(Locale.ROOT).startsWith("meta:")) {
+                String metaKey = key.substring(5);
+                if (metadataKeys.stream().noneMatch(k -> k.equalsIgnoreCase(metaKey))) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown metadata key: " + metaKey);
+                }
+                return new RequestedFilter(ColumnType.METADATA, metaKey, op, value, filter.getDataType());
+            }
+
+            String entity = base;
+            String column = key;
+            if (key.contains(".")) {
+                String[] parts = key.split("\\.", 2);
+                entity = parts[0];
+                column = parts[1];
+            }
+            if (entity.equalsIgnoreCase(base)) {
+                ensureColumn(baseColumns, column, base);
+                return new RequestedFilter(ColumnType.BASE, column.toUpperCase(Locale.ROOT), op, value, filter.getDataType());
+            }
+            if (entity.equalsIgnoreCase(documentTable) || entity.equalsIgnoreCase("DOCUMENT") || entity.equalsIgnoreCase("DOCUMENT_PARENT")) {
+                ensureColumn(documentColumns, column, "document");
+                return new RequestedFilter(ColumnType.DOCUMENT, column.toUpperCase(Locale.ROOT), op, value, filter.getDataType());
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid filter entity: " + entity);
+        }
+
+        private static String requireEntity(String value) {
+            if (!StringUtils.hasText(value)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "baseEntity is required");
+            }
+            String trimmed = value.trim().toUpperCase(Locale.ROOT);
+            if (!trimmed.matches("[A-Z0-9_]+")) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid entity name: " + value);
+            }
+            return trimmed;
+        }
+
+        private static void ensureColumn(Set<String> available, String column, String entity) {
+            String normalized = column.toUpperCase(Locale.ROOT);
+            if (!available.contains(normalized)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown column " + column + " on " + entity);
+            }
+        }
+
+        String baseTable() {
+            return baseTable;
+        }
+
+        String baseAlias() {
+            return baseAlias;
+        }
+
+        String documentTable() {
+            return documentTable;
+        }
+
+        String documentAlias() {
+            return documentAlias;
+        }
+
+        String documentInternalPk() {
+            return documentInternalPk;
+        }
+
+        String documentBusinessKey() {
+            return documentBusinessKey;
+        }
+
+        String businessFkColumn() {
+            return businessFkColumn;
+        }
+
+        String metadataTable() {
+            return metadataTable;
+        }
+
+        String metadataKeyColumn() {
+            return metadataKeyColumn;
+        }
+
+        String metadataValueColumn() {
+            return metadataValueColumn;
+        }
+
+        String documentIdColumn() {
+            return documentIdColumn;
+        }
+
+        boolean valueIsClob() {
+            return valueIsClob;
+        }
+
+        int clobLimit() {
+            return clobLimit;
+        }
+
+        List<RequestedColumn> requestedColumns() {
+            return requestedColumns;
+        }
+
+        List<RequestedFilter> filters() {
+            return filters;
+        }
+
+        List<String> selectedMetadataKeys() {
+            return requestedColumns.stream()
+                    .filter(c -> c.type() == ColumnType.METADATA)
+                    .map(RequestedColumn::column)
+                    .distinct()
+                    .toList();
+        }
+
+        String metadataAlias(String key) {
+            String alias = metadataAliases.get(key);
+            if (alias == null) {
+                alias = "m" + metadataAliases.size();
+                metadataAliases.put(key, alias);
+            }
+            return alias;
+        }
+    }
+
+    private record RequestedColumn(ColumnType type, String entity, String column, String original) {
+    }
+
+    private record RequestedFilter(ColumnType type, String column, String operator, String value, String dataType) {
+    }
+
+    private enum ColumnType {
+        BASE,
+        DOCUMENT,
+        METADATA
     }
 
     private static class ParameterCollector {
@@ -368,9 +534,5 @@ public class DynamicReportBuilder {
         Map<String, Object> asMap() {
             return values;
         }
-    }
-
-    private String identifier(EntityPlan plan, String key) {
-        return plan.alias() + ":" + key;
     }
 }

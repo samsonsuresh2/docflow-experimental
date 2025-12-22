@@ -45,6 +45,25 @@ docflow:
     type: filesystem
     filesystem:
       root: uploads
+  reports:
+    documentTable:
+      name: DOCUMENT_PARENT
+      internalPk: ID
+      businessKey: DOCUMENT_NUMBER
+    metadataTable:
+      name: DOCUMENT_METADATA
+      documentIdColumn: DOCUMENT_ID
+      keyColumn: FIELD_KEY
+      valueColumn: FIELD_VALUE
+      valueIsClob: true
+      clobSelectLimit: 4000
+    entities:
+      - name: LOAN_DATA
+        label: Loans
+        type: RELATIONAL
+        joinToDocument:
+          enabled: true
+          businessFkColumn: USER_ID
 excel:
   target-table: loan_data
   primary-key: loan_no

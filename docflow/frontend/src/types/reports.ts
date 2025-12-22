@@ -1,12 +1,16 @@
-export type ReportRelationship = {
-  to: string;
-  via: string;
+export type ReportBaseEntity = {
+  name: string;
+  label: string;
+  type: string;
+  joinsToDocument: boolean;
+  businessFkColumn?: string | null;
 };
 
-export type ReportMetadata = {
-  entity: string;
-  availableKeys: string[];
-  relationships: ReportRelationship[];
+export type ReportAdminScope = {
+  entities: ReportBaseEntity[];
+  baseColumns: string[];
+  documentColumns: string[];
+  metadataKeys: string[];
 };
 
 export type DynamicReportFilter = {
@@ -15,25 +19,15 @@ export type DynamicReportFilter = {
   value: string;
 };
 
-export type DynamicReportJoin = {
-  rightEntity: string;
-  on: string;
-};
-
 export type DynamicReportRequest = {
   baseEntity: string;
   columns: string[];
   filters: DynamicReportFilter[];
-  joins: DynamicReportJoin[];
 };
 
 export type ReportRunResponse = {
   columns: string[];
   rows: Array<Record<string, unknown>>;
-};
-
-export type ReportEntityList = {
-  entities: string[];
 };
 
 export type ReportTemplate = {
