@@ -1,19 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import ReportResultsGrid from '../components/ReportResultsGrid';
 import {
-  fetchReportEntities,
-  fetchReportMetadata,
+  fetchReportScope,
   fetchReportTemplates,
   runDynamicReport,
   saveReportTemplate,
 } from '../lib/reports';
-import type {
-  DynamicReportRequest,
-  ReportMetadata,
-  ReportRelationship,
-  ReportRunResponse,
-  ReportTemplate,
-} from '../types/reports';
+import type { DynamicReportRequest, ReportBaseEntity, ReportRunResponse, ReportTemplate } from '../types/reports';
 
 const OPERATORS = ['=', '<', '>', '<=', '>=', 'like', 'between'] as const;
 type Operator = (typeof OPERATORS)[number];
@@ -29,9 +22,8 @@ type FilterRow = {
 type ColumnOption = {
   value: string;
   label: string;
+  group: 'Base Table' | 'Document' | 'Metadata';
 };
-
-type RelationshipOption = ReportRelationship & { key: string };
 
 function normaliseError(error: unknown): string {
   if (typeof error === 'string') {
@@ -52,22 +44,38 @@ function normaliseError(error: unknown): string {
   return 'Something went wrong while communicating with the reports service.';
 }
 
+function normalizeKeyForBackend(value: string): string {
+  if (!value) {
+    return value;
+  }
+  if (value.startsWith('meta.')) {
+    return `meta:${value.slice('meta.'.length)}`;
+  }
+  return value;
+}
+
+function normaliseTemplateKey(value: string): string {
+  if (!value) {
+    return value;
+  }
+  if (value.startsWith('meta.')) {
+    return `meta:${value.slice('meta.'.length)}`;
+  }
+  return value;
+}
+
 export default function ReportBuilderPage() {
-  const [entityOptions, setEntityOptions] = useState<string[]>([]);
+  const [entities, setEntities] = useState<ReportBaseEntity[]>([]);
   const [entityLoading, setEntityLoading] = useState<boolean>(true);
   const [entityError, setEntityError] = useState<string | null>(null);
 
   const [selectedEntity, setSelectedEntity] = useState<string>('');
-  const [metadataCache, setMetadataCache] = useState<Record<string, ReportMetadata>>({});
+  const [entityColumns, setEntityColumns] = useState<Record<string, string[]>>({});
+  const [documentColumns, setDocumentColumns] = useState<string[]>([]);
+  const [metadataKeys, setMetadataKeys] = useState<string[]>([]);
   const [metadataLoading, setMetadataLoading] = useState<boolean>(false);
   const [metadataError, setMetadataError] = useState<string | null>(null);
-  const metadataCacheRef = useRef<Record<string, ReportMetadata>>({});
 
-  useEffect(() => {
-    metadataCacheRef.current = metadataCache;
-  }, [metadataCache]);
-
-  const [selectedRelationships, setSelectedRelationships] = useState<string[]>([]);
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [filters, setFilters] = useState<FilterRow[]>([]);
 
@@ -95,16 +103,20 @@ export default function ReportBuilderPage() {
     let cancelled = false;
     setEntityLoading(true);
     setEntityError(null);
-    fetchReportEntities()
-      .then((entities) => {
+    fetchReportScope()
+      .then((scope) => {
         if (!cancelled) {
-          setEntityOptions(entities);
+          setEntities(scope.entities ?? []);
+          setDocumentColumns(scope.documentColumns ?? []);
+          setMetadataKeys(scope.metadataKeys ?? []);
         }
       })
       .catch((error) => {
         if (!cancelled) {
           setEntityError(normaliseError(error));
-          setEntityOptions([]);
+          setEntities([]);
+          setDocumentColumns([]);
+          setMetadataKeys([]);
         }
       })
       .finally(() => {
@@ -143,31 +155,9 @@ export default function ReportBuilderPage() {
     };
   }, []);
 
-  const loadMetadata = useCallback(async (entity: string) => {
-    const key = entity.trim().toLowerCase();
-    if (!key) {
-      return;
-    }
-    if (metadataCacheRef.current[key]) {
-      return;
-    }
-    setMetadataLoading(true);
-    setMetadataError(null);
-    try {
-      const metadata = await fetchReportMetadata(key);
-      setMetadataCache((prev) => ({ ...prev, [metadata.entity]: metadata }));
-    } catch (error) {
-      setMetadataError(normaliseError(error));
-      throw error;
-    } finally {
-      setMetadataLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
     if (!selectedEntity) {
       setSelectedColumns([]);
-      setSelectedRelationships([]);
       setFilters([]);
       setResult(null);
       setHasRun(false);
@@ -175,43 +165,28 @@ export default function ReportBuilderPage() {
       setRunError(null);
       return;
     }
-    setSelectedColumns(['entity_id']);
-    setSelectedRelationships([]);
+    setSelectedColumns([]);
     setFilters([]);
     setResult(null);
     setHasRun(false);
     setLastRequest(null);
     setRunError(null);
     setPage(0);
-    loadMetadata(selectedEntity).catch(() => {
-      // error handled in loadMetadata
-    });
-  }, [selectedEntity, loadMetadata]);
-
-  useEffect(() => {
-    selectedRelationships.forEach((key) => {
-      const [target] = key.split('|');
-      if (target && !metadataCache[target]) {
-        loadMetadata(target).catch(() => {
-          // handled in loader
-        });
-      }
-    });
-  }, [selectedRelationships, metadataCache, loadMetadata]);
-
-  const availableRelationships: RelationshipOption[] = useMemo(() => {
-    if (!selectedEntity) {
-      return [];
-    }
-    const metadata = metadataCache[selectedEntity];
-    if (!metadata) {
-      return [];
-    }
-    return metadata.relationships.map((relationship) => ({
-      ...relationship,
-      key: `${relationship.to}|${relationship.via}`,
-    }));
-  }, [metadataCache, selectedEntity]);
+    setMetadataLoading(true);
+    setMetadataError(null);
+    fetchReportScope(selectedEntity)
+      .then((scope) => {
+        setEntityColumns((prev) => ({ ...prev, [selectedEntity]: scope.baseColumns ?? [] }));
+        setDocumentColumns(scope.documentColumns ?? []);
+        setMetadataKeys(scope.metadataKeys ?? []);
+      })
+      .catch((error) => {
+        setMetadataError(normaliseError(error));
+      })
+      .finally(() => {
+        setMetadataLoading(false);
+      });
+  }, [selectedEntity]);
 
   useEffect(() => {
     if (!pendingTemplate) {
@@ -220,36 +195,18 @@ export default function ReportBuilderPage() {
     if (pendingTemplate.request.baseEntity !== selectedEntity) {
       return;
     }
-    if (!metadataCache[pendingTemplate.request.baseEntity]) {
+    const baseCols = entityColumns[selectedEntity];
+    if (!baseCols || baseCols.length === 0) {
       return;
     }
 
     const templateColumns = Array.isArray(pendingTemplate.request.columns)
       ? pendingTemplate.request.columns
       : [];
-    const columnSet = new Set<string>(templateColumns.length > 0 ? templateColumns : ['entity_id']);
-    columnSet.add('entity_id');
+    const columnSet = new Set<string>(
+      (templateColumns.length > 0 ? templateColumns : []).map((value) => normaliseTemplateKey(value)),
+    );
     setSelectedColumns(Array.from(columnSet));
-
-    const validRelationshipKeys = new Set(availableRelationships.map((relationship) => relationship.key));
-    const joinKeys = new Set<string>();
-    if (Array.isArray(pendingTemplate.request.joins)) {
-      pendingTemplate.request.joins.forEach((join) => {
-        if (!join || !join.rightEntity || !join.on) {
-          return;
-        }
-        const [left] = join.on.split('=');
-        const via = left?.trim();
-        if (!via) {
-          return;
-        }
-        const key = `${join.rightEntity}|${via}`;
-        if (validRelationshipKeys.size === 0 || validRelationshipKeys.has(key)) {
-          joinKeys.add(key);
-        }
-      });
-    }
-    setSelectedRelationships(Array.from(joinKeys));
 
     const nextFilters: FilterRow[] = Array.isArray(pendingTemplate.request.filters)
       ? pendingTemplate.request.filters.map((filter) => {
@@ -264,14 +221,14 @@ export default function ReportBuilderPage() {
           }
           const id = filterIdRef.current + 1;
           filterIdRef.current = id;
-          return {
-            id,
-            key: filter?.key ?? '',
-            op: operator,
-            value,
-            valueTo,
-          };
-        })
+            return {
+              id,
+              key: normaliseTemplateKey(filter?.key ?? ''),
+              op: operator,
+              value,
+              valueTo,
+            };
+          })
       : [];
     setFilters(nextFilters);
     setPendingTemplate(null);
@@ -280,45 +237,38 @@ export default function ReportBuilderPage() {
     setRunError(null);
     setLastRequest(null);
     setPage(0);
-  }, [pendingTemplate, selectedEntity, metadataCache, availableRelationships]);
+  }, [pendingTemplate, selectedEntity, entityColumns]);
+
+  const documentEntityName = useMemo(() => {
+    const documentEntity = entities.find((entity) => !entity.joinsToDocument);
+    return documentEntity?.name ?? 'DOCUMENT_PARENT';
+  }, [entities]);
 
   const columnOptions: ColumnOption[] = useMemo(() => {
     if (!selectedEntity) {
       return [];
     }
     const options: ColumnOption[] = [];
-    const values = new Set<string>();
+    const seen = new Set<string>();
 
-    const addOption = (value: string, label: string) => {
-      if (!values.has(value)) {
-        values.add(value);
-        options.push({ value, label });
+    const addOption = (value: string, label: string, group: ColumnOption['group']) => {
+      if (!seen.has(value)) {
+        seen.add(value);
+        options.push({ value, label, group });
       }
     };
 
-    addOption('entity_id', `${selectedEntity} · entity_id`);
+    const baseCols = entityColumns[selectedEntity] ?? [];
+    baseCols.forEach((col) => addOption(col, `${selectedEntity} · ${col}`, 'Base Table'));
 
-    const baseMetadata = metadataCache[selectedEntity];
-    if (baseMetadata) {
-      baseMetadata.availableKeys.forEach((key) => {
-        addOption(key, `${selectedEntity} · ${key}`);
-      });
-    }
+    documentColumns.forEach((col) =>
+      addOption(`${documentEntityName}.${col}`, `${documentEntityName} · ${col}`, 'Document'),
+    );
 
-    selectedRelationships.forEach((relationshipKey) => {
-      const [target] = relationshipKey.split('|');
-      if (!target) {
-        return;
-      }
-      addOption(`${target}.entity_id`, `${target} · entity_id`);
-      const joinMetadata = metadataCache[target];
-      joinMetadata?.availableKeys.forEach((key) => {
-        addOption(`${target}.${key}`, `${target} · ${key}`);
-      });
-    });
+    metadataKeys.forEach((key) => addOption(`meta:${key}`, `Metadata · ${key}`, 'Metadata'));
 
     return options;
-  }, [metadataCache, selectedEntity, selectedRelationships]);
+  }, [selectedEntity, entityColumns, documentColumns, documentEntityName, metadataKeys]);
 
   useEffect(() => {
     if (columnOptions.length === 0) {
@@ -327,8 +277,8 @@ export default function ReportBuilderPage() {
     const valid = new Set(columnOptions.map((option) => option.value));
     setSelectedColumns((prev) => {
       const next = prev.filter((column) => valid.has(column));
-      if (!next.includes('entity_id')) {
-        next.unshift('entity_id');
+      if (next.length === 0 && columnOptions.length > 0) {
+        next.push(columnOptions[0].value);
       }
       return Array.from(new Set(next));
     });
@@ -342,18 +292,7 @@ export default function ReportBuilderPage() {
 
   const handleColumnChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const selected = Array.from(event.target.selectedOptions).map((option) => option.value);
-    const unique = new Set(selected);
-    unique.add('entity_id');
-    setSelectedColumns(Array.from(unique));
-  };
-
-  const handleRelationshipToggle = (relationshipKey: string) => {
-    setSelectedRelationships((prev) => {
-      if (prev.includes(relationshipKey)) {
-        return prev.filter((key) => key !== relationshipKey);
-      }
-      return [...prev, relationshipKey];
-    });
+    setSelectedColumns(Array.from(new Set(selected)));
   };
 
   const handleAddFilter = () => {
@@ -407,11 +346,8 @@ export default function ReportBuilderPage() {
       setTemplateName(template.name);
       setPendingTemplate(template);
       setSelectedEntity(template.request.baseEntity);
-      loadMetadata(template.request.baseEntity).catch(() => {
-        // handled by loader
-      });
     },
-    [loadMetadata],
+    [],
   );
 
   const handleApplySelectedTemplate = () => {
@@ -433,24 +369,10 @@ export default function ReportBuilderPage() {
     if (!selectedEntity) {
       return null;
     }
-    const metadata = metadataCache[selectedEntity];
-    if (!metadata) {
+    const columns = Array.from(new Set(selectedColumns.map(normalizeKeyForBackend)));
+    if (columns.length === 0) {
       return null;
     }
-
-    const columns = Array.from(new Set(selectedColumns));
-    if (!columns.includes('entity_id')) {
-      columns.unshift('entity_id');
-    }
-
-    const relationshipMap = new Map(availableRelationships.map((relationship) => [relationship.key, relationship]));
-    const joins = selectedRelationships
-      .map((key) => relationshipMap.get(key))
-      .filter((relationship): relationship is RelationshipOption => Boolean(relationship))
-      .map((relationship) => ({
-        rightEntity: relationship.to,
-        on: `${relationship.via}=${relationship.via}`,
-      }));
 
     const filtersPayload = filters
       .map((filter) => {
@@ -462,7 +384,7 @@ export default function ReportBuilderPage() {
             return null;
           }
           return {
-            key: filter.key,
+            key: normalizeKeyForBackend(filter.key),
             op: filter.op,
             value: `${filter.value},${filter.valueTo}`,
           };
@@ -471,7 +393,7 @@ export default function ReportBuilderPage() {
           return null;
         }
         return {
-          key: filter.key,
+          key: normalizeKeyForBackend(filter.key),
           op: filter.op,
           value: filter.value,
         };
@@ -479,19 +401,11 @@ export default function ReportBuilderPage() {
       .filter((filter): filter is NonNullable<typeof filter> => Boolean(filter));
 
     return {
-      baseEntity: metadata.entity,
+      baseEntity: selectedEntity,
       columns,
       filters: filtersPayload,
-      joins,
     };
-  }, [
-    selectedEntity,
-    metadataCache,
-    selectedColumns,
-    availableRelationships,
-    selectedRelationships,
-    filters,
-  ]);
+  }, [selectedEntity, selectedColumns, filters]);
 
   const handleSaveTemplate = useCallback(async () => {
     setTemplateSaveError(null);
@@ -581,15 +495,15 @@ export default function ReportBuilderPage() {
       <header>
         <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Dynamic Reports</h1>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Build ad-hoc data extracts across DocFlow&apos;s entity stores. Select columns, relationships, and filters, then run the
-          report to preview results.
+          Build ad-hoc data extracts across DocFlow&apos;s entity stores. Select columns and filters, then run the report to preview
+          results.
         </p>
       </header>
 
       <section className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
         <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Report Templates</h2>
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          Save frequently used report definitions and reload them later. Templates capture the entity, columns, joins, and filters.
+          Save frequently used report definitions and reload them later. Templates capture the entity, columns, and filters.
         </p>
 
         <div className="mt-4 grid gap-6 md:grid-cols-[1.5fr_2fr]">
@@ -678,8 +592,8 @@ export default function ReportBuilderPage() {
       <section className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
         <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Report Definition</h2>
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          Choose a base entity, include optional joins, and add filters to refine the dataset. Columns without a prefix refer to the
-          base entity. Joined entity columns are prefixed with the entity name.
+          Choose a base entity and add filters to refine the dataset. Columns without a prefix refer to the base entity. Document and
+          metadata fields are prefixed in the list below.
         </p>
 
         <div className="mt-6 grid gap-6 md:grid-cols-2">
@@ -694,9 +608,9 @@ export default function ReportBuilderPage() {
               disabled={entityLoading}
             >
               <option value="">Select an entity…</option>
-              {entityOptions.map((entity) => (
-                <option key={entity} value={entity}>
-                  {entity}
+              {entities.map((entity) => (
+                <option key={entity.name} value={entity.name}>
+                  {entity.label ?? entity.name}
                 </option>
               ))}
             </select>
@@ -709,7 +623,7 @@ export default function ReportBuilderPage() {
 
           <div className="space-y-2">
             <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-              Columns (entity_id is always included)
+              Columns
             </label>
             <select
               multiple
@@ -719,126 +633,118 @@ export default function ReportBuilderPage() {
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
               disabled={!selectedEntity || metadataLoading}
             >
-              {columnOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+              {(['Base Table', 'Document', 'Metadata'] as const).map((group) => {
+                const options = columnOptions.filter((option) => option.group === group);
+                if (options.length === 0) {
+                  return null;
+                }
+                return (
+                  <optgroup key={group} label={group}>
+                    {options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                );
+              })}
             </select>
             {metadataLoading ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">Inspecting metadata…</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Loading columns…</p>
             ) : metadataError ? (
               <p className="text-xs text-red-600 dark:text-red-400">{metadataError}</p>
             ) : null}
           </div>
         </div>
 
-        <div className="mt-6 grid gap-6 md:grid-cols-2">
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Relationships</h3>
-            {availableRelationships.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">No configured relationships for this entity.</p>
-            ) : (
-              <div className="space-y-2">
-                {availableRelationships.map((relationship) => (
-                  <label
-                    key={relationship.key}
-                    className="flex items-start gap-2 rounded border border-transparent p-2 text-sm transition hover:border-blue-200 hover:bg-blue-50 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10"
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                      checked={selectedRelationships.includes(relationship.key)}
-                      onChange={() => handleRelationshipToggle(relationship.key)}
-                    />
-                    <span className="leading-tight text-slate-700 dark:text-slate-200">
-                      Join <span className="font-semibold">{relationship.to}</span> via <code className="rounded bg-slate-100 px-1 py-0.5 text-xs dark:bg-slate-800">{relationship.via}</code>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
+        <div className="mt-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Filters</h3>
+            <button
+              type="button"
+              className="inline-flex items-center rounded bg-blue-600 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-400"
+              onClick={handleAddFilter}
+              disabled={!selectedEntity}
+            >
+              Add Filter
+            </button>
           </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Filters</h3>
-              <button
-                type="button"
-                className="inline-flex items-center rounded bg-blue-600 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-400"
-                onClick={handleAddFilter}
-                disabled={!selectedEntity}
-              >
-                Add Filter
-              </button>
-            </div>
-            {filters.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">No filters applied.</p>
-            ) : (
-              <div className="space-y-2">
-                {filters.map((filter) => (
-                  <div
-                    key={filter.id}
-                    className="grid gap-2 rounded border border-slate-200 p-3 text-sm transition-colors dark:border-slate-700 md:grid-cols-[1.5fr_1fr_1.5fr_1.5fr_auto]"
+          {filters.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">No filters applied.</p>
+          ) : (
+            <div className="space-y-2">
+              {filters.map((filter) => (
+                <div
+                  key={filter.id}
+                  className="grid gap-2 rounded border border-slate-200 p-3 text-sm transition-colors dark:border-slate-700 md:grid-cols-[1.5fr_1fr_1.5fr_1.5fr_auto]"
+                >
+                  <select
+                    value={filter.key}
+                    onChange={(event) => handleFilterChange(filter.id, { key: event.target.value })}
+                    className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
                   >
-                    <select
-                      value={filter.key}
-                      onChange={(event) => handleFilterChange(filter.id, { key: event.target.value })}
-                      className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-                    >
-                      <option value="">Select column…</option>
-                      {columnOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={filter.op}
-                      onChange={(event) =>
-                        handleFilterChange(filter.id, {
-                          op: event.target.value as Operator,
-                          valueTo: event.target.value === 'between' ? filter.valueTo ?? '' : '',
-                        })
+                    <option value="">Select column…</option>
+                    {(['Base Table', 'Document', 'Metadata'] as const).map((group) => {
+                      const options = columnOptions.filter((option) => option.group === group);
+                      if (options.length === 0) {
+                        return null;
                       }
-                      className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-                    >
-                      {OPERATORS.map((operator) => (
-                        <option key={operator} value={operator}>
-                          {operator.toUpperCase()}
-                        </option>
-                      ))}
-                    </select>
+                      return (
+                        <optgroup key={group} label={group}>
+                          {options.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
+                  </select>
+                  <select
+                    value={filter.op}
+                    onChange={(event) =>
+                      handleFilterChange(filter.id, {
+                        op: event.target.value as Operator,
+                        valueTo: event.target.value === 'between' ? filter.valueTo ?? '' : '',
+                      })
+                    }
+                    className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                  >
+                    {OPERATORS.map((operator) => (
+                      <option key={operator} value={operator}>
+                        {operator.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={filter.value}
+                    onChange={(event) => handleFilterChange(filter.id, { value: event.target.value })}
+                    placeholder={filter.op === 'between' ? 'From value' : 'Value'}
+                    className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                  />
+                  {filter.op === 'between' ? (
                     <input
                       type="text"
-                      value={filter.value}
-                      onChange={(event) => handleFilterChange(filter.id, { value: event.target.value })}
-                      placeholder={filter.op === 'between' ? 'From value' : 'Value'}
+                      value={filter.valueTo ?? ''}
+                      onChange={(event) => handleFilterChange(filter.id, { valueTo: event.target.value })}
+                      placeholder="To value"
                       className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
                     />
-                    {filter.op === 'between' ? (
-                      <input
-                        type="text"
-                        value={filter.valueTo ?? ''}
-                        onChange={(event) => handleFilterChange(filter.id, { valueTo: event.target.value })}
-                        placeholder="To value"
-                        className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-                      />
-                    ) : (
-                      <div className="hidden md:block" />
-                    )}
-                    <button
-                      type="button"
-                      className="self-start rounded border border-red-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-red-600 transition hover:bg-red-50 dark:border-red-400/40 dark:text-red-300 dark:hover:bg-red-500/10"
-                      onClick={() => handleRemoveFilter(filter.id)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  ) : (
+                    <div className="hidden md:block" />
+                  )}
+                  <button
+                    type="button"
+                    className="self-start rounded border border-red-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-red-600 transition hover:bg-red-50 dark:border-red-400/40 dark:text-red-300 dark:hover:bg-red-500/10"
+                    onClick={() => handleRemoveFilter(filter.id)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">

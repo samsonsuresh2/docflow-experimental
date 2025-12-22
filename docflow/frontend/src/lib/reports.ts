@@ -1,21 +1,15 @@
 import type {
   DynamicReportRequest,
-  ReportEntityList,
-  ReportMetadata,
+  ReportAdminScope,
   ReportRunResponse,
   ReportTemplate,
   ReportTemplateList,
 } from '../types/reports';
 import client from './api';
 
-export async function fetchReportEntities(): Promise<string[]> {
-  const response = await client.get<ReportEntityList>('/reports/meta');
-  return response.data.entities ?? [];
-}
-
-export async function fetchReportMetadata(entity: string): Promise<ReportMetadata> {
-  const response = await client.get<ReportMetadata>('/reports/meta', {
-    params: { entity },
+export async function fetchReportScope(baseEntity?: string): Promise<ReportAdminScope> {
+  const response = await client.get<ReportAdminScope>('/reports/admin/scope', {
+    params: baseEntity ? { baseEntity } : undefined,
   });
   return response.data;
 }
