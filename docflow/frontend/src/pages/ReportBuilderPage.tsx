@@ -199,6 +199,20 @@ export default function ReportBuilderPage() {
     });
   }, [selectedRelationships, metadataCache, loadMetadata]);
 
+  const availableRelationships: RelationshipOption[] = useMemo(() => {
+    if (!selectedEntity) {
+      return [];
+    }
+    const metadata = metadataCache[selectedEntity];
+    if (!metadata) {
+      return [];
+    }
+    return metadata.relationships.map((relationship) => ({
+      ...relationship,
+      key: `${relationship.to}|${relationship.via}`,
+    }));
+  }, [metadataCache, selectedEntity]);
+
   useEffect(() => {
     if (!pendingTemplate) {
       return;
@@ -267,20 +281,6 @@ export default function ReportBuilderPage() {
     setLastRequest(null);
     setPage(0);
   }, [pendingTemplate, selectedEntity, metadataCache, availableRelationships]);
-
-  const availableRelationships: RelationshipOption[] = useMemo(() => {
-    if (!selectedEntity) {
-      return [];
-    }
-    const metadata = metadataCache[selectedEntity];
-    if (!metadata) {
-      return [];
-    }
-    return metadata.relationships.map((relationship) => ({
-      ...relationship,
-      key: `${relationship.to}|${relationship.via}`,
-    }));
-  }, [metadataCache, selectedEntity]);
 
   const columnOptions: ColumnOption[] = useMemo(() => {
     if (!selectedEntity) {
