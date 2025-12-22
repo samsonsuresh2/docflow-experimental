@@ -6,6 +6,7 @@ import Review from './pages/Review';
 import DataInjector from './pages/DataInjector';
 import Admin from './pages/Admin';
 import Audit from './pages/Audit';
+import ReportBuilderPage from './pages/ReportBuilderPage';
 import { useUser } from './lib/UserContext';
 import ThemeToggle from './components/ThemeToggle';
 
@@ -41,9 +42,6 @@ function App() {
             </NavLink>
             <NavLink to="/review" className={navLinkClass}>
               Review
-            </NavLink>
-            <NavLink to="/data-injector" className={navLinkClass}>
-              Data Injector
             </NavLink>
             <NavLink to="/audit" className={navLinkClass}>
               Audit
@@ -88,9 +86,10 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/upload" element={<Upload />} />
           <Route path="/review" element={<Review />} />
-          <Route path="/data-injector" element={<DataInjector />} />
+          <Route path="/data-ingestor" element={<DataInjector />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/audit" element={<Audit />} />
+          <Route path="/reports" element={<ReportBuilderPage />} />
         </Routes>
       </main>
     </div>

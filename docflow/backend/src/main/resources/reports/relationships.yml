@@ -1,0 +1,8 @@
+loan_data:
+  relationships:
+    - to: user_data
+      via: user_id
+user_data:
+  relationships:
+    - to: loan_data
+      via: user_id
