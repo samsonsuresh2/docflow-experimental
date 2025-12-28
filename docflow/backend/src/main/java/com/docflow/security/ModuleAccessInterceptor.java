@@ -37,7 +37,7 @@ public class ModuleAccessInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         String path = request.getRequestURI();
-        @Nullable String module = resolveModule(path, request);
+         String module = resolveModule(path, request);
         if (module == null) {
             return true;
         }
