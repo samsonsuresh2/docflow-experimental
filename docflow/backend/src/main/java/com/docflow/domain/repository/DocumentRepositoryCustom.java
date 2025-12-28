@@ -14,6 +14,7 @@ public interface DocumentRepositoryCustom {
         String documentNumber,
         DocumentStatus status,
         List<DocumentSearchFilter> dynamicFilters,
-        Pageable pageable
+        Pageable pageable,
+        String createdBy
     );
 }

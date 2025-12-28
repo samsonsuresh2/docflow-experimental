@@ -258,6 +258,11 @@ export default function Review() {
         setCurrentPage(data.number ?? pageToLoad);
         setSortBy(sortToUse);
         setSortDirection(directionToUse);
+        if ((data.totalElements ?? 0) === 0) {
+          setTableError('No documents found for the given criteria.');
+        } else {
+          setTableError(null);
+        }
       } catch (error) {
         setTableError('Unable to load documents.');
       } finally {
@@ -1030,4 +1035,3 @@ function AuthRequired() {
     </div>
   );
 }
-

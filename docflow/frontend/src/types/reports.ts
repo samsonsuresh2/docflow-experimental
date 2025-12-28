@@ -28,6 +28,7 @@ export type DynamicReportRequest = {
 export type ReportRunResponse = {
   columns: string[];
   rows: Array<Record<string, unknown>>;
+  rowCount?: number;
 };
 
 export type ReportTemplate = {
@@ -36,8 +37,42 @@ export type ReportTemplate = {
   request: DynamicReportRequest;
   createdBy: string;
   createdAt: string;
+  description?: string | null;
 };
 
 export type ReportTemplateList = {
   templates: ReportTemplate[];
+};
+
+export type ExecutableReportTemplateSummary = {
+  id: number;
+  name: string;
+  description?: string | null;
+};
+
+export type ExecutableReportFilterType = 'TEXT' | 'NUMBER' | 'DATE';
+
+export type ExecutableReportFilterField = {
+  key: string;
+  label: string;
+  type: ExecutableReportFilterType;
+  allowedOps: ('=' | '<' | '>')[];
+  dateFormat?: string | null;
+};
+
+export type ExecutableReportTemplateDetail = {
+  templateId: number;
+  name: string;
+  filters: ExecutableReportFilterField[];
+};
+
+export type ReportExecutionFilterInput = {
+  key: string;
+  op: string;
+  value: string;
+};
+
+export type ReportExecutionRunRequest = {
+  templateId: number;
+  filters: ReportExecutionFilterInput[];
 };

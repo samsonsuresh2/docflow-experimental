@@ -40,19 +40,22 @@ public class DefaultDocumentService implements DocumentService {
     private final AuditService auditService;
     private final RuleService ruleService;
     private final ConfigService configService;
+    private final com.docflow.context.RequestUserContext requestUserContext;
 
     public DefaultDocumentService(DocumentRepository documentRepository,
                                   StorageAdapter storageAdapter,
                                   MetadataService metadataService,
                                   AuditService auditService,
                                   RuleService ruleService,
-                                  ConfigService configService) {
+                                  ConfigService configService,
+                                  com.docflow.context.RequestUserContext requestUserContext) {
         this.documentRepository = documentRepository;
         this.storageAdapter = storageAdapter;
         this.metadataService = metadataService;
         this.auditService = auditService;
         this.ruleService = ruleService;
         this.configService = configService;
+        this.requestUserContext = requestUserContext;
     }
 
     @Override
@@ -103,11 +106,13 @@ public class DefaultDocumentService implements DocumentService {
         Pageable pageable
     ) {
         List<DocumentSearchFilter> filters = buildSearchFilters(dynamicFilters, metadataKey, metadataValue);
+        String createdBy = DocumentScopeGuard.ownerConstraint(requestUserContext);
         Page<DocumentParent> documents = documentRepository.searchDocuments(
             sanitize(documentNumber),
             status,
             filters,
-            pageable
+            pageable,
+            createdBy
         );
 
         return documents.map(this::mapToSummary);
@@ -210,13 +215,17 @@ public class DefaultDocumentService implements DocumentService {
     }
 
     private DocumentParent requireDocument(Long id) {
-        return documentRepository.findById(id)
+        DocumentParent document = documentRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Document not found"));
+        DocumentScopeGuard.assertCanAccess(document, requestUserContext);
+        return document;
     }
 
     private DocumentParent requireDocumentByNumber(String documentNumber) {
-        return documentRepository.findByDocumentNumber(documentNumber)
+        DocumentParent document = documentRepository.findByDocumentNumber(documentNumber)
                 .orElseThrow(() -> new NoSuchElementException("Document not found"));
+        DocumentScopeGuard.assertCanAccess(document, requestUserContext);
+        return document;
     }
 
     private String sanitize(String value) {

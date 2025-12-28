@@ -45,6 +45,8 @@ docflow:
     type: filesystem
     filesystem:
       root: uploads
+  auth:
+    implicitMakerEnabled: true
   reports:
     documentTable:
       name: DOCUMENT_PARENT

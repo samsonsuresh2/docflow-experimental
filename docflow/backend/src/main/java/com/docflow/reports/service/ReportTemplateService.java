@@ -89,7 +89,7 @@ public class ReportTemplateService {
         }
     }
 
-    private ReportTemplateResponse getById(long id) {
+    public ReportTemplateResponse getById(long id) {
         try {
             return jdbcTemplate.queryForObject(
                     "SELECT id, name, description, config_json, created_at FROM " + TABLE_NAME + " WHERE id = :id",
@@ -103,11 +103,12 @@ public class ReportTemplateService {
     private ReportTemplateResponse mapRow(ResultSet rs, int rowNum) throws SQLException {
         long id = rs.getLong("id");
         String name = rs.getString("name");
+        String description = rs.getString("description");
         Timestamp createdAt = rs.getTimestamp("created_at");
         String json = rs.getString("config_json");
         StoredTemplatePayload payload = deserializePayload(json);
         Instant created = createdAt != null ? createdAt.toInstant() : Instant.now();
-        return new ReportTemplateResponse(id, name, payload.request(), payload.createdBy(), created);
+        return new ReportTemplateResponse(id, name, description, payload.request(), payload.createdBy(), created);
     }
 
     private StoredTemplatePayload deserializePayload(String json) {

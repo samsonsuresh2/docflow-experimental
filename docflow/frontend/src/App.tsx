@@ -6,13 +6,19 @@ import Review from './pages/Review';
 import DataInjector from './pages/DataInjector';
 import Admin from './pages/Admin';
 import Audit from './pages/Audit';
+import ReportsPage from './pages/ReportsPage';
 import ReportBuilderPage from './pages/ReportBuilderPage';
+import RoleSelection from './pages/RoleSelection';
 import { useUser } from './lib/UserContext';
 import ThemeToggle from './components/ThemeToggle';
+import { useModules } from './lib/ModuleContext';
+import { ModuleCodes, type ModuleCode } from './types/modules';
+import NotAuthorized from './components/NotAuthorized';
 
 function App() {
   const navigate = useNavigate();
   const { user, setUser } = useUser();
+  const { hasModule, loading: modulesLoading, error: modulesError } = useModules();
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     [
@@ -37,18 +43,36 @@ function App() {
             <NavLink to="/" className={navLinkClass} end>
               Home
             </NavLink>
-            <NavLink to="/upload" className={navLinkClass}>
-              Upload
-            </NavLink>
-            <NavLink to="/review" className={navLinkClass}>
-              Review
-            </NavLink>
-            <NavLink to="/audit" className={navLinkClass}>
-              Audit
-            </NavLink>
-            <NavLink to="/admin" className={navLinkClass}>
-              Admin
-            </NavLink>
+            {hasModule(ModuleCodes.UPLOAD) ? (
+              <NavLink to="/upload" className={navLinkClass}>
+                Upload
+              </NavLink>
+            ) : null}
+            {hasModule(ModuleCodes.REVIEW) ? (
+              <NavLink to="/review" className={navLinkClass}>
+                Review
+              </NavLink>
+            ) : null}
+            {hasModule(ModuleCodes.AUDIT) ? (
+              <NavLink to="/audit" className={navLinkClass}>
+                Audit
+              </NavLink>
+            ) : null}
+            {hasModule(ModuleCodes.REPORTS) ? (
+              <NavLink to="/reports" className={navLinkClass}>
+                Reports
+              </NavLink>
+            ) : null}
+            {hasModule(ModuleCodes.REPORT_CONFIG) ? (
+              <NavLink to="/report-config" className={navLinkClass}>
+                Report Config
+              </NavLink>
+            ) : null}
+            {hasModule(ModuleCodes.ADMIN) ? (
+              <NavLink to="/admin" className={navLinkClass}>
+                Admin
+              </NavLink>
+            ) : null}
           </nav>
           <div className="flex items-center gap-3 text-sm">
             <ThemeToggle />
@@ -81,15 +105,67 @@ function App() {
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-6 py-8">
+        {modulesError ? <NotAuthorized message="Unable to load module access for this user." /> : null}
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/upload" element={<Upload />} />
-          <Route path="/review" element={<Review />} />
-          <Route path="/data-ingestor" element={<DataInjector />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/audit" element={<Audit />} />
-          <Route path="/reports" element={<ReportBuilderPage />} />
+          <Route path="/select-role" element={<RoleSelection />} />
+          <Route
+            path="/upload"
+            element={
+              <ModuleGate module={ModuleCodes.UPLOAD}>
+                <Upload />
+              </ModuleGate>
+            }
+          />
+          <Route
+            path="/review"
+            element={
+              <ModuleGate module={ModuleCodes.REVIEW}>
+                <Review />
+              </ModuleGate>
+            }
+          />
+          <Route
+            path="/data-ingestor"
+            element={
+              <ModuleGate module={ModuleCodes.DATA_INGEST}>
+                <DataInjector />
+              </ModuleGate>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ModuleGate module={ModuleCodes.ADMIN}>
+                <Admin />
+              </ModuleGate>
+            }
+          />
+          <Route
+            path="/audit"
+            element={
+              <ModuleGate module={ModuleCodes.AUDIT}>
+                <Audit />
+              </ModuleGate>
+            }
+          />
+          <Route
+            path="/reports"
+            element={
+              <ModuleGate module={ModuleCodes.REPORTS}>
+                <ReportsPage />
+              </ModuleGate>
+            }
+          />
+          <Route
+            path="/report-config"
+            element={
+              <ModuleGate module={ModuleCodes.REPORT_CONFIG}>
+                <ReportBuilderPage />
+              </ModuleGate>
+            }
+          />
         </Routes>
       </main>
     </div>
@@ -97,3 +173,14 @@ function App() {
 }
 
 export default App;
+
+function ModuleGate({ children, module }: { children: JSX.Element; module: ModuleCode }) {
+  const { hasModule, loading } = useModules();
+  if (loading) {
+    return <div className="text-sm text-slate-500 dark:text-slate-400">Loading module access…</div>;
+  }
+  if (!hasModule(module)) {
+    return <NotAuthorized />;
+  }
+  return children;
+}

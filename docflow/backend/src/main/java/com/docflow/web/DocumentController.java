@@ -106,6 +106,14 @@ public class DocumentController {
             pageable
         );
 
+        boolean maker = requestUserContext.getCurrentUser()
+                .map(user -> "MAKER".equalsIgnoreCase(user.activeRole()))
+                .orElse(false);
+        if (maker && results.getTotalElements() == 0) {
+            return ResponseEntity.ok()
+                    .header("X-Docflow-Message", com.docflow.service.DocumentScopeGuard.NO_DOCUMENTS_MESSAGE)
+                    .body(results);
+        }
         return ResponseEntity.ok(results);
     }
 

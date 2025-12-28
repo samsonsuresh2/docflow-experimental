@@ -32,13 +32,14 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
     public Page<DocumentParent> searchDocuments(String documentNumber,
                                                 DocumentStatus status,
                                                 List<DocumentSearchFilter> dynamicFilters,
-                                                Pageable pageable) {
+                                                Pageable pageable,
+                                                String createdBy) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<DocumentParent> query = cb.createQuery(DocumentParent.class);
         Root<DocumentParent> root = query.from(DocumentParent.class);
         query.select(root).distinct(true);
 
-        List<Predicate> predicates = buildPredicates(cb, query, root, documentNumber, status, dynamicFilters);
+        List<Predicate> predicates = buildPredicates(cb, query, root, documentNumber, status, dynamicFilters, createdBy);
         if (!predicates.isEmpty()) {
             query.where(predicates.toArray(Predicate[]::new));
         }
@@ -49,17 +50,17 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
         typedQuery.setMaxResults(pageable.getPageSize());
         List<DocumentParent> content = typedQuery.getResultList();
 
-        long total = count(documentNumber, status, dynamicFilters);
+        long total = count(documentNumber, status, dynamicFilters, createdBy);
         return new PageImpl<>(content, pageable, total);
     }
 
-    private long count(String documentNumber, DocumentStatus status, List<DocumentSearchFilter> dynamicFilters) {
+    private long count(String documentNumber, DocumentStatus status, List<DocumentSearchFilter> dynamicFilters, String createdBy) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Long> countQuery = cb.createQuery(Long.class);
         Root<DocumentParent> root = countQuery.from(DocumentParent.class);
         countQuery.select(cb.countDistinct(root));
 
-        List<Predicate> predicates = buildPredicates(cb, countQuery, root, documentNumber, status, dynamicFilters);
+        List<Predicate> predicates = buildPredicates(cb, countQuery, root, documentNumber, status, dynamicFilters, createdBy);
         if (!predicates.isEmpty()) {
             countQuery.where(predicates.toArray(Predicate[]::new));
         }
@@ -71,7 +72,8 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
                                             Root<DocumentParent> root,
                                             String documentNumber,
                                             DocumentStatus status,
-                                            List<DocumentSearchFilter> dynamicFilters) {
+                                            List<DocumentSearchFilter> dynamicFilters,
+                                            String createdBy) {
         List<Predicate> predicates = new ArrayList<>();
 
         if (documentNumber != null && !documentNumber.isBlank()) {
@@ -80,6 +82,9 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
         }
         if (status != null) {
             predicates.add(cb.equal(root.get("status"), status));
+        }
+        if (createdBy != null && !createdBy.isBlank()) {
+            predicates.add(cb.equal(root.get("createdBy"), createdBy));
         }
 
         if (dynamicFilters != null) {

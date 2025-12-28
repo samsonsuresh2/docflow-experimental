@@ -25,6 +25,8 @@ public class UserContextFilter extends OncePerRequestFilter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UserContextFilter.class);
     private static final String USER_HEADER = "X-USER-ID";
+    private static final String SESSION_USER_ID = "AUTHENTICATED_USER_ID";
+    private static final String SESSION_ACTIVE_ROLE = "ACTIVE_ROLE";
 
     private final RequestUserContext requestUserContext;
     private final UserRoleRepository userRoleRepository;
@@ -48,39 +50,58 @@ public class UserContextFilter extends OncePerRequestFilter {
             return;
         }
 
-        String userId = request.getHeader(USER_HEADER);
-        if (userId == null || userId.isBlank()) {
-            if (devProfileActive) {
-                LOGGER.warn(
-                        "Request {} {} missing X-USER-ID header; continuing because 'dev' profile is active",
-                        request.getMethod(),
-                        request.getRequestURI()
-                );
-                try {
-                    filterChain.doFilter(request, response);
-                } finally {
-                    requestUserContext.clear();
-                }
-                return;
-            }
-            response.sendError(HttpStatus.UNAUTHORIZED.value(), "Missing X-USER-ID header");
-            return;
-        }
-
-        Set<String> roles = userRoleRepository.findByUserId(userId).stream()
-                .map(UserRole::getRoleName)
-                .collect(Collectors.toUnmodifiableSet());
-
-        if (roles.isEmpty()) {
-            response.sendError(HttpStatus.UNAUTHORIZED.value(), "User has no assigned roles");
-            return;
-        }
+        String userId = resolveUserId(request);
+        String activeRole = resolveActiveRole(request);
+        Set<String> roles = resolveRoles(userId, activeRole);
 
         try {
-            requestUserContext.setCurrentUser(new RequestUser(userId, roles));
+            requestUserContext.setCurrentUser(new RequestUser(userId, roles, activeRole));
             filterChain.doFilter(request, response);
         } finally {
             requestUserContext.clear();
         }
+    }
+
+    private String resolveUserId(HttpServletRequest request) throws IOException {
+        Object sessionUser = request.getSession(false) != null ? request.getSession(false).getAttribute(SESSION_USER_ID) : null;
+        if (sessionUser instanceof String sessionUserId && !sessionUserId.isBlank()) {
+            return sessionUserId;
+        }
+        String userId = request.getHeader(USER_HEADER);
+        if (userId == null || userId.isBlank()) {
+            if (devProfileActive) {
+                LOGGER.warn(
+                        "Request {} {} missing authentication; continuing because 'dev' profile is active",
+                        request.getMethod(),
+                        request.getRequestURI()
+                );
+                return "dev-user";
+            }
+            throw new IOException("Missing authentication");
+        }
+        return userId;
+    }
+
+    private String resolveActiveRole(HttpServletRequest request) {
+        Object sessionRole = request.getSession(false) != null ? request.getSession(false).getAttribute(SESSION_ACTIVE_ROLE) : null;
+        if (sessionRole instanceof String role && !role.isBlank()) {
+            return role;
+        }
+        return null;
+    }
+
+    private Set<String> resolveRoles(String userId, String activeRole) throws IOException {
+        Set<String> roles = userRoleRepository.findByUserId(userId).stream()
+                .map(UserRole::getRoleName)
+                .collect(Collectors.toUnmodifiableSet());
+        if (activeRole != null) {
+            roles = new java.util.HashSet<>(roles);
+            roles.add(activeRole);
+            roles = Collections.unmodifiableSet(roles);
+        }
+        if (roles.isEmpty() && !devProfileActive) {
+            throw new IOException("User has no assigned roles");
+        }
+        return roles;
     }
 }

@@ -8,6 +8,7 @@ public class ReportTemplateResponse {
 
     private long id;
     private String name;
+    private String description;
     private DynamicReportRequest request;
     private String createdBy;
 
@@ -17,9 +18,10 @@ public class ReportTemplateResponse {
     public ReportTemplateResponse() {
     }
 
-    public ReportTemplateResponse(long id, String name, DynamicReportRequest request, String createdBy, Instant createdAt) {
+    public ReportTemplateResponse(long id, String name, String description, DynamicReportRequest request, String createdBy, Instant createdAt) {
         this.id = id;
         this.name = name;
+        this.description = description;
         this.request = request;
         this.createdBy = createdBy;
         this.createdAt = createdAt;
@@ -39,6 +41,14 @@ public class ReportTemplateResponse {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     public DynamicReportRequest getRequest() {

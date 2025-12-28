@@ -1,4 +1,4 @@
-export type UserRole = 'ADMIN' | 'MAKER' | 'REVIEWER' | 'CHECKER';
+export type UserRole = 'ADMIN' | 'MAKER' | 'REVIEWER' | 'CHECKER' | 'APPROVER' | '';
 
 export interface UserProfile {
   userId: string;
@@ -7,18 +7,10 @@ export interface UserProfile {
 
 const STORAGE_KEY = 'docflow:user';
 
-export const USER_OPTIONS: UserProfile[] = [
-  { userId: 'admin1', role: 'ADMIN' },
-  { userId: 'maker1', role: 'MAKER' },
-  { userId: 'reviewer1', role: 'REVIEWER' },
-  { userId: 'checker1', role: 'CHECKER' },
-];
+export const USER_OPTIONS: UserProfile[] = [];
 
-export function findUserById(id: string | null | undefined): UserProfile | null {
-  if (!id) {
-    return null;
-  }
-  return USER_OPTIONS.find((option) => option.userId === id) ?? null;
+export function findUserById(): UserProfile | null {
+  return null;
 }
 
 export function loadUser(): UserProfile | null {
@@ -32,7 +24,7 @@ export function loadUser(): UserProfile | null {
   try {
     const parsed = JSON.parse(raw) as Partial<UserProfile>;
     if (parsed && parsed.userId) {
-      return findUserById(parsed.userId);
+      return { userId: parsed.userId, role: (parsed.role ?? '') as UserRole };
     }
   } catch {
     return null;

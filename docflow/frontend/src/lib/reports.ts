@@ -1,6 +1,9 @@
 import type {
   DynamicReportRequest,
+  ExecutableReportTemplateDetail,
+  ExecutableReportTemplateSummary,
   ReportAdminScope,
+  ReportExecutionRunRequest,
   ReportRunResponse,
   ReportTemplate,
   ReportTemplateList,
@@ -17,6 +20,18 @@ export async function fetchReportScope(baseEntity?: string): Promise<ReportAdmin
 export async function fetchReportTemplates(): Promise<ReportTemplate[]> {
   const response = await client.get<ReportTemplateList>('/reports/templates');
   return response.data.templates ?? [];
+}
+
+export async function fetchExecutableReportTemplates(): Promise<ExecutableReportTemplateSummary[]> {
+  const response = await client.get<{ templates: ExecutableReportTemplateSummary[] }>('/reports/templates', {
+    params: { mode: 'exec' },
+  });
+  return response.data.templates ?? [];
+}
+
+export async function fetchExecutableReportTemplate(templateId: number): Promise<ExecutableReportTemplateDetail> {
+  const response = await client.get<ExecutableReportTemplateDetail>(`/reports/templates/${templateId}`);
+  return response.data;
 }
 
 export async function saveReportTemplate(
@@ -40,6 +55,25 @@ export async function runDynamicReport(
     request,
     {
       params: {
+        page,
+        size,
+      },
+    },
+  );
+  return response.data;
+}
+
+export async function runReportTemplate(
+  request: ReportExecutionRunRequest,
+  page: number,
+  size: number,
+): Promise<ReportRunResponse> {
+  const response = await client.post<ReportRunResponse>(
+    '/reports/run',
+    request,
+    {
+      params: {
+        mode: 'exec',
         page,
         size,
       },

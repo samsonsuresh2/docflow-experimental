@@ -3,7 +3,7 @@ package com.docflow.context;
 import java.util.Collections;
 import java.util.Set;
 
-public record RequestUser(String userId, Set<String> roles) {
+public record RequestUser(String userId, Set<String> roles, String activeRole) {
 
     public RequestUser {
         if (userId == null || userId.isBlank()) {
