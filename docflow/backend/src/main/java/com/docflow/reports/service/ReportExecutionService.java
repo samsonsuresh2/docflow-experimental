@@ -220,10 +220,12 @@ public class ReportExecutionService {
                 throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Template is missing report definition");
             }
             String baseEntity = requireNonBlank(request.getBaseEntity(), "Template base entity missing");
-            List<String> columns = new ArrayList<>(Objects.requireNonNullElse(request.getColumns(), List.of()));
+            List<String> columns = new ArrayList<>(
+                Objects.requireNonNullElse(request.getColumns(), List.<String>of())
+            );
             Map<String, TemplateFilterDefinition> userFilters = new LinkedHashMap<>();
             List<ReportFilter> fixedFilters = new ArrayList<>();
-        for (ReportFilter filter : Objects.requireNonNullElse(request.getFilters(), List.of())) {
+            for (ReportFilter filter : Objects.requireNonNullElse(request.getFilters(), List.<ReportFilter>of())) {
             if (filter == null || !StringUtils.hasText(filter.getKey())) {
                 continue;
             }

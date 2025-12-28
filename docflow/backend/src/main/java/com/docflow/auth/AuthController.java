@@ -65,7 +65,7 @@ public class AuthController {
     public ActiveRoleResponse selectActiveRole(@Valid @RequestBody ActiveRoleRequest request, HttpServletRequest httpRequest) {
         String userId = currentUser(httpRequest);
         List<String> allowedRoles = userRoleService.findRolesForUser(userId, authProperties.isImplicitMakerEnabled());
-        String desiredRole = normalizeRole(request.role());
+        String desiredRole = request.role();
         if (allowedRoles.stream().noneMatch(r -> r.equalsIgnoreCase(desiredRole))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requested role is not permitted for this user");
         }
