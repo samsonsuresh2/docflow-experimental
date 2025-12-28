@@ -9,8 +9,13 @@ import com.docflow.domain.AuditLog;
 import com.docflow.domain.DocumentParent;
 import com.docflow.domain.DocumentStatus;
 import com.docflow.domain.repository.DocumentRepository;
+import com.docflow.service.form.FieldAccessDecision;
+import com.docflow.service.form.FieldAccessEvaluator;
+import com.docflow.service.form.UploadFieldConfigParser;
+import com.docflow.service.form.UploadFieldDefinition;
 import com.docflow.service.search.DocumentSearchFilter;
 import com.docflow.storage.StorageAdapter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -41,6 +46,7 @@ public class DefaultDocumentService implements DocumentService {
     private final RuleService ruleService;
     private final ConfigService configService;
     private final com.docflow.context.RequestUserContext requestUserContext;
+    private final UploadFieldConfigParser uploadFieldConfigParser;
 
     public DefaultDocumentService(DocumentRepository documentRepository,
                                   StorageAdapter storageAdapter,
@@ -48,7 +54,8 @@ public class DefaultDocumentService implements DocumentService {
                                   AuditService auditService,
                                   RuleService ruleService,
                                   ConfigService configService,
-                                  com.docflow.context.RequestUserContext requestUserContext) {
+                                  com.docflow.context.RequestUserContext requestUserContext,
+                                  ObjectMapper objectMapper) {
         this.documentRepository = documentRepository;
         this.storageAdapter = storageAdapter;
         this.metadataService = metadataService;
@@ -56,6 +63,7 @@ public class DefaultDocumentService implements DocumentService {
         this.ruleService = ruleService;
         this.configService = configService;
         this.requestUserContext = requestUserContext;
+        this.uploadFieldConfigParser = new UploadFieldConfigParser(objectMapper);
     }
 
     @Override
@@ -132,6 +140,10 @@ public class DefaultDocumentService implements DocumentService {
             return mapToResponse(document, metadata);
         }
 
+        List<UploadFieldDefinition> definitions = uploadFieldConfigParser.parse(configService.getUploadFieldsConfig());
+        Map<String, Object> existingMetadata = metadataService.getMetadata(document);
+        enforceRequiredFields(definitions, status, existingMetadata);
+
         OffsetDateTime now = OffsetDateTime.now();
         document.setStatus(status);
         document.setUpdatedBy(user.userId());
@@ -147,12 +159,16 @@ public class DefaultDocumentService implements DocumentService {
     @Override
     public DocumentResponse updateMetadata(Long id, Map<String, Object> requestedMetadata, RequestUser user) {
         DocumentParent document = requireDocument(id);
+        List<UploadFieldDefinition> definitions = uploadFieldConfigParser.parse(configService.getUploadFieldsConfig());
+        Map<String, Object> safeMetadata = requestedMetadata != null ? requestedMetadata : Map.of();
+        Map<String, Object> existingMetadata = metadataService.getMetadata(document);
+        enforceEditability(definitions, document, existingMetadata, safeMetadata);
         OffsetDateTime now = OffsetDateTime.now();
         document.setUpdatedBy(user.userId());
         document.setUpdatedAt(now);
         documentRepository.save(document);
 
-        Map<String, Object> metadata = metadataService.persistMetadata(document, requestedMetadata, user);
+        Map<String, Object> metadata = metadataService.persistMetadata(document, safeMetadata, user);
         return mapToResponse(document, metadata);
     }
 
@@ -212,6 +228,126 @@ public class DefaultDocumentService implements DocumentService {
     @Override
     public DocumentResponse rework(Long id, RequestUser user, String comment) {
         return updateStatus(id, DocumentStatus.REWORK, user, "REWORK", comment);
+    }
+
+    private void enforceRequiredFields(List<UploadFieldDefinition> definitions,
+                                       DocumentStatus targetStatus,
+                                       Map<String, Object> metadata) {
+        if (definitions.isEmpty()) {
+            return;
+        }
+        String activeRole = requestUserContext.getCurrentUser()
+            .map(RequestUser::activeRole)
+            .orElse(null);
+        List<String> missing = new ArrayList<>();
+        for (UploadFieldDefinition definition : definitions) {
+            boolean visibleIfPasses = FieldAccessEvaluator.evaluateVisibleIf(definition, metadata);
+            Object currentValue = metadata != null ? metadata.get(definition.getName()) : null;
+            FieldAccessDecision access = FieldAccessEvaluator.evaluate(
+                definition,
+                activeRole,
+                targetStatus,
+                currentValue,
+                visibleIfPasses
+            );
+            if (access.isRequiredNow() && !FieldAccessEvaluator.isValueFilled(currentValue)) {
+                missing.add(definition.getDisplayLabel());
+            }
+        }
+        if (!missing.isEmpty()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST,
+                "Missing required fields: " + String.join(", ", missing)
+            );
+        }
+    }
+
+    private void enforceEditability(List<UploadFieldDefinition> definitions,
+                                    DocumentParent document,
+                                    Map<String, Object> existingMetadata,
+                                    Map<String, Object> requestedMetadata) {
+        if (definitions.isEmpty()) {
+            return;
+        }
+        String activeRole = requestUserContext.getCurrentUser()
+            .map(RequestUser::activeRole)
+            .orElse(null);
+
+        Map<String, Object> combinedMetadata = new LinkedHashMap<>();
+        if (existingMetadata != null) {
+            combinedMetadata.putAll(existingMetadata);
+        }
+        if (requestedMetadata != null) {
+            combinedMetadata.putAll(requestedMetadata);
+        }
+
+        List<String> editViolations = new ArrayList<>();
+        List<String> lockViolations = new ArrayList<>();
+
+        for (UploadFieldDefinition definition : definitions) {
+            Object currentValue = existingMetadata != null ? existingMetadata.get(definition.getName()) : null;
+            Object requestedValue = requestedMetadata != null ? requestedMetadata.get(definition.getName()) : null;
+            boolean visibleIfPasses = FieldAccessEvaluator.evaluateVisibleIf(definition, combinedMetadata);
+            FieldAccessDecision access = FieldAccessEvaluator.evaluate(
+                definition,
+                activeRole,
+                document.getStatus(),
+                currentValue,
+                visibleIfPasses
+            );
+
+            boolean fieldPresentInRequest = requestedMetadata != null && requestedMetadata.containsKey(definition.getName());
+            if (fieldPresentInRequest && !access.isEditable()) {
+                editViolations.add(definition.getDisplayLabel());
+            }
+
+            if (definition.isLockAfterFilled() && FieldAccessEvaluator.isValueFilled(currentValue)) {
+                if (!fieldPresentInRequest) {
+                    lockViolations.add(definition.getDisplayLabel());
+                } else if (!valuesAreEqual(currentValue, requestedValue)) {
+                    lockViolations.add(definition.getDisplayLabel());
+                }
+            }
+        }
+
+        if (!editViolations.isEmpty() || !lockViolations.isEmpty()) {
+            List<String> messages = new ArrayList<>();
+            if (!editViolations.isEmpty()) {
+                messages.add("Fields not editable: " + String.join(", ", editViolations));
+            }
+            if (!lockViolations.isEmpty()) {
+                messages.add("Locked fields cannot be changed: " + String.join(", ", lockViolations));
+            }
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST,
+                String.join(" | ", messages)
+            );
+        }
+    }
+
+    private boolean valuesAreEqual(Object existingValue, Object requestedValue) {
+        if (existingValue == null && requestedValue == null) {
+            return true;
+        }
+        if (existingValue == null || requestedValue == null) {
+            return false;
+        }
+        if (existingValue instanceof Number && requestedValue instanceof Number) {
+            return Double.compare(((Number) existingValue).doubleValue(), ((Number) requestedValue).doubleValue()) == 0;
+        }
+        if (existingValue instanceof Iterable<?> existingIterable && requestedValue instanceof Iterable<?> requestedIterable) {
+            java.util.Iterator<?> a = existingIterable.iterator();
+            java.util.Iterator<?> b = requestedIterable.iterator();
+            while (a.hasNext() && b.hasNext()) {
+                Object nextA = a.next();
+                Object nextB = b.next();
+                if (!valuesAreEqual(nextA, nextB)) {
+                    return false;
+                }
+            }
+            return !a.hasNext() && !b.hasNext();
+        }
+        return existingValue.toString().equals(requestedValue.toString());
     }
 
     private DocumentParent requireDocument(Long id) {

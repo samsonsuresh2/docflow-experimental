@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { UploadFieldDefinition } from '../lib/config';
+import { FieldAccessResult } from '../lib/fieldAccess';
 import {
   buildDefaultValues,
   DynamicFormValue,
@@ -15,6 +16,7 @@ type Props = {
   onChange?: (values: DynamicFormValues) => void;
   submitLabel?: string | null;
   disabled?: boolean;
+  accessMap?: Map<string, FieldAccessResult>;
 };
 
 export default function DynamicForm({
@@ -24,6 +26,7 @@ export default function DynamicForm({
   onChange,
   submitLabel = 'Submit',
   disabled = false,
+  accessMap,
 }: Props) {
   const effectiveFields = useMemo(
     () =>
@@ -82,7 +85,8 @@ export default function DynamicForm({
   }, [values, onChange]);
 
   const handleChange = (name: string, value: DynamicFormValue) => {
-    if (disabled) {
+    const access = accessMap?.get(name);
+    if (disabled || access?.isEditable === false || access?.isLocked) {
       return;
     }
     const field = fieldMap.get(name);
@@ -98,20 +102,29 @@ export default function DynamicForm({
 
   const formContent = (
     <div className="space-y-4">
-      {effectiveFields.map((field) => (
-        <label key={field.name} className="block text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-            {field.label}
-            {field.required ? <span className="ml-1 text-red-500">*</span> : null}
-          </span>
-          {renderInput(
-            field,
-            values[field.name] ?? getDefaultValueForField(field),
-            (value) => handleChange(field.name, value),
-            disabled,
-          )}
-        </label>
-      ))}
+      {effectiveFields.map((field) => {
+        const access = accessMap?.get(field.name);
+        if (access && !access.isVisible) {
+          return null;
+        }
+        const isRequired = access?.isRequiredNow ?? field.required ?? false;
+        return (
+          <label key={field.name} className="block text-sm">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+              {field.label}
+              {isRequired ? <span className="ml-1 text-red-500">*</span> : null}
+            </span>
+            {renderInput(
+              field,
+              values[field.name] ?? getDefaultValueForField(field),
+              (value) => handleChange(field.name, value),
+              disabled,
+              access,
+              isRequired,
+            )}
+          </label>
+        );
+      })}
       {onSubmit && submitLabel !== null ? (
         <button
           type="submit"
@@ -148,10 +161,14 @@ function renderInput(
   value: DynamicFormValue,
   onChange: (value: DynamicFormValue) => void,
   formDisabled: boolean,
+  access: FieldAccessResult | undefined,
+  isRequired: boolean,
 ) {
   const isExplicitReadOnly = field.type === 'readonly';
-  const isDisabled = formDisabled || (!isExplicitReadOnly && Boolean(field.readOnly));
-  const isReadOnly = isExplicitReadOnly || Boolean(field.readOnly);
+  const isEditable = access?.isEditable ?? !formDisabled;
+  const locked = access?.isLocked ?? false;
+  const isDisabled = formDisabled || (!isExplicitReadOnly && (!isEditable || Boolean(field.readOnly)) || locked);
+  const isReadOnly = isExplicitReadOnly || Boolean(field.readOnly) || !isEditable || locked;
   const baseClassName =
     'mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40 dark:disabled:bg-slate-800';
 
@@ -167,7 +184,7 @@ function renderInput(
         <textarea
           className={baseClassName}
           disabled={isDisabled}
-          required={field.required}
+          required={isRequired}
           placeholder={field.placeholder}
           rows={field.rows ?? 3}
           value={typeof value === 'string' ? value : ''}
@@ -200,7 +217,7 @@ function renderInput(
           type={typeMap[field.type] ?? 'text'}
           className={baseClassName}
           disabled={isDisabled}
-          required={field.required}
+          required={isRequired}
           placeholder={field.placeholder}
           value={typeof value === 'string' ? value : ''}
           onChange={handleStringChange}
@@ -214,7 +231,7 @@ function renderInput(
         <select
           className={baseClassName}
           disabled={isDisabled}
-          required={field.required}
+          required={isRequired}
           value={typeof value === 'string' ? value : ''}
           onChange={handleStringChange}
         >
@@ -234,7 +251,7 @@ function renderInput(
           multiple
           className={baseClassName}
           disabled={isDisabled}
-          required={field.required}
+          required={isRequired}
           value={Array.isArray(value) ? value : []}
           onChange={(event) => {
             const selected = Array.from(event.target.selectedOptions).map((option) => option.value);
@@ -266,7 +283,7 @@ function renderInput(
                 className="h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-900"
                 checked={selected === option.value}
                 disabled={isDisabled}
-                required={Boolean(field.required) && index === 0}
+                required={Boolean(isRequired) && index === 0}
                 onChange={(event) => {
                   if (event.target.checked) {
                     onChange(option.value);
@@ -286,7 +303,7 @@ function renderInput(
           className="mt-2 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed dark:border-slate-600 dark:bg-slate-900"
           checked={Boolean(value)}
           disabled={isDisabled}
-          required={field.required}
+          required={isRequired}
           onChange={(event) => onChange(event.target.checked)}
         />
       );
@@ -328,7 +345,7 @@ function renderInput(
           type="text"
           className={baseClassName}
           disabled={isDisabled}
-          required={field.required}
+          required={isRequired}
           placeholder={field.placeholder}
           value={typeof value === 'string' ? value : ''}
           onChange={handleStringChange}

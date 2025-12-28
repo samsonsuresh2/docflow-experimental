@@ -1,8 +1,10 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import DynamicForm from '../components/DynamicForm';
 import api from '../lib/api';
-import { fieldsForRole, parseUploadFieldConfig, UploadFieldDefinition } from '../lib/config';
-import { DynamicFormValues, isDynamicFormValueEmpty } from '../lib/dynamicFormValues';
+import { parseUploadFieldConfig, UploadFieldDefinition } from '../lib/config';
+import { DynamicFormValues } from '../lib/dynamicFormValues';
+import { buildFieldAccessMap } from '../lib/fieldAccess';
+import { buildMetadataPayload } from '../lib/metadataPayload';
 import { useUser } from '../lib/UserContext';
 import type { DocumentResponse } from '../types/documents';
 
@@ -51,9 +53,14 @@ export default function Upload() {
     };
   }, []);
 
+  const accessMap = useMemo(
+    () => buildFieldAccessMap(fields, metadataValues, { activeRole: user?.role ?? null, documentStatus: 'DRAFT' }),
+    [fields, metadataValues, user?.role],
+  );
+
   const availableFields = useMemo(
-    () => fieldsForRole(fields, user?.role).map((field) => ({ ...field, readOnly: false })),
-    [fields, user?.role],
+    () => fields.filter((field) => accessMap.get(field.name)?.isVisible ?? true),
+    [fields, accessMap],
   );
 
   if (!user) {
@@ -76,7 +83,7 @@ export default function Upload() {
     try {
       setSubmitting(true);
       setActiveAction(intent);
-      const metadata = buildMetadataPayload(availableFields, metadataValues);
+      const metadata = buildMetadataPayload(fields, metadataValues, {}, accessMap);
       const payload = {
         title: title.trim(),
         metadata,
@@ -173,6 +180,7 @@ export default function Upload() {
               onChange={handleMetadataChange}
               submitLabel={null}
               disabled={submitting || loadingConfig}
+              accessMap={accessMap}
             />
           )}
         </fieldset>
@@ -206,51 +214,4 @@ function AuthRequired() {
       Please sign in via the Login page to upload documents.
     </div>
   );
-}
-
-function buildMetadataPayload(
-  fields: UploadFieldDefinition[],
-  values: DynamicFormValues,
-): Record<string, unknown> {
-  const metadata: Record<string, unknown> = {};
-  fields.forEach((field) => {
-    const rawValue = values[field.name];
-    if (rawValue === undefined) {
-      return;
-    }
-
-    if (typeof rawValue !== 'boolean' && isDynamicFormValueEmpty(rawValue)) {
-      return;
-    }
-
-    switch (field.type) {
-      case 'number': {
-        if (typeof rawValue === 'string') {
-          const parsed = Number(rawValue);
-          metadata[field.name] = Number.isNaN(parsed) ? rawValue : parsed;
-        } else {
-          metadata[field.name] = rawValue;
-        }
-        break;
-      }
-      case 'checkbox': {
-        metadata[field.name] = Boolean(rawValue);
-        break;
-      }
-      case 'multiselect':
-      case 'checkbox-group': {
-        if (Array.isArray(rawValue)) {
-          if (rawValue.length > 0) {
-            metadata[field.name] = rawValue;
-          }
-        } else if (typeof rawValue === 'string' && rawValue) {
-          metadata[field.name] = [rawValue];
-        }
-        break;
-      }
-      default:
-        metadata[field.name] = rawValue;
-    }
-  });
-  return metadata;
 }
