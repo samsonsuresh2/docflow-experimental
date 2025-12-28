@@ -3,14 +3,15 @@ import DocumentPreviewModal, { PreviewContent } from '../components/DocumentPrev
 import DynamicForm from '../components/DynamicForm';
 import StatusBadge from '../components/StatusBadge';
 import api from '../lib/api';
-import { fieldsForRole, parseUploadFieldConfig, UploadFieldDefinition } from '../lib/config';
+import { parseUploadFieldConfig, UploadFieldDefinition } from '../lib/config';
 import { parseReviewFilterConfig, ReviewFilterDefinition } from '../lib/reviewFilters';
 import { convertDocxToHtml, convertXlsxToHtml } from '../lib/documentPreview';
 import {
   DynamicFormValues,
-  isDynamicFormValueEmpty,
   normaliseValuesForFields,
 } from '../lib/dynamicFormValues';
+import { buildFieldAccessMap } from '../lib/fieldAccess';
+import { buildMetadataPayload } from '../lib/metadataPayload';
 import { useUser } from '../lib/UserContext';
 import { DocumentStatus, normalizeStatus } from '../lib/documentStatus';
 import type { UserRole } from '../lib/user';
@@ -148,29 +149,41 @@ export default function Review() {
     };
   }, []);
 
-  const availableFields = useMemo(() => {
-    const baseFields = fieldsForRole(fields, user?.role);
+  const mergedFields = useMemo(() => {
     const existingMetadata = document?.metadata ?? {};
     const extraFields = Object.keys(existingMetadata)
-      .filter((key) => !baseFields.some((field) => field.name === key))
+      .filter((key) => !fields.some((field) => field.name === key))
       .map<UploadFieldDefinition>((key) => ({ name: key, label: key, type: 'text' }));
+    return [...fields, ...extraFields];
+  }, [fields, document]);
 
-    const editable = canEditMetadata(user?.role ?? null, normalizedStatus);
+  const accessMap = useMemo(
+    () =>
+      buildFieldAccessMap(mergedFields, metadataValues, {
+        activeRole: user?.role ?? null,
+        documentStatus: normalizedStatus ?? document?.status ?? null,
+      }),
+    [mergedFields, metadataValues, user?.role, normalizedStatus, document?.status],
+  );
 
-    return [...baseFields, ...extraFields].map((field) => ({
-      ...field,
-      readOnly: Boolean(field.readOnly) || !editable,
-    }));
-  }, [fields, user?.role, document, normalizedStatus]);
+  const visibleFields = useMemo(
+    () => mergedFields.filter((field) => accessMap.get(field.name)?.isVisible ?? true),
+    [mergedFields, accessMap],
+  );
+
+  const canEdit = useMemo(
+    () => visibleFields.some((field) => accessMap.get(field.name)?.isEditable),
+    [visibleFields, accessMap],
+  );
 
   useEffect(() => {
     if (!document) {
       setMetadataValues({});
       return;
     }
-    const initialValues = normaliseValuesForFields(availableFields, document.metadata ?? {});
+    const initialValues = normaliseValuesForFields(mergedFields, document.metadata ?? {});
     setMetadataValues(initialValues);
-  }, [document, availableFields]);
+  }, [document, mergedFields]);
 
   useEffect(() => {
     return () => {
@@ -373,8 +386,7 @@ export default function Review() {
     if (!document) {
       return;
     }
-    const editable = canEditMetadata(user.role, normalizedStatus);
-    if (!editable) {
+    if (!canEdit) {
       setErrorMessage('You do not have permission to update metadata for this document.');
       return;
     }
@@ -383,7 +395,7 @@ export default function Review() {
       setBusy(true);
       setErrorMessage(null);
       setStatusMessage(null);
-      const metadata = buildMetadataPayload(availableFields, values);
+      const metadata = buildMetadataPayload(mergedFields, values, document.metadata ?? {}, accessMap);
       await api.put(`/documents/${document.id}/metadata`, { metadata });
       setStatusMessage('Metadata updated successfully.');
       await loadDocument(document.id);
@@ -396,7 +408,6 @@ export default function Review() {
   };
 
   const availableActions = determineActions(user.role, normalizedStatus);
-  const canEdit = canEditMetadata(user.role, normalizedStatus);
   const canPreview = Boolean(document?.filePath);
 
   const handleWorkflowAction = async (action: WorkflowAction) => {
@@ -789,18 +800,19 @@ export default function Review() {
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Read only</span>
               )}
             </div>
-            {configLoading && availableFields.length === 0 ? (
+            {configLoading && visibleFields.length === 0 ? (
               <p className="mt-4 text-sm text-slate-500 dark:text-slate-300">Loading field configuration…</p>
-            ) : availableFields.length === 0 ? (
+            ) : visibleFields.length === 0 ? (
               <p className="mt-4 text-sm text-slate-500 dark:text-slate-300">No metadata fields configured for this role.</p>
             ) : (
               <DynamicForm
-                fields={availableFields}
+                fields={visibleFields}
                 initialValues={metadataValues}
                 onChange={handleMetadataChange}
                 onSubmit={canEdit ? handleMetadataUpdate : undefined}
                 submitLabel={canEdit ? 'Save Metadata' : null}
                 disabled={busy || !canEdit}
+                accessMap={accessMap}
               />
             )}
           </div>
@@ -860,16 +872,6 @@ export default function Review() {
       />
     </div>
   );
-}
-
-function canEditMetadata(role: UserRole | null, status: DocumentStatus | null) {
-  if (!role || !status) {
-    return false;
-  }
-  if (role !== 'MAKER') {
-    return false;
-  }
-  return status === 'DRAFT' || status === 'REWORK';
 }
 
 function determineActions(role: UserRole, status: DocumentStatus | null): { key: WorkflowAction; label: string }[] {
@@ -981,51 +983,6 @@ function determineFileExtension(fileName: string, contentType?: string): string 
   }
 
   return null;
-}
-
-function buildMetadataPayload(
-  fields: UploadFieldDefinition[],
-  values: DynamicFormValues,
-): Record<string, unknown> {
-  const metadata: Record<string, unknown> = {};
-  fields.forEach((field) => {
-    const rawValue = values[field.name];
-    if (rawValue === undefined) {
-      return;
-    }
-    if (typeof rawValue !== 'boolean' && isDynamicFormValueEmpty(rawValue)) {
-      return;
-    }
-    switch (field.type) {
-      case 'number': {
-        if (typeof rawValue === 'string') {
-          const parsed = Number(rawValue);
-          metadata[field.name] = Number.isNaN(parsed) ? rawValue : parsed;
-        } else {
-          metadata[field.name] = rawValue;
-        }
-        break;
-      }
-      case 'checkbox': {
-        metadata[field.name] = Boolean(rawValue);
-        break;
-      }
-      case 'multiselect':
-      case 'checkbox-group': {
-        if (Array.isArray(rawValue)) {
-          if (rawValue.length > 0) {
-            metadata[field.name] = rawValue;
-          }
-        } else if (typeof rawValue === 'string' && rawValue) {
-          metadata[field.name] = [rawValue];
-        }
-        break;
-      }
-      default:
-        metadata[field.name] = rawValue;
-    }
-  });
-  return metadata;
 }
 
 function AuthRequired() {

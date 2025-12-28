@@ -1,5 +1,3 @@
-import { UserRole } from './user';
-
 export type UploadFieldType =
   | 'text'
   | 'number'
@@ -29,10 +27,18 @@ export interface UploadFieldDefinition {
   required?: boolean;
   placeholder?: string;
   options?: FieldOption[];
-  roles?: UserRole[];
+  roles?: string[];
+  visibleToRoles?: string[];
+  editableByRoles?: string[];
+  requiredAtStatuses?: string[];
+  lockAfterFilled?: boolean;
   readOnly?: boolean;
   defaultValue?: unknown;
   rows?: number;
+  visibleIf?: {
+    field: string;
+    notIn?: string[];
+  };
 }
 
 export function parseUploadFieldConfig(raw: string | null | undefined): UploadFieldDefinition[] {
@@ -135,10 +141,40 @@ function normaliseField(candidate: unknown): UploadFieldDefinition | null {
     : undefined;
 
   const roles = Array.isArray(obj.roles)
-    ? (obj.roles
-        .map((role) => (typeof role === 'string' ? role.toUpperCase() : null))
-        .filter((role): role is UserRole => role === 'ADMIN' || role === 'MAKER' || role === 'REVIEWER' || role === 'CHECKER'))
+    ? obj.roles
+        .map((role) => (typeof role === 'string' ? role.trim() : null))
+        .filter((role): role is string => Boolean(role))
     : undefined;
+
+  const visibleToRoles = Array.isArray(obj.visibleToRoles)
+    ? obj.visibleToRoles.map((role) => (typeof role === 'string' ? role.trim() : null)).filter((role): role is string => Boolean(role))
+    : roles;
+
+  const editableByRoles = Array.isArray(obj.editableByRoles)
+    ? obj.editableByRoles.map((role) => (typeof role === 'string' ? role.trim() : null)).filter((role): role is string => Boolean(role))
+    : undefined;
+
+  const requiredAtStatuses = Array.isArray(obj.requiredAtStatuses)
+    ? obj.requiredAtStatuses
+        .map((status) => (typeof status === 'string' ? status.trim().toUpperCase() : null))
+        .filter((status): status is string => Boolean(status))
+    : undefined;
+
+  const lockAfterFilled = Boolean(obj.lockAfterFilled);
+
+  const visibleIf =
+    obj.visibleIf && typeof obj.visibleIf === 'object'
+      ? {
+          field: typeof (obj.visibleIf as { field?: unknown }).field === 'string'
+            ? ((obj.visibleIf as { field?: unknown }).field as string)
+            : '',
+          notIn: Array.isArray((obj.visibleIf as { notIn?: unknown }).notIn)
+            ? ((obj.visibleIf as { notIn?: unknown }).notIn as unknown[])
+                .map((value) => (typeof value === 'string' ? value : String(value ?? '')))
+                .filter((entry) => entry.length > 0)
+            : undefined,
+        }
+      : undefined;
 
   const defaultValue = obj.defaultValue;
 
@@ -151,19 +187,12 @@ function normaliseField(candidate: unknown): UploadFieldDefinition | null {
     readOnly,
     options,
     roles,
+    visibleToRoles,
+    editableByRoles,
+    requiredAtStatuses,
+    lockAfterFilled,
     defaultValue,
     rows,
+    visibleIf: visibleIf && visibleIf.field ? visibleIf : undefined,
   };
-}
-
-export function fieldsForRole(fields: UploadFieldDefinition[], role: UserRole | null | undefined) {
-  if (!role) {
-    return fields;
-  }
-  return fields.filter((field) => {
-    if (!field.roles || field.roles.length === 0) {
-      return true;
-    }
-    return field.roles.includes(role);
-  });
 }

@@ -6,6 +6,7 @@ import com.docflow.domain.DocumentParent;
 import com.docflow.domain.DocumentStatus;
 import com.docflow.domain.repository.DocumentRepository;
 import com.docflow.service.search.DocumentSearchFilter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,6 +14,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -46,6 +48,8 @@ class DefaultDocumentServiceTest {
     private ConfigService configService;
     @Mock
     private RequestUserContext requestUserContext;
+    @Spy
+    private ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks
     private DefaultDocumentService service;
@@ -61,6 +65,7 @@ class DefaultDocumentServiceTest {
         sampleDocument.setId(1L);
         sampleDocument.setDocumentNumber("DOC-1");
         sampleDocument.setCreatedBy("maker1");
+        sampleDocument.setStatus(DocumentStatus.DRAFT);
         when(metadataService.getMetadata(any())).thenReturn(Map.of());
     }
 
@@ -105,5 +110,42 @@ class DefaultDocumentServiceTest {
         service.getDocument(1L);
 
         verify(documentRepository).findById(1L);
+    }
+
+    @Test
+    void updateStatusRejectsMissingRequiredFieldsForStatus() {
+        when(configService.getUploadFieldsConfig()).thenReturn("[{\"name\":\"field1\",\"requiredAtStatuses\":[\"APPROVED\"]}]");
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
+        when(requestUserContext.getCurrentUser()).thenReturn(Optional.of(new RequestUser("approver", Set.of("APPROVER"), "APPROVER")));
+
+        assertThatThrownBy(() -> service.updateStatus(1L, DocumentStatus.APPROVED, new RequestUser("approver", Set.of("APPROVER"), "APPROVER"), "APPROVE", null))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Missing required fields");
+    }
+
+    @Test
+    void updateMetadataRejectsLockedFieldChange() {
+        when(configService.getUploadFieldsConfig()).thenReturn("[{\"name\":\"lockedField\",\"lockAfterFilled\":true}]");
+        when(requestUserContext.getCurrentUser()).thenReturn(Optional.of(new RequestUser("maker1", Set.of("MAKER"), "MAKER")));
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
+        when(metadataService.getMetadata(sampleDocument)).thenReturn(Map.of("lockedField", "initial"));
+
+        assertThatThrownBy(() -> service.updateMetadata(1L, Map.of("lockedField", "updated"), new RequestUser("maker1", Set.of("MAKER"), "MAKER")))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Locked fields");
+        verify(metadataService, never()).persistMetadata(any(), any(), any());
+    }
+
+    @Test
+    void updateMetadataRejectsRoleWithoutEditPermission() {
+        when(configService.getUploadFieldsConfig()).thenReturn("[{\"name\":\"editable\",\"editableByRoles\":[\"REVIEWER\"]}]");
+        when(requestUserContext.getCurrentUser()).thenReturn(Optional.of(new RequestUser("maker1", Set.of("MAKER"), "MAKER")));
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
+        when(metadataService.getMetadata(sampleDocument)).thenReturn(Map.of());
+
+        assertThatThrownBy(() -> service.updateMetadata(1L, Map.of("editable", "value"), new RequestUser("maker1", Set.of("MAKER"), "MAKER")))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Fields not editable");
+        verify(metadataService, never()).persistMetadata(any(), any(), any());
     }
 }
