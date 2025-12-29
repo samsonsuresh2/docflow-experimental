@@ -234,6 +234,7 @@
     </changeSet>
 
     <changeSet id="008-create-report-templates-table" author="docflow">
+        <validCheckSum>9:288869b7867191e9625ac49496df4c8b</validCheckSum>
         <sql splitStatements="false" endDelimiter="/"><![CDATA[
 DECLARE
     v_count INTEGER;
