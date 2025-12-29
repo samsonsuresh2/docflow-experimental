@@ -12,10 +12,11 @@ spring:
         dialect: org.hibernate.dialect.OracleDialect
         format_sql: true
   flyway:
-    enabled: true
+    enabled: false
     locations: classpath:db/migration
     baseline-on-migrate: true
   liquibase:
+    enabled: true
     change-log: classpath:db/changelog/db.changelog-master.xml
 
 server:
