@@ -234,7 +234,7 @@
     </changeSet>
 
     <changeSet id="008-create-report-templates-table" author="docflow">
-        <sql><![CDATA[
+        <sql splitStatements="false"><![CDATA[
 DECLARE
     v_count INTEGER;
 BEGIN
@@ -254,7 +254,7 @@ END;
     </changeSet>
 
     <changeSet id="009-role-module-access" author="docflow">
-        <sql><![CDATA[
+        <sql splitStatements="false"><![CDATA[
 DECLARE
     v_count INTEGER;
 BEGIN
@@ -309,7 +309,7 @@ END;
     </changeSet>
 
     <changeSet id="010-user-role-map" author="docflow">
-        <sql><![CDATA[
+        <sql splitStatements="false"><![CDATA[
 DECLARE
     v_count INTEGER;
 BEGIN
