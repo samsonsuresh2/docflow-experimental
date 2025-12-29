@@ -234,7 +234,7 @@
     </changeSet>
 
     <changeSet id="008-create-report-templates-table" author="docflow">
-        <sql splitStatements="false"><![CDATA[
+        <sql splitStatements="false" endDelimiter="/"><![CDATA[
 DECLARE
     v_count INTEGER;
 BEGIN
@@ -250,11 +250,12 @@ BEGIN
             )';
     END IF;
 END;
+/
         ]]></sql>
     </changeSet>
 
     <changeSet id="009-role-module-access" author="docflow">
-        <sql splitStatements="false"><![CDATA[
+        <sql splitStatements="false" endDelimiter="/"><![CDATA[
 DECLARE
     v_count INTEGER;
 BEGIN
@@ -271,7 +272,7 @@ BEGIN
             )';
     END IF;
 END;
-
+/
 DECLARE
     PROCEDURE seed_access(p_role VARCHAR2, p_module VARCHAR2) IS
         v_exists INTEGER;
@@ -295,7 +296,7 @@ BEGIN
     seed_access('ADMIN', 'DATA_INGEST');
     seed_access('ADMIN', 'ADMIN');
 END;
-
+/
 DECLARE
     v_exists INTEGER;
 BEGIN
@@ -305,11 +306,12 @@ BEGIN
         VALUES (user_roles_seq.NEXTVAL, 'approver1', 'APPROVER', SYSTIMESTAMP);
     END IF;
 END;
+/
         ]]></sql>
     </changeSet>
 
     <changeSet id="010-user-role-map" author="docflow">
-        <sql splitStatements="false"><![CDATA[
+        <sql splitStatements="false" endDelimiter="/"><![CDATA[
 DECLARE
     v_count INTEGER;
 BEGIN
@@ -326,7 +328,7 @@ BEGIN
             )';
     END IF;
 END;
-
+/
 DECLARE
     PROCEDURE seed_role(p_user VARCHAR2, p_role VARCHAR2) IS
         v_exists INTEGER;
@@ -341,6 +343,7 @@ BEGIN
     seed_role('samson', 'APPROVER');
     seed_role('samson', 'REVIEWER');
 END;
+/
         ]]></sql>
     </changeSet>
 
