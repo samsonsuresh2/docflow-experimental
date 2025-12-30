@@ -1,9 +1,9 @@
 package com.docflow.security;
 
+import com.docflow.auth.AuthProperties;
+import com.docflow.auth.UserRoleService;
 import com.docflow.context.RequestUser;
 import com.docflow.context.RequestUserContext;
-import com.docflow.domain.UserRole;
-import com.docflow.domain.repository.UserRoleRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,6 +14,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -30,16 +31,19 @@ public class UserContextFilter extends OncePerRequestFilter {
     private static final String SESSION_ACTIVE_ROLE = "ACTIVE_ROLE";
 
     private final RequestUserContext requestUserContext;
-    private final UserRoleRepository userRoleRepository;
+    private final UserRoleService userRoleService;
+    private final AuthProperties authProperties;
     private final boolean devProfileActive;
 
     public UserContextFilter(
             RequestUserContext requestUserContext,
-            UserRoleRepository userRoleRepository,
+            UserRoleService userRoleService,
+            AuthProperties authProperties,
             Environment environment
     ) {
         this.requestUserContext = requestUserContext;
-        this.userRoleRepository = userRoleRepository;
+        this.userRoleService = userRoleService;
+        this.authProperties = authProperties;
         this.devProfileActive = Arrays.asList(environment.getActiveProfiles()).contains("dev");
     }
 
@@ -78,7 +82,7 @@ public class UserContextFilter extends OncePerRequestFilter {
                 );
                 return "dev-user";
             }
-            throw new IOException("Missing authentication");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing authentication");
         }
         return userId;
     }
@@ -91,18 +95,15 @@ public class UserContextFilter extends OncePerRequestFilter {
         return null;
     }
 
-    private Set<String> resolveRoles(String userId, String activeRole) throws IOException {
-        Set<String> roles = userRoleRepository.findByUserId(userId).stream()
-                .map(UserRole::getRoleName)
-                .collect(Collectors.toUnmodifiableSet());
-        if (activeRole != null) {
-            roles = new java.util.HashSet<>(roles);
+    private Set<String> resolveRoles(String userId, String activeRole) {
+        Set<String> roles = userRoleService.findRolesForUser(userId, authProperties.isImplicitMakerEnabled()).stream()
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+        if (activeRole != null && !activeRole.isBlank()) {
             roles.add(activeRole);
-            roles = Collections.unmodifiableSet(roles);
         }
         if (roles.isEmpty() && !devProfileActive) {
-            throw new IOException("User has no assigned roles");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User has no assigned roles");
         }
-        return roles;
+        return Collections.unmodifiableSet(roles);
     }
 }

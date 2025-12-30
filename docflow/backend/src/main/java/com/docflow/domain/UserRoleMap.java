@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 
-import java.io.Serializable;
 import java.time.OffsetDateTime;
 import java.util.Objects;
 
@@ -19,8 +18,8 @@ public class UserRoleMap {
     private String userId;
 
     @jakarta.persistence.Id
-    @Column(name = "role", nullable = false, length = 50)
-    private String role;
+    @Column(name = "role_name", nullable = false, length = 50)
+    private String roleName;
 
     @Column(name = "enabled")
     private String enabled;
@@ -39,12 +38,12 @@ public class UserRoleMap {
         this.userId = userId;
     }
 
-    public String getRole() {
-        return role;
+    public String getRoleName() {
+        return roleName;
     }
 
-    public void setRole(String role) {
-        this.role = role;
+    public void setRoleName(String roleName) {
+        this.roleName = roleName;
     }
 
     public String getEnabled() {
@@ -76,11 +75,11 @@ public class UserRoleMap {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         UserRoleMap that = (UserRoleMap) o;
-        return Objects.equals(userId, that.userId) && Objects.equals(role, that.role);
+        return Objects.equals(userId, that.userId) && Objects.equals(roleName, that.roleName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(userId, role);
+        return Objects.hash(userId, roleName);
     }
 }

@@ -10,6 +10,6 @@ import java.util.List;
 
 public interface UserRoleMapRepository extends JpaRepository<UserRoleMap, UserRoleMapKey> {
 
-    @Query("select r.role from UserRoleMap r where upper(r.userId) = upper(:userId) and r.enabled = 'Y'")
+    @Query("select r.roleName from UserRoleMap r where upper(r.userId) = upper(:userId) and r.enabled = 'Y'")
     List<String> findEnabledRoles(@Param("userId") String userId);
 }
