@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useUser } from '../lib/UserContext';
+import { useModules } from '../lib/ModuleContext';
 
 type RolesResponse = {
   userId: string;
@@ -11,6 +12,7 @@ type RolesResponse = {
 export default function RoleSelection() {
   const navigate = useNavigate();
   const { user, setUser } = useUser();
+  const { refresh: refreshModules } = useModules();
   const [roles, setRoles] = useState<string[]>([]);
   const [selectedRole, setSelectedRole] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
@@ -56,6 +58,7 @@ export default function RoleSelection() {
       } else {
         setUser({ userId: '', role: selectedRole as typeof selectedRole });
       }
+      await refreshModules();
       navigate('/');
     } catch {
       setError('Unable to set active role.');

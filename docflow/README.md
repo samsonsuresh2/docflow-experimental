@@ -9,3 +9,7 @@ DocFlow is a single-tenant document review and approval portal featuring a maker
 - `ops/` — Docker Compose setup for orchestrating the backend, frontend, and Oracle database locally.
 
 Refer to component-level READMEs for setup and usage details.
+
+## Authorization UX
+
+The UI now hides modules the active role cannot access. Module visibility is derived from the `allowedModules` list returned by `/api/auth/me`, while the backend continues to enforce authorization for every request.
