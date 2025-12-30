@@ -87,7 +87,8 @@ public class AuthController {
     public SessionContextResponse me(HttpServletRequest request) {
         String userId = currentUser(request);
         String activeRole = activeRole(request);
-        return new SessionContextResponse(userId, activeRole);
+        List<String> allowedModules = moduleAccessService.getAllowedModulesForCurrentUser();
+        return new SessionContextResponse(userId, activeRole, allowedModules);
     }
 
     private String currentUser(HttpServletRequest request) {
@@ -119,5 +120,5 @@ record ActiveRoleRequest(@NotBlank String role) {
 record ActiveRoleResponse(String activeRole) {
 }
 
-record SessionContextResponse(String userId, String activeRole) {
+record SessionContextResponse(String userId, String activeRole, List<String> allowedModules) {
 }

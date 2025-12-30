@@ -1,10 +1,10 @@
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { persistUser, UserProfile } from './user';
-import api from './api';
+import { clearSessionContextCache, getSessionContext } from './session';
 
 type UserContextValue = {
   user: UserProfile | null;
-  setUser: (user: UserProfile | null) => void;
+  setUser: (user: UserProfile | null, options?: { preserveSessionCache?: boolean }) => void;
 };
 
 const UserContext = createContext<UserContextValue | undefined>(undefined);
@@ -12,7 +12,12 @@ const UserContext = createContext<UserContextValue | undefined>(undefined);
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<UserProfile | null>(null);
 
-  const setUser = (next: UserProfile | null) => {
+  const setUser = (next: UserProfile | null, options?: { preserveSessionCache?: boolean }) => {
+    if (!options?.preserveSessionCache) {
+      if (!next || user?.userId !== next.userId || user?.role !== next.role) {
+        clearSessionContextCache();
+      }
+    }
     setUserState(next);
     persistUser(next);
   };
@@ -21,13 +26,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
     let active = true;
     const bootstrap = async () => {
       try {
-        const response = await api.get<{ userId: string; activeRole: string | null }>('/auth/me');
+        const session = await getSessionContext();
         if (!active) return;
-        if (response.data.userId) {
+        if (session.userId) {
           setUser({
-            userId: response.data.userId,
-            role: (response.data.activeRole ?? '') as UserProfile['role'],
-          });
+            userId: session.userId,
+            role: (session.activeRole ?? '') as UserProfile['role'],
+          }, { preserveSessionCache: true });
         }
       } catch {
         if (active) {

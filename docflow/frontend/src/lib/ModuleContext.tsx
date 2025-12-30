@@ -1,7 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { fetchAllowedModules } from './modules';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useUser } from './UserContext';
 import type { ModuleCode } from '../types/modules';
+import { clearSessionContextCache, getSessionContext } from './session';
 
 type ModuleContextValue = {
   allowedModules: ModuleCode[];
@@ -19,28 +19,25 @@ export function ModuleProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadModules = async () => {
-    if (!user || !user.role) {
+  const loadModules = useCallback(async (forceRefresh?: boolean) => {
+    if (!user) {
       setAllowedModules([]);
       setError(null);
+      clearSessionContextCache();
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const modules = await fetchAllowedModules();
-      setAllowedModules(
-        modules
-          .map((code) => code?.trim().toUpperCase() as ModuleCode)
-          .filter(Boolean),
-      );
+      const session = await getSessionContext({ forceRefresh });
+      setAllowedModules(session.allowedModules);
     } catch (err) {
       setAllowedModules([]);
       setError('Unable to load modules for this user.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     void loadModules();
@@ -51,10 +48,10 @@ export function ModuleProvider({ children }: { children: ReactNode }) {
       allowedModules,
       loading,
       error,
-      refresh: loadModules,
+      refresh: () => loadModules(true),
       hasModule: (code: ModuleCode) => allowedModules.includes(code),
     }),
-    [allowedModules, loading, error],
+    [allowedModules, loading, error, loadModules],
   );
 
   return <ModuleContext.Provider value={value}>{children}</ModuleContext.Provider>;
