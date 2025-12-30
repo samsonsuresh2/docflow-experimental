@@ -22,8 +22,8 @@ public class UserRoleMap {
     private String userId;
 
     @Id
-    @Column(name = "role", nullable = false, length = 50)
-    private String role;
+    @Column(name = "role_name", nullable = false, length = 50)
+    private String roleName;
 
     @Column(name = "enabled", nullable = false, length = 1)
     @JdbcTypeCode(Types.CHAR)
@@ -46,12 +46,12 @@ public class UserRoleMap {
         this.userId = userId;
     }
 
-    public String getRole() {
-        return role;
+    public String getRoleName() {
+        return roleName;
     }
 
-    public void setRole(String role) {
-        this.role = role;
+    public void setRoleName(String roleName) {
+        this.roleName = roleName;
     }
 
     public Boolean getEnabled() {
@@ -86,11 +86,11 @@ public class UserRoleMap {
         if (!(o instanceof UserRoleMap)) return false;
         UserRoleMap that = (UserRoleMap) o;
         return Objects.equals(userId, that.userId)
-            && Objects.equals(role, that.role);
+            && Objects.equals(roleName, that.roleName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(userId, role);
+        return Objects.hash(userId, roleName);
     }
 }
