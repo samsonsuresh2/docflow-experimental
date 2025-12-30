@@ -348,4 +348,94 @@ END;
         ]]></sql>
     </changeSet>
 
+    <changeSet id="011-create-roles-table" author="docflow">
+        <comment>Create role master table</comment>
+        <createTable tableName="roles">
+            <column name="role_name" type="VARCHAR2(50)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="description" type="VARCHAR2(255)"/>
+            <column name="enabled" type="CHAR(1)" defaultValue="Y">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP"/>
+        </createTable>
+        <insert tableName="roles">
+            <column name="role_name" value="ADMIN"/>
+            <column name="description" value="Administrator"/>
+        </insert>
+        <insert tableName="roles">
+            <column name="role_name" value="MAKER"/>
+            <column name="description" value="Maker"/>
+        </insert>
+        <insert tableName="roles">
+            <column name="role_name" value="CHECKER"/>
+            <column name="description" value="Checker"/>
+        </insert>
+        <insert tableName="roles">
+            <column name="role_name" value="REVIEWER"/>
+            <column name="description" value="Reviewer"/>
+        </insert>
+        <insert tableName="roles">
+            <column name="role_name" value="APPROVER"/>
+            <column name="description" value="Approver"/>
+        </insert>
+        <rollback>
+            <dropTable tableName="roles"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="012-standardize-user-role-map-column" author="docflow">
+        <comment>Rename ROLE to ROLE_NAME and enforce keys/index/foreign key</comment>
+        <dropPrimaryKey tableName="USER_ROLE_MAP" constraintName="PK_USER_ROLE_MAP"/>
+        <renameColumn tableName="USER_ROLE_MAP" oldColumnName="ROLE" newColumnName="ROLE_NAME" columnDataType="VARCHAR2(50)"/>
+        <addPrimaryKey tableName="USER_ROLE_MAP" columnNames="USER_ID, ROLE_NAME" constraintName="PK_USER_ROLE_MAP"/>
+        <createIndex tableName="USER_ROLE_MAP" indexName="IDX_USER_ROLE_MAP_USER_ID">
+            <column name="USER_ID"/>
+        </createIndex>
+        <addForeignKeyConstraint baseTableName="USER_ROLE_MAP"
+                                  baseColumnNames="ROLE_NAME"
+                                  constraintName="FK_USER_ROLE_MAP_ROLE_NAME"
+                                  referencedTableName="ROLES"
+                                  referencedColumnNames="ROLE_NAME"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="USER_ROLE_MAP" constraintName="FK_USER_ROLE_MAP_ROLE_NAME"/>
+            <dropIndex tableName="USER_ROLE_MAP" indexName="IDX_USER_ROLE_MAP_USER_ID"/>
+            <dropPrimaryKey tableName="USER_ROLE_MAP" constraintName="PK_USER_ROLE_MAP"/>
+            <renameColumn tableName="USER_ROLE_MAP" oldColumnName="ROLE_NAME" newColumnName="ROLE" columnDataType="VARCHAR2(50)"/>
+            <addPrimaryKey tableName="USER_ROLE_MAP" columnNames="USER_ID, ROLE" constraintName="PK_USER_ROLE_MAP"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="013-seed-user-role-map-dev-users" author="docflow">
+        <comment>Ensure dev users have roles via USER_ROLE_MAP</comment>
+        <sql splitStatements="false" endDelimiter="/"><![CDATA[
+DECLARE
+    PROCEDURE seed_role(p_user VARCHAR2, p_role VARCHAR2) IS
+        v_exists INTEGER;
+    BEGIN
+        SELECT COUNT(*) INTO v_exists FROM USER_ROLE_MAP WHERE USER_ID = p_user AND ROLE_NAME = p_role;
+        IF v_exists = 0 THEN
+            INSERT INTO USER_ROLE_MAP (USER_ID, ROLE_NAME, ENABLED) VALUES (p_user, p_role, 'Y');
+        END IF;
+    END;
+BEGIN
+    seed_role('samson', 'ADMIN');
+    seed_role('samson', 'APPROVER');
+    seed_role('samson', 'REVIEWER');
+    seed_role('samson', 'MAKER');
+    seed_role('dev-user', 'ADMIN');
+    seed_role('dev-user', 'APPROVER');
+    seed_role('dev-user', 'REVIEWER');
+    seed_role('dev-user', 'MAKER');
+END;
+/
+        ]]></sql>
+        <rollback>
+            <delete tableName="USER_ROLE_MAP">
+                <where>USER_ID IN ('samson','dev-user')</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>
