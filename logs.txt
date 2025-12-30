@@ -1,0 +1,149 @@
+2025-12-29 20:53:57.083 | 
+2025-12-29 20:53:57.084 |   .   ____          _            __ _ _
+2025-12-29 20:53:57.084 |  /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+2025-12-29 20:53:57.084 | ( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+2025-12-29 20:53:57.084 |  \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+2025-12-29 20:53:57.084 |   '  |____| .__|_| |_|_| |_\__, | / / / /
+2025-12-29 20:53:57.084 |  =========|_|==============|___/=/_/_/_/
+2025-12-29 20:53:57.092 |  :: Spring Boot ::                (v3.2.5)
+2025-12-29 20:53:57.092 | 
+2025-12-29 20:53:57.464 | 2025-12-29T15:23:57.445Z  INFO 1 --- [           main] com.docflow.DocflowApplication           : Starting DocflowApplication using Java 17.0.17 with PID 1 (/app/app.jar started by root in /app)
+2025-12-29 20:53:57.468 | 2025-12-29T15:23:57.466Z DEBUG 1 --- [           main] com.docflow.DocflowApplication           : Running with Spring Boot v3.2.5, Spring v6.1.6
+2025-12-29 20:53:57.474 | 2025-12-29T15:23:57.471Z  INFO 1 --- [           main] com.docflow.DocflowApplication           : No active profile set, falling back to 1 default profile: "default"
+2025-12-29 20:54:03.787 | 2025-12-29T15:24:03.786Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2025-12-29 20:54:04.191 | 2025-12-29T15:24:04.189Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 370 ms. Found 7 JPA repository interfaces.
+2025-12-29 20:54:07.693 | 2025-12-29T15:24:07.692Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2025-12-29 20:54:07.731 | 2025-12-29T15:24:07.730Z  INFO 1 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2025-12-29 20:54:07.732 | 2025-12-29T15:24:07.731Z  INFO 1 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.20]
+2025-12-29 20:54:07.889 | 2025-12-29T15:24:07.887Z  INFO 1 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2025-12-29 20:54:07.896 | 2025-12-29T15:24:07.894Z  INFO 1 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 10180 ms
+2025-12-29 20:54:10.234 | 2025-12-29T15:24:10.223Z  INFO 1 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2025-12-29 20:54:13.144 | 2025-12-29T15:24:13.143Z  INFO 1 --- [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection oracle.jdbc.driver.T4CConnection@62108cd3
+2025-12-29 20:54:13.152 | 2025-12-29T15:24:13.152Z  INFO 1 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2025-12-29 20:54:13.291 | 2025-12-29T15:24:13.290Z  INFO 1 --- [           main] liquibase.database                       : Could not set remarks reporting on OracleDatabase: com.zaxxer.hikari.pool.HikariProxyConnection.setRemarksReporting(boolean)
+2025-12-29 20:54:19.973 | 2025-12-29T15:24:19.972Z  INFO 1 --- [           main] liquibase.changelog                      : Reading from DOCFLOW_EXP.DATABASECHANGELOG
+2025-12-29 20:54:20.711 | 2025-12-29T15:24:20.710Z  INFO 1 --- [           main] liquibase.lockservice                    : Successfully acquired change log lock
+2025-12-29 20:54:20.722 | 2025-12-29T15:24:20.721Z  INFO 1 --- [           main] liquibase.command                        : Using deploymentId: 7021860720
+2025-12-29 20:54:20.733 | 2025-12-29T15:24:20.732Z  INFO 1 --- [           main] liquibase.changelog                      : Reading from DOCFLOW_EXP.DATABASECHANGELOG
+2025-12-29 20:54:20.802 | Running Changeset: db/changelog/db.changelog-master.xml::add-updated-at-user-role-map::docflow
+2025-12-29 20:54:21.341 | 2025-12-29T15:24:21.339Z  INFO 1 --- [           main] liquibase.changelog                      : Columns updated_at(TIMESTAMP WITH TIME ZONE) added to user_role_map
+2025-12-29 20:54:21.345 | 2025-12-29T15:24:21.343Z  INFO 1 --- [           main] liquibase.changelog                      : ChangeSet db/changelog/db.changelog-master.xml::add-updated-at-user-role-map::docflow ran successfully in 536ms
+2025-12-29 20:54:21.448 | 2025-12-29T15:24:21.446Z  INFO 1 --- [           main] liquibase.util                           : UPDATE SUMMARY
+2025-12-29 20:54:21.448 | 2025-12-29T15:24:21.447Z  INFO 1 --- [           main] liquibase.util                           : Run:                          1
+2025-12-29 20:54:21.450 | 2025-12-29T15:24:21.448Z  INFO 1 --- [           main] liquibase.util                           : Previously run:               9
+2025-12-29 20:54:21.454 | 2025-12-29T15:24:21.450Z  INFO 1 --- [           main] liquibase.util                           : Filtered out:                 0
+2025-12-29 20:54:21.455 | 2025-12-29T15:24:21.454Z  INFO 1 --- [           main] liquibase.util                           : -------------------------------
+2025-12-29 20:54:21.456 | 2025-12-29T15:24:21.455Z  INFO 1 --- [           main] liquibase.util                           : Total change sets:           10
+2025-12-29 20:54:21.457 | 2025-12-29T15:24:21.456Z  INFO 1 --- [           main] liquibase.util                           : Update summary generated
+2025-12-29 20:54:21.475 | 2025-12-29T15:24:21.473Z  INFO 1 --- [           main] liquibase.command                        : Update command completed successfully.
+2025-12-29 20:54:21.475 | Liquibase: Update has been successful. Rows affected: 1
+2025-12-29 20:54:21.509 | 2025-12-29T15:24:21.507Z  INFO 1 --- [           main] liquibase.lockservice                    : Successfully released change log lock
+2025-12-29 20:54:21.519 | 2025-12-29T15:24:21.517Z  INFO 1 --- [           main] liquibase.command                        : Command execution complete
+2025-12-29 20:54:22.229 | 2025-12-29T15:24:22.228Z  INFO 1 --- [           main] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+2025-12-29 20:54:22.490 | 2025-12-29T15:24:22.489Z  INFO 1 --- [           main] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.4.4.Final
+2025-12-29 20:54:22.646 | 2025-12-29T15:24:22.645Z  INFO 1 --- [           main] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+2025-12-29 20:54:23.897 | 2025-12-29T15:24:23.896Z  INFO 1 --- [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2025-12-29 20:54:24.308 | 2025-12-29T15:24:24.307Z  WARN 1 --- [           main] org.hibernate.orm.deprecation            : HHH90000025: OracleDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2025-12-29 20:54:25.923 | 2025-12-29T15:24:25.921Z DEBUG 1 --- [           main] com.docflow.logging.MethodLoggerAspect   : ▶️ Entering BooleanToYNConverter.convertToDatabaseColumn(..) with args: [false]
+2025-12-29 20:54:25.924 | 2025-12-29T15:24:25.923Z DEBUG 1 --- [           main] com.docflow.logging.MethodLoggerAspect   : ✅ Exiting BooleanToYNConverter.convertToDatabaseColumn(..) -> N (1 ms)
+2025-12-29 20:54:25.927 | 2025-12-29T15:24:25.925Z DEBUG 1 --- [           main] com.docflow.logging.MethodLoggerAspect   : ▶️ Entering BooleanToYNConverter.convertToDatabaseColumn(..) with args: [true]
+2025-12-29 20:54:25.930 | 2025-12-29T15:24:25.926Z DEBUG 1 --- [           main] com.docflow.logging.MethodLoggerAspect   : ✅ Exiting BooleanToYNConverter.convertToDatabaseColumn(..) -> Y (0 ms)
+2025-12-29 20:54:25.936 | 2025-12-29T15:24:25.935Z DEBUG 1 --- [           main] com.docflow.logging.MethodLoggerAspect   : ▶️ Entering BooleanToYNConverter.convertToDatabaseColumn(..) with args: [false]
+2025-12-29 20:54:25.938 | 2025-12-29T15:24:25.935Z DEBUG 1 --- [           main] com.docflow.logging.MethodLoggerAspect   : ✅ Exiting BooleanToYNConverter.convertToDatabaseColumn(..) -> N (0 ms)
+2025-12-29 20:54:25.939 | 2025-12-29T15:24:25.938Z DEBUG 1 --- [           main] com.docflow.logging.MethodLoggerAspect   : ▶️ Entering BooleanToYNConverter.convertToDatabaseColumn(..) with args: [true]
+2025-12-29 20:54:25.940 | 2025-12-29T15:24:25.939Z DEBUG 1 --- [           main] com.docflow.logging.MethodLoggerAspect   : ✅ Exiting BooleanToYNConverter.convertToDatabaseColumn(..) -> Y (0 ms)
+2025-12-29 20:54:29.336 | 2025-12-29T15:24:29.335Z  INFO 1 --- [           main] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2025-12-29 20:54:32.650 | 2025-12-29T15:24:32.649Z  INFO 1 --- [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2025-12-29 20:54:34.760 | 2025-12-29T15:24:34.758Z DEBUG 1 --- [           main] com.docflow.security.UserContextFilter   : Filter 'userContextFilter' configured for use
+2025-12-29 20:54:35.006 | 2025-12-29T15:24:35.005Z  INFO 1 --- [           main] o.s.d.j.r.query.QueryEnhancerFactory     : Hibernate is in classpath; If applicable, HQL parser will be used.
+2025-12-29 20:54:38.729 | 2025-12-29T15:24:38.728Z  WARN 1 --- [           main] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2025-12-29 20:54:39.020 | 2025-12-29T15:24:39.018Z DEBUG 1 --- [           main] com.docflow.logging.MethodLoggerAspect   : ▶️ Entering ModuleAccessWebConfig.addInterceptors(..) with args: [org.springframework.web.servlet.config.annotation.InterceptorRegistry@32850adc]
+2025-12-29 20:54:39.026 | 2025-12-29T15:24:39.024Z DEBUG 1 --- [           main] com.docflow.logging.MethodLoggerAspect   : ✅ Exiting ModuleAccessWebConfig.addInterceptors(..) -> null (5 ms)
+2025-12-29 20:54:41.366 | 2025-12-29T15:24:41.365Z  INFO 1 --- [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 3 endpoint(s) beneath base path '/actuator'
+2025-12-29 20:54:41.787 | 2025-12-29T15:24:41.785Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path ''
+2025-12-29 20:54:41.839 | 2025-12-29T15:24:41.838Z  INFO 1 --- [           main] com.docflow.DocflowApplication           : Started DocflowApplication in 47.011 seconds (process running for 51.049)
+2025-12-29 20:54:52.691 | 2025-12-29T15:24:52.690Z  INFO 1 --- [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2025-12-29 20:54:52.692 | 2025-12-29T15:24:52.691Z  INFO 1 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2025-12-29 20:54:52.705 | 2025-12-29T15:24:52.703Z  INFO 1 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 11 ms
+2025-12-29 20:54:52.793 | 2025-12-29T15:24:52.778Z ERROR 1 --- [nio-8080-exec-1] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] in context with path [] threw exception
+2025-12-29 20:54:52.793 | 
+2025-12-29 20:54:52.794 | java.io.IOException: Missing authentication
+2025-12-29 20:54:52.794 | 	at com.docflow.security.UserContextFilter.resolveUserId(UserContextFilter.java:81) ~[!/:na]
+2025-12-29 20:54:52.794 | 	at com.docflow.security.UserContextFilter.doFilterInternal(UserContextFilter.java:54) ~[!/:na]
+2025-12-29 20:54:52.794 | 	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:54:52.794 | 	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:54:52.794 | 	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.springframework.web.filter.ServerHttpObservationFilter.doFilterInternal(ServerHttpObservationFilter.java:109) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:54:52.794 | 	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:54:52.794 | 	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:167) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:90) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:482) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:115) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:93) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:344) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:391) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:896) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1736) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1191) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:63) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:54:52.794 | 	at java.base/java.lang.Thread.run(Unknown Source) ~[na:na]
+2025-12-29 20:54:52.794 | 
+2025-12-29 20:55:48.167 | 2025-12-29T15:25:48.162Z ERROR 1 --- [nio-8080-exec-2] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] in context with path [] threw exception
+2025-12-29 20:55:48.167 | 
+2025-12-29 20:55:48.167 | java.io.IOException: Missing authentication
+2025-12-29 20:55:48.167 | 	at com.docflow.security.UserContextFilter.resolveUserId(UserContextFilter.java:81) ~[!/:na]
+2025-12-29 20:55:48.167 | 	at com.docflow.security.UserContextFilter.doFilterInternal(UserContextFilter.java:54) ~[!/:na]
+2025-12-29 20:55:48.167 | 	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:55:48.167 | 	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:55:48.167 | 	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.springframework.web.filter.ServerHttpObservationFilter.doFilterInternal(ServerHttpObservationFilter.java:109) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:55:48.167 | 	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:55:48.167 | 	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.1.6.jar!/:6.1.6]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:175) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:150) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:167) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:90) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:482) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:115) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:93) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:344) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:391) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:896) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1736) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1191) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:63) ~[tomcat-embed-core-10.1.20.jar!/:na]
+2025-12-29 20:55:48.167 | 	at java.base/java.lang.Thread.run(Unknown Source) ~[na:na]
+2025-12-29 20:55:48.167 | 

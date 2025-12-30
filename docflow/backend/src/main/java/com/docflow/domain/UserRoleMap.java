@@ -1,11 +1,14 @@
 package com.docflow.domain;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
 
-import java.io.Serializable;
+import java.sql.Types;
 import java.time.OffsetDateTime;
 import java.util.Objects;
 
@@ -14,22 +17,26 @@ import java.util.Objects;
 @IdClass(UserRoleMapKey.class)
 public class UserRoleMap {
 
-    @jakarta.persistence.Id
+    @Id
     @Column(name = "user_id", nullable = false, length = 200)
     private String userId;
 
-    @jakarta.persistence.Id
+    @Id
     @Column(name = "role", nullable = false, length = 50)
     private String role;
 
-    @Column(name = "enabled")
-    private String enabled;
+    @Column(name = "enabled", nullable = false, length = 1)
+    @JdbcTypeCode(Types.CHAR)
+    @Convert(converter = BooleanToYNConverter.class)
+    private Boolean enabled;
 
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
 
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
+
+    /* ===================== getters / setters ===================== */
 
     public String getUserId() {
         return userId;
@@ -47,11 +54,11 @@ public class UserRoleMap {
         this.role = role;
     }
 
-    public String getEnabled() {
+    public Boolean getEnabled() {
         return enabled;
     }
 
-    public void setEnabled(String enabled) {
+    public void setEnabled(Boolean enabled) {
         this.enabled = enabled;
     }
 
@@ -71,12 +78,15 @@ public class UserRoleMap {
         this.updatedAt = updatedAt;
     }
 
+    /* ===================== equality ===================== */
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (!(o instanceof UserRoleMap)) return false;
         UserRoleMap that = (UserRoleMap) o;
-        return Objects.equals(userId, that.userId) && Objects.equals(role, that.role);
+        return Objects.equals(userId, that.userId)
+            && Objects.equals(role, that.role);
     }
 
     @Override

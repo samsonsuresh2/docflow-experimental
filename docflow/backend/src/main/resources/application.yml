@@ -18,7 +18,8 @@ spring:
   liquibase:
     enabled: true
     change-log: classpath:db/changelog/db.changelog-master.xml
-
+  profiles:
+    active: dev
 server:
   port: 8080
 

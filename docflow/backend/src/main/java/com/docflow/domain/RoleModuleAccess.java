@@ -1,10 +1,15 @@
 package com.docflow.domain;
 
+import com.docflow.domain.BooleanToYNConverter;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
-import java.io.Serializable;
+import org.hibernate.annotations.JdbcTypeCode;
+
+import java.sql.Types;
 import java.time.OffsetDateTime;
 import java.util.Objects;
 
@@ -13,22 +18,26 @@ import java.util.Objects;
 @IdClass(RoleModuleAccessKey.class)
 public class RoleModuleAccess {
 
-    @jakarta.persistence.Id
+    @Id
     @Column(name = "role", nullable = false, length = 50)
     private String role;
 
-    @jakarta.persistence.Id
+    @Id
     @Column(name = "module_code", nullable = false, length = 100)
     private String moduleCode;
 
-    @Column(name = "enabled")
-    private String enabled;
+    @Column(name = "enabled", nullable = false, length = 1)
+    @JdbcTypeCode(Types.CHAR)
+    @Convert(converter = BooleanToYNConverter.class)
+    private Boolean enabled;
 
     @Column(name = "created_at")
     private OffsetDateTime createdAt;
 
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
+
+    /* ===================== getters / setters ===================== */
 
     public String getRole() {
         return role;
@@ -46,11 +55,11 @@ public class RoleModuleAccess {
         this.moduleCode = moduleCode;
     }
 
-    public String getEnabled() {
+    public Boolean getEnabled() {
         return enabled;
     }
 
-    public void setEnabled(String enabled) {
+    public void setEnabled(Boolean enabled) {
         this.enabled = enabled;
     }
 
@@ -70,12 +79,15 @@ public class RoleModuleAccess {
         this.updatedAt = updatedAt;
     }
 
+    /* ===================== equality ===================== */
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (!(o instanceof RoleModuleAccess)) return false;
         RoleModuleAccess that = (RoleModuleAccess) o;
-        return Objects.equals(role, that.role) && Objects.equals(moduleCode, that.moduleCode);
+        return Objects.equals(role, that.role)
+            && Objects.equals(moduleCode, that.moduleCode);
     }
 
     @Override

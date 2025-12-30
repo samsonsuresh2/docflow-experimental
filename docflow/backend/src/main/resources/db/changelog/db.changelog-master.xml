@@ -2,7 +2,8 @@
 <databaseChangeLog
         xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.18.xsd">
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.18.xsd">
 
     <changeSet id="document-parent-table" author="docflow">
         <comment>Create document_parent table with sequence and trigger</comment>
@@ -84,31 +85,17 @@
     </changeSet>
 
     <changeSet id="audit-log-table" author="docflow">
-        <comment>Create audit_log table with sequence and trigger</comment>
-        <createSequence sequenceName="audit_log_seq" startValue="1"/>
+        <comment>Create audit_log table</comment>
         <createTable tableName="audit_log">
             <column name="id" type="NUMBER(19)">
                 <constraints primaryKey="true" nullable="false"/>
             </column>
-            <column name="document_id" type="NUMBER(19)">
-                <constraints nullable="false"/>
-            </column>
-            <column name="field_key" type="VARCHAR2(150)"/>
-            <column name="old_value" type="CLOB"/>
-            <column name="new_value" type="CLOB"/>
-            <column name="change_type" type="VARCHAR2(50)"/>
-            <column name="changed_by" type="VARCHAR2(100)">
-                <constraints nullable="false"/>
-            </column>
-            <column name="changed_at" type="TIMESTAMP(6)" defaultValueComputed="SYSTIMESTAMP">
-                <constraints nullable="false"/>
-            </column>
+            <column name="action" type="VARCHAR2(100)"/>
+            <column name="resource" type="VARCHAR2(200)"/>
+            <column name="details" type="CLOB"/>
+            <column name="created_at" type="TIMESTAMP(6)" defaultValueComputed="SYSTIMESTAMP"/>
         </createTable>
-        <addForeignKeyConstraint baseTableName="audit_log"
-                                 baseColumnNames="document_id"
-                                 referencedTableName="document_parent"
-                                 referencedColumnNames="id"
-                                 constraintName="fk_audit_log_parent"/>
+        <createSequence sequenceName="audit_log_seq" startValue="1"/>
         <sql>
             CREATE OR REPLACE TRIGGER audit_log_bir
             BEFORE INSERT ON audit_log
@@ -138,6 +125,8 @@
             <column name="config_value" type="CLOB">
                 <constraints nullable="false"/>
             </column>
+            <column name="created_by" type="VARCHAR2(100)"/>
+            <column name="created_at" type="TIMESTAMP(6)" defaultValueComputed="SYSTIMESTAMP"/>
             <column name="updated_by" type="VARCHAR2(100)"/>
             <column name="updated_at" type="TIMESTAMP(6)" defaultValueComputed="SYSTIMESTAMP"/>
         </createTable>
@@ -157,41 +146,21 @@
         </rollback>
     </changeSet>
 
-    <changeSet id="user-roles-table" author="docflow">
-        <comment>Create user_roles table with sequence and trigger</comment>
+    <changeSet id="seed-user-roles" author="docflow">
+        <comment>Seed sample user roles (admin1/maker1/reviewer1/checker1)</comment>
         <createSequence sequenceName="user_roles_seq" startValue="1"/>
         <createTable tableName="user_roles">
             <column name="id" type="NUMBER(19)">
                 <constraints primaryKey="true" nullable="false"/>
             </column>
-            <column name="user_id" type="VARCHAR2(100)">
+            <column name="user_id" type="VARCHAR2(200)">
                 <constraints nullable="false"/>
             </column>
             <column name="role_name" type="VARCHAR2(50)">
                 <constraints nullable="false"/>
             </column>
-            <column name="assigned_at" type="TIMESTAMP(6)" defaultValueComputed="SYSTIMESTAMP"/>
+            <column name="assigned_at" type="TIMESTAMP(6)"/>
         </createTable>
-        <addUniqueConstraint tableName="user_roles" columnNames="user_id, role_name" constraintName="uk_user_roles_user_role"/>
-        <sql>
-            CREATE OR REPLACE TRIGGER user_roles_bir
-            BEFORE INSERT ON user_roles
-            FOR EACH ROW
-            WHEN (NEW.id IS NULL)
-            BEGIN
-                SELECT user_roles_seq.NEXTVAL INTO :NEW.id FROM dual;
-            END;
-        </sql>
-        <rollback>
-            <sql>DROP TRIGGER user_roles_bir</sql>
-            <dropUniqueConstraint tableName="user_roles" constraintName="uk_user_roles_user_role"/>
-            <dropTable tableName="user_roles"/>
-            <dropSequence sequenceName="user_roles_seq"/>
-        </rollback>
-    </changeSet>
-
-    <changeSet id="seed-user-roles" author="docflow">
-        <comment>Seed default user roles</comment>
         <insert tableName="user_roles">
             <column name="id" valueComputed="user_roles_seq.NEXTVAL"/>
             <column name="user_id" value="admin1"/>
@@ -226,14 +195,14 @@
     <changeSet id="document-parent-add-file-path" author="docflow">
         <comment>Add file_path column to document_parent</comment>
         <addColumn tableName="document_parent">
-            <column name="FILE_PATH" type="VARCHAR2(500)"/>
+            <column name="file_path" type="VARCHAR2(500)"/>
         </addColumn>
-        <rollback>
-            <dropColumn tableName="document_parent" columnName="FILE_PATH"/>
-        </rollback>
     </changeSet>
 
+    <!-- ===== New changesets migrated from Flyway (inline PL/SQL) ===== -->
+
     <changeSet id="008-create-report-templates-table" author="docflow">
+        <!-- keep checksum for already-run variations if needed -->
         <validCheckSum>9:288869b7867191e9625ac49496df4c8b</validCheckSum>
         <sql splitStatements="false" endDelimiter="/"><![CDATA[
 DECLARE
@@ -256,67 +225,110 @@ END;
     </changeSet>
 
     <changeSet id="009-role-module-access" author="docflow">
-        <sql splitStatements="false" endDelimiter="/"><![CDATA[
-DECLARE
-    v_count INTEGER;
-BEGIN
-    SELECT COUNT(*) INTO v_count FROM ALL_TABLES WHERE TABLE_NAME = 'ROLE_MODULE_ACCESS';
-    IF v_count = 0 THEN
-        EXECUTE IMMEDIATE '
-            CREATE TABLE ROLE_MODULE_ACCESS (
-                ROLE        VARCHAR2(50)   NOT NULL,
-                MODULE_CODE VARCHAR2(100)  NOT NULL,
-                ENABLED     CHAR(1)        DEFAULT ''Y'',
-                CREATED_AT  TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
-                UPDATED_AT  TIMESTAMP,
-                CONSTRAINT PK_ROLE_MODULE_ACCESS PRIMARY KEY (ROLE, MODULE_CODE)
-            )';
-    END IF;
-END;
-/
-DECLARE
-    PROCEDURE seed_access(p_role VARCHAR2, p_module VARCHAR2) IS
-        v_exists INTEGER;
+    <!-- Create table if missing (single anonymous block, no "/" needed) -->
+    <sql splitStatements="false"><![CDATA[
+    DECLARE
+        v_count INTEGER;
     BEGIN
-        SELECT COUNT(*) INTO v_exists FROM ROLE_MODULE_ACCESS WHERE ROLE = p_role AND MODULE_CODE = p_module;
-        IF v_exists = 0 THEN
-            INSERT INTO ROLE_MODULE_ACCESS (ROLE, MODULE_CODE, ENABLED) VALUES (p_role, p_module, 'Y');
+        SELECT COUNT(*) INTO v_count FROM ALL_TABLES WHERE TABLE_NAME = 'ROLE_MODULE_ACCESS';
+        IF v_count = 0 THEN
+            EXECUTE IMMEDIATE '
+                CREATE TABLE ROLE_MODULE_ACCESS (
+                    ROLE        VARCHAR2(50)   NOT NULL,
+                    MODULE_CODE VARCHAR2(100)  NOT NULL,
+                    ENABLED     CHAR(1)        DEFAULT ''Y'',
+                    CREATED_AT  TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+                    UPDATED_AT  TIMESTAMP,
+                    CONSTRAINT PK_ROLE_MODULE_ACCESS PRIMARY KEY (ROLE, MODULE_CODE)
+                )';
         END IF;
     END;
-BEGIN
-    seed_access('MAKER', 'UPLOAD');
-    seed_access('MAKER', 'REPORTS');
-    seed_access('REVIEWER', 'UPLOAD');
-    seed_access('REVIEWER', 'REVIEW');
-    seed_access('APPROVER', 'REVIEW');
-    seed_access('APPROVER', 'AUDIT');
-    seed_access('ADMIN', 'UPLOAD');
-    seed_access('ADMIN', 'REPORT_CONFIG');
-    seed_access('ADMIN', 'AUDIT');
-    seed_access('ADMIN', 'REPORTS');
-    seed_access('ADMIN', 'DATA_INGEST');
-    seed_access('ADMIN', 'ADMIN');
-END;
-/
-DECLARE
-    v_exists INTEGER;
-BEGIN
-    SELECT COUNT(*) INTO v_exists FROM USER_ROLES WHERE USER_ID = 'approver1' AND ROLE_NAME = 'APPROVER';
-    IF v_exists = 0 THEN
-        INSERT INTO USER_ROLES (id, user_id, role_name, assigned_at)
-        VALUES (user_roles_seq.NEXTVAL, 'approver1', 'APPROVER', SYSTIMESTAMP);
-    END IF;
-END;
-/
-        ]]></sql>
-    </changeSet>
+    ]]></sql>
 
-    <changeSet id="010-user-role-map" author="docflow">
-        <sql splitStatements="false" endDelimiter="/"><![CDATA[
+    <!-- Seed access via pure SQL MERGE (idempotent) -->
+    <sql><![CDATA[
+    MERGE INTO ROLE_MODULE_ACCESS t
+    USING (SELECT 'MAKER' role, 'UPLOAD' module_code FROM dual) s
+    ON (t.role = s.role AND t.module_code = s.module_code)
+    WHEN NOT MATCHED THEN INSERT (role, module_code, enabled) VALUES (s.role, s.module_code, 'Y');
+
+    MERGE INTO ROLE_MODULE_ACCESS t
+    USING (SELECT 'MAKER' role, 'REPORTS' module_code FROM dual) s
+    ON (t.role = s.role AND t.module_code = s.module_code)
+    WHEN NOT MATCHED THEN INSERT (role, module_code, enabled) VALUES (s.role, s.module_code, 'Y');
+
+    MERGE INTO ROLE_MODULE_ACCESS t
+    USING (SELECT 'REVIEWER' role, 'UPLOAD' module_code FROM dual) s
+    ON (t.role = s.role AND t.module_code = s.module_code)
+    WHEN NOT MATCHED THEN INSERT (role, module_code, enabled) VALUES (s.role, s.module_code, 'Y');
+
+    MERGE INTO ROLE_MODULE_ACCESS t
+    USING (SELECT 'REVIEWER' role, 'REVIEW' module_code FROM dual) s
+    ON (t.role = s.role AND t.module_code = s.module_code)
+    WHEN NOT MATCHED THEN INSERT (role, module_code, enabled) VALUES (s.role, s.module_code, 'Y');
+
+    MERGE INTO ROLE_MODULE_ACCESS t
+    USING (SELECT 'APPROVER' role, 'REVIEW' module_code FROM dual) s
+    ON (t.role = s.role AND t.module_code = s.module_code)
+    WHEN NOT MATCHED THEN INSERT (role, module_code, enabled) VALUES (s.role, s.module_code, 'Y');
+
+    MERGE INTO ROLE_MODULE_ACCESS t
+    USING (SELECT 'APPROVER' role, 'AUDIT' module_code FROM dual) s
+    ON (t.role = s.role AND t.module_code = s.module_code)
+    WHEN NOT MATCHED THEN INSERT (role, module_code, enabled) VALUES (s.role, s.module_code, 'Y');
+
+    MERGE INTO ROLE_MODULE_ACCESS t
+    USING (SELECT 'ADMIN' role, 'UPLOAD' module_code FROM dual) s
+    ON (t.role = s.role AND t.module_code = s.module_code)
+    WHEN NOT MATCHED THEN INSERT (role, module_code, enabled) VALUES (s.role, s.module_code, 'Y');
+
+    MERGE INTO ROLE_MODULE_ACCESS t
+    USING (SELECT 'ADMIN' role, 'REPORT_CONFIG' module_code FROM dual) s
+    ON (t.role = s.role AND t.module_code = s.module_code)
+    WHEN NOT MATCHED THEN INSERT (role, module_code, enabled) VALUES (s.role, s.module_code, 'Y');
+
+    MERGE INTO ROLE_MODULE_ACCESS t
+    USING (SELECT 'ADMIN' role, 'AUDIT' module_code FROM dual) s
+    ON (t.role = s.role AND t.module_code = s.module_code)
+    WHEN NOT MATCHED THEN INSERT (role, module_code, enabled) VALUES (s.role, s.module_code, 'Y');
+
+    MERGE INTO ROLE_MODULE_ACCESS t
+    USING (SELECT 'ADMIN' role, 'REPORTS' module_code FROM dual) s
+    ON (t.role = s.role AND t.module_code = s.module_code)
+    WHEN NOT MATCHED THEN INSERT (role, module_code, enabled) VALUES (s.role, s.module_code, 'Y');
+
+    MERGE INTO ROLE_MODULE_ACCESS t
+    USING (SELECT 'ADMIN' role, 'DATA_INGEST' module_code FROM dual) s
+    ON (t.role = s.role AND t.module_code = s.module_code)
+    WHEN NOT MATCHED THEN INSERT (role, module_code, enabled) VALUES (s.role, s.module_code, 'Y');
+
+    MERGE INTO ROLE_MODULE_ACCESS t
+    USING (SELECT 'ADMIN' role, 'ADMIN' module_code FROM dual) s
+    ON (t.role = s.role AND t.module_code = s.module_code)
+    WHEN NOT MATCHED THEN INSERT (role, module_code, enabled) VALUES (s.role, s.module_code, 'Y');
+    ]]></sql>
+
+    <!-- Also ensure approver1 exists in USER_ROLES -->
+    <sql><![CDATA[
+    MERGE INTO USER_ROLES t
+    USING (SELECT 'approver1' user_id, 'APPROVER' role_name FROM dual) s
+    ON (t.user_id = s.user_id AND t.role_name = s.role_name)
+    WHEN NOT MATCHED THEN INSERT (id, user_id, role_name, assigned_at)
+    VALUES (user_roles_seq.NEXTVAL, s.user_id, s.role_name, SYSTIMESTAMP);
+    ]]></sql>
+</changeSet>
+
+   <changeSet id="010-user-role-map" author="docflow">
+
+    <!-- Create table if not exists (single PL/SQL block) -->
+    <sql splitStatements="false"><![CDATA[
 DECLARE
     v_count INTEGER;
 BEGIN
-    SELECT COUNT(*) INTO v_count FROM ALL_TABLES WHERE TABLE_NAME = 'USER_ROLE_MAP';
+    SELECT COUNT(*) INTO v_count
+    FROM ALL_TABLES
+    WHERE TABLE_NAME = 'USER_ROLE_MAP';
+
     IF v_count = 0 THEN
         EXECUTE IMMEDIATE '
             CREATE TABLE USER_ROLE_MAP (
@@ -324,28 +336,42 @@ BEGIN
                 ROLE       VARCHAR2(50)  NOT NULL,
                 ENABLED    CHAR(1)       DEFAULT ''Y'',
                 CREATED_AT TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
-                UPDATED_AT TIMESTAMP,
                 CONSTRAINT PK_USER_ROLE_MAP PRIMARY KEY (USER_ID, ROLE)
             )';
     END IF;
 END;
-/
-DECLARE
-    PROCEDURE seed_role(p_user VARCHAR2, p_role VARCHAR2) IS
-        v_exists INTEGER;
-    BEGIN
-        SELECT COUNT(*) INTO v_exists FROM USER_ROLE_MAP WHERE USER_ID = p_user AND ROLE = p_role;
-        IF v_exists = 0 THEN
-            INSERT INTO USER_ROLE_MAP (USER_ID, ROLE, ENABLED) VALUES (p_user, p_role, 'Y');
-        END IF;
-    END;
-BEGIN
-    seed_role('samson', 'ADMIN');
-    seed_role('samson', 'APPROVER');
-    seed_role('samson', 'REVIEWER');
-END;
-/
-        ]]></sql>
-    </changeSet>
+]]></sql>
 
+    <!-- Seed roles (idempotent) -->
+    <sql><![CDATA[
+MERGE INTO USER_ROLE_MAP t
+USING (SELECT 'samson' AS user_id, 'ADMIN' AS role FROM dual) s
+ON (t.user_id = s.user_id AND t.role = s.role)
+WHEN NOT MATCHED THEN
+  INSERT (user_id, role, enabled) VALUES (s.user_id, s.role, 'Y');
+]]></sql>
+
+    <sql><![CDATA[
+MERGE INTO USER_ROLE_MAP t
+USING (SELECT 'samson' AS user_id, 'APPROVER' AS role FROM dual) s
+ON (t.user_id = s.user_id AND t.role = s.role)
+WHEN NOT MATCHED THEN
+  INSERT (user_id, role, enabled) VALUES (s.user_id, s.role, 'Y');
+]]></sql>
+
+    <sql><![CDATA[
+MERGE INTO USER_ROLE_MAP t
+USING (SELECT 'samson' AS user_id, 'REVIEWER' AS role FROM dual) s
+ON (t.user_id = s.user_id AND t.role = s.role)
+WHEN NOT MATCHED THEN
+  INSERT (user_id, role, enabled) VALUES (s.user_id, s.role, 'Y');
+]]></sql>
+
+</changeSet>
+
+<changeSet id="add-updated-at-user-role-map" author="docflow">
+    <addColumn tableName="user_role_map">
+        <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"/>
+    </addColumn>
+</changeSet>
 </databaseChangeLog>
