@@ -5,7 +5,6 @@ import com.docflow.context.RequestUserContext;
 import com.docflow.domain.DocumentParent;
 import com.docflow.domain.DocumentStatus;
 import com.docflow.domain.repository.DocumentRepository;
-import com.docflow.service.search.DocumentSearchFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,6 +49,9 @@ class DefaultDocumentServiceTest {
     private RequestUserContext requestUserContext;
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
+
+    @Mock
+    private WorkflowPermissionService workflowPermissionService;
 
     @InjectMocks
     private DefaultDocumentService service;
@@ -117,8 +119,9 @@ class DefaultDocumentServiceTest {
         when(configService.getUploadFieldsConfig()).thenReturn("[{\"name\":\"field1\",\"requiredAtStatuses\":[\"APPROVED\"]}]");
         when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
         when(requestUserContext.getCurrentUser()).thenReturn(Optional.of(new RequestUser("approver", Set.of("APPROVER"), "APPROVER")));
+        doNothing().when(workflowPermissionService).assertAllowed(eq("APPROVER"), eq(DocumentStatus.DRAFT), eq(WorkflowActionCodes.APPROVE));
 
-        assertThatThrownBy(() -> service.updateStatus(1L, DocumentStatus.APPROVED, new RequestUser("approver", Set.of("APPROVER"), "APPROVER"), "APPROVE", null))
+        assertThatThrownBy(() -> service.updateStatus(1L, DocumentStatus.APPROVED, new RequestUser("approver", Set.of("APPROVER"), "APPROVER"), WorkflowActionCodes.APPROVE, null))
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("Missing required fields");
     }
@@ -147,5 +150,24 @@ class DefaultDocumentServiceTest {
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("Fields not editable");
         verify(metadataService, never()).persistMetadata(any(), any(), any());
+    }
+
+    @Test
+    void updateStatusRejectsForbiddenAction() {
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
+        when(configService.getUploadFieldsConfig()).thenReturn("[]");
+        doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Forbidden"))
+            .when(workflowPermissionService)
+            .assertAllowed(eq("MAKER"), eq(DocumentStatus.DRAFT), eq(WorkflowActionCodes.APPROVE));
+
+        assertThatThrownBy(() -> service.updateStatus(
+            1L,
+            DocumentStatus.APPROVED,
+            new RequestUser("maker1", Set.of("MAKER"), "MAKER"),
+            WorkflowActionCodes.APPROVE,
+            null
+        ))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("cannot perform action APPROVE");
     }
 }

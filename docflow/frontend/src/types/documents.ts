@@ -9,6 +9,7 @@ export interface DocumentResponse {
   updatedBy: string | null;
   metadata: Record<string, unknown> | null;
   filePath: string | null;
+  allowedActions?: string[];
   createdAt?: string;
   updatedAt?: string | null;
 }
@@ -22,6 +23,7 @@ export interface DocumentSummary {
   createdAt?: string;
   updatedBy: string | null;
   updatedAt: string | null;
+  allowedActions?: string[];
 }
 
 export interface PageResponse<T> {

@@ -13,15 +13,15 @@ import {
 import { buildFieldAccessMap } from '../lib/fieldAccess';
 import { buildMetadataPayload } from '../lib/metadataPayload';
 import { useUser } from '../lib/UserContext';
-import { DocumentStatus, normalizeStatus } from '../lib/documentStatus';
-import type { UserRole } from '../lib/user';
+import { normalizeStatus } from '../lib/documentStatus';
+import { mapAllowedActions, type WorkflowActionKey } from '../lib/workflowActions';
 import type { DocumentResponse, DocumentSummary, PageResponse } from '../types/documents';
 
 interface ConfigResponse {
   configJson: string | null;
 }
 
-type WorkflowAction = 'submit' | 'startReview' | 'approve' | 'reject' | 'rework' | 'close';
+type WorkflowAction = WorkflowActionKey;
 
 type StatusFilter =
   | 'ALL'
@@ -407,7 +407,7 @@ export default function Review() {
     }
   };
 
-  const availableActions = determineActions(user.role, normalizedStatus);
+  const availableActions = useMemo(() => mapAllowedActions(document?.allowedActions), [document?.allowedActions]);
   const canPreview = Boolean(document?.filePath);
 
   const handleWorkflowAction = async (action: WorkflowAction) => {
@@ -446,7 +446,12 @@ export default function Review() {
       await loadDocument(document.id);
       await fetchDocuments();
     } catch (error) {
-      setErrorMessage('Workflow action failed.');
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      if (status === 403) {
+        setErrorMessage('You are not allowed to perform that workflow action.');
+      } else {
+        setErrorMessage('Workflow action failed.');
+      }
     } finally {
       setBusy(false);
     }
@@ -874,70 +879,6 @@ export default function Review() {
   );
 }
 
-function determineActions(role: UserRole, status: DocumentStatus | null): { key: WorkflowAction; label: string }[] {
-  if (!status) {
-    return [];
-  }
-  if (role === 'ADMIN') {
-    return buildFullActionList(status);
-  }
-
-  switch (role) {
-    case 'MAKER':
-      if (status === 'DRAFT') {
-        return [{ key: 'submit', label: 'Submit for Review' }];
-      }
-      if (status === 'REWORK') {
-        return [{ key: 'submit', label: 'Resubmit for Review' }];
-      }
-      return [];
-    case 'REVIEWER':
-    case 'CHECKER':
-      return determineReviewerCheckerActions(status);
-    default:
-      return [];
-  }
-}
-
-function determineReviewerCheckerActions(status: DocumentStatus): { key: WorkflowAction; label: string }[] {
-  switch (status) {
-    case 'SUBMITTED':
-      return [{ key: 'startReview', label: 'Start Review' }];
-    case 'UNDER_REVIEW':
-      return [
-        { key: 'approve', label: 'Approve' },
-        { key: 'rework', label: 'Rework' },
-        { key: 'reject', label: 'Reject' },
-      ];
-    case 'APPROVED':
-    case 'REJECTED':
-      return [{ key: 'close', label: 'Close Document' }];
-    default:
-      return [];
-  }
-}
-
-function buildFullActionList(status: DocumentStatus): { key: WorkflowAction; label: string }[] {
-  switch (status) {
-    case 'DRAFT':
-      return [{ key: 'submit', label: 'Submit for Review' }];
-    case 'REWORK':
-      return [{ key: 'submit', label: 'Resubmit for Review' }];
-    case 'SUBMITTED':
-      return [{ key: 'startReview', label: 'Start Review' }];
-    case 'UNDER_REVIEW':
-      return [
-        { key: 'approve', label: 'Approve' },
-        { key: 'rework', label: 'Rework' },
-        { key: 'reject', label: 'Reject' },
-      ];
-    case 'APPROVED':
-    case 'REJECTED':
-      return [{ key: 'close', label: 'Close Document' }];
-    default:
-      return [];
-  }
-}
 
 function formatTimestamp(value: string | null | undefined): string {
   if (!value) {

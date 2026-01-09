@@ -5,6 +5,7 @@ import { parseUploadFieldConfig, UploadFieldDefinition } from '../lib/config';
 import { DynamicFormValues } from '../lib/dynamicFormValues';
 import { buildFieldAccessMap } from '../lib/fieldAccess';
 import { buildMetadataPayload } from '../lib/metadataPayload';
+import { hasAllowedAction } from '../lib/workflowActions';
 import { useUser } from '../lib/UserContext';
 import type { DocumentResponse } from '../types/documents';
 
@@ -105,12 +106,21 @@ export default function Upload() {
 
       if (intent === 'submit') {
         try {
+          if (!hasAllowedAction(response.data.allowedActions, 'SUBMIT')) {
+            setErrorMessage('You are not allowed to submit this document.');
+            return;
+          }
           await api.put(`/documents/${response.data.id}/submit`);
           setStatusMessage(
             `Document submitted and moved to Open status. Document ID: ${documentIdentifier}.`,
           );
         } catch (error) {
-          setErrorMessage('Document saved as draft, but submission failed. Please submit from the Review page.');
+          const status = (error as { response?: { status?: number } })?.response?.status;
+          if (status === 403) {
+            setErrorMessage('You are not allowed to submit this document.');
+          } else {
+            setErrorMessage('Document saved as draft, but submission failed. Please submit from the Review page.');
+          }
           return;
         }
       } else {
