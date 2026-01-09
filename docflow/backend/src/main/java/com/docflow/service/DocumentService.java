@@ -52,6 +52,9 @@ public interface DocumentService {
     List<AuditLog> getAuditTrailByDocumentNumber(String documentNumber);
 
     @Transactional(readOnly = true)
+    List<AuditLog> getLifecycleTimeline(Long id);
+
+    @Transactional(readOnly = true)
     DocumentFile getDocumentFile(Long id);
 
     @Transactional

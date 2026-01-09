@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import DocumentPreviewModal, { PreviewContent } from '../components/DocumentPreviewModal';
 import DynamicForm from '../components/DynamicForm';
 import StatusBadge from '../components/StatusBadge';
@@ -22,6 +23,29 @@ interface ConfigResponse {
 }
 
 type WorkflowAction = WorkflowActionKey;
+
+type TimelineEntry = {
+  eventLabel: string;
+  eventCode: string;
+  actorName: string;
+  actorId: string;
+  time: string;
+  comment?: string | null;
+  fromStatus?: string | null;
+  toStatus?: string | null;
+};
+
+type RelatedEntityColumn = {
+  key: string;
+  label: string;
+};
+
+type RelatedEntityResponse = {
+  entityName: string;
+  label: string;
+  columns: RelatedEntityColumn[];
+  rows: Record<string, unknown>[];
+};
 
 type StatusFilter =
   | 'ALL'
@@ -77,6 +101,17 @@ export default function Review() {
   const [previewContent, setPreviewContent] = useState<PreviewContent | null>(null);
   const [previewDownloadUrl, setPreviewDownloadUrl] = useState<string | null>(null);
   const [previewFileName, setPreviewFileName] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
+  const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
+  const [relatedEntityOpen, setRelatedEntityOpen] = useState(false);
+  const [relatedEntityLoading, setRelatedEntityLoading] = useState(false);
+  const [relatedEntityError, setRelatedEntityError] = useState<string | null>(null);
+  const [relatedEntityLabel, setRelatedEntityLabel] = useState<string | null>(null);
+  const [relatedEntityColumns, setRelatedEntityColumns] = useState<RelatedEntityColumn[]>([]);
+  const [relatedEntityRows, setRelatedEntityRows] = useState<Record<string, unknown>[]>([]);
   const documentDetailsRef = useRef<HTMLDivElement | null>(null);
 
   const normalizedStatus = normalizeStatus(document?.status ?? null);
@@ -199,6 +234,18 @@ export default function Review() {
     }
   }, [document]);
 
+  useEffect(() => {
+    setTimelineOpen(false);
+    setTimelineEntries([]);
+    setTimelineError(null);
+    setDetailsOpen(false);
+    setRelatedEntityOpen(false);
+    setRelatedEntityColumns([]);
+    setRelatedEntityRows([]);
+    setRelatedEntityError(null);
+    setRelatedEntityLabel(null);
+  }, [document?.id]);
+
   if (!user) {
     return <AuthRequired />;
   }
@@ -316,6 +363,13 @@ export default function Review() {
   const handleRowClick = useCallback(
     (summary: DocumentSummary) => {
       setSelectedDocumentId(summary.id);
+      setDetailsOpen(false);
+      setTimelineOpen(false);
+      setRelatedEntityOpen(false);
+      setTimelineEntries([]);
+      setRelatedEntityColumns([]);
+      setRelatedEntityRows([]);
+      setRelatedEntityLabel(null);
       setStatusMessage(null);
       setErrorMessage(null);
       void loadDocument(summary.id);
@@ -527,6 +581,58 @@ export default function Review() {
       setPreviewLoading(false);
     }
   };
+
+  const fetchTimeline = useCallback(async () => {
+    if (!document) {
+      return;
+    }
+    setTimelineLoading(true);
+    setTimelineError(null);
+    try {
+      const response = await api.get<TimelineEntry[]>(`/documents/${document.id}/timeline`);
+      setTimelineEntries(response.data);
+    } catch (error) {
+      setTimelineEntries([]);
+      setTimelineError('Unable to load timeline events.');
+    } finally {
+      setTimelineLoading(false);
+    }
+  }, [document]);
+
+  useEffect(() => {
+    if (timelineOpen) {
+      void fetchTimeline();
+    }
+  }, [timelineOpen, fetchTimeline]);
+
+  const fetchRelatedEntity = useCallback(async () => {
+    if (!document) {
+      return;
+    }
+    setRelatedEntityLoading(true);
+    setRelatedEntityError(null);
+    try {
+      const response = await api.get<RelatedEntityResponse>(
+        `/documents/${document.id}/related-entities/LOAN_DATA`,
+      );
+      setRelatedEntityLabel(response.data.label);
+      setRelatedEntityColumns(response.data.columns ?? []);
+      setRelatedEntityRows(response.data.rows ?? []);
+    } catch (error) {
+      setRelatedEntityLabel(null);
+      setRelatedEntityColumns([]);
+      setRelatedEntityRows([]);
+      setRelatedEntityError('Unable to load related records.');
+    } finally {
+      setRelatedEntityLoading(false);
+    }
+  }, [document]);
+
+  useEffect(() => {
+    if (relatedEntityOpen) {
+      void fetchRelatedEntity();
+    }
+  }, [relatedEntityOpen, fetchRelatedEntity]);
 
   const handleClosePreview = () => {
     setPreviewOpen(false);
@@ -777,95 +883,252 @@ export default function Review() {
       {document ? (
         <div ref={documentDetailsRef} className="space-y-6">
           <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{document.title}</h2>
-                <p className="text-sm text-slate-600 dark:text-slate-300">Document #{document.documentNumber}</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-slate-300 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                  onClick={() => setDetailsOpen((current) => !current)}
+                  aria-expanded={detailsOpen}
+                  aria-label="Toggle document details"
+                >
+                  {detailsOpen ? '−' : '+'}
+                </button>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Document Details</h3>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                    {document ? 1 : 0}
+                  </span>
+                </div>
               </div>
-              <StatusBadge status={document.status} />
             </div>
-            <dl className="mt-4 grid gap-4 md:grid-cols-2">
-              <div>
-                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Created By</dt>
-                <dd className="text-sm text-slate-700 dark:text-slate-200">{document.createdBy}</dd>
+            {detailsOpen ? (
+              <div className="mt-4 space-y-6">
+                <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{document.title}</h2>
+                      <p className="text-sm text-slate-600 dark:text-slate-300">Document #{document.documentNumber}</p>
+                    </div>
+                    <StatusBadge status={document.status} />
+                  </div>
+                  <dl className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div>
+                      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Created By</dt>
+                      <dd className="text-sm text-slate-700 dark:text-slate-200">{document.createdBy}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Last Updated By</dt>
+                      <dd className="text-sm text-slate-700 dark:text-slate-200">{document.updatedBy ?? '—'}</dd>
+                    </div>
+                  </dl>
+                </div>
+
+                <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Metadata</h3>
+                    {canEdit ? (
+                      <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Editable</span>
+                    ) : (
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Read only</span>
+                    )}
+                  </div>
+                  {configLoading && visibleFields.length === 0 ? (
+                    <p className="mt-4 text-sm text-slate-500 dark:text-slate-300">Loading field configuration…</p>
+                  ) : visibleFields.length === 0 ? (
+                    <p className="mt-4 text-sm text-slate-500 dark:text-slate-300">No metadata fields configured for this role.</p>
+                  ) : (
+                    <DynamicForm
+                      fields={visibleFields}
+                      initialValues={metadataValues}
+                      onChange={handleMetadataChange}
+                      onSubmit={canEdit ? handleMetadataUpdate : undefined}
+                      submitLabel={canEdit ? 'Save Metadata' : null}
+                      disabled={busy || !canEdit}
+                      accessMap={accessMap}
+                    />
+                  )}
+                </div>
+                {canPreview || availableActions.length > 0 ? (
+                  <div className="space-y-4 rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Workflow Actions</h3>
+                      <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                        Preview the uploaded file or trigger the next state transition permitted for your role.
+                      </p>
+                    </div>
+                    {availableActions.length > 0 ? (
+                      <label className="block text-sm">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Comment (optional)</span>
+                        <textarea
+                          className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                          rows={3}
+                          value={actionComment}
+                          onChange={(event) => setActionComment(event.target.value)}
+                        />
+                      </label>
+                    ) : null}
+                    <div className="flex flex-wrap gap-2">
+                      {canPreview ? (
+                        <button
+                          type="button"
+                          className="inline-flex items-center rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
+                          onClick={handlePreview}
+                        >
+                          Preview
+                        </button>
+                      ) : null}
+                      {availableActions.map((action) => (
+                        <button
+                          key={action.key}
+                          type="button"
+                          className="inline-flex items-center rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 dark:disabled:bg-slate-700 dark:disabled:text-slate-300"
+                          onClick={() => handleWorkflowAction(action.key)}
+                          disabled={busy}
+                        >
+                          {busy ? 'Processing…' : action.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
-              <div>
-                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Last Updated By</dt>
-                <dd className="text-sm text-slate-700 dark:text-slate-200">{document.updatedBy ?? '—'}</dd>
-              </div>
-            </dl>
+            ) : null}
           </div>
 
           <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Metadata</h3>
-              {canEdit ? (
-                <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Editable</span>
-              ) : (
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Read only</span>
-              )}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-slate-300 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                  onClick={() => setTimelineOpen((current) => !current)}
+                  aria-expanded={timelineOpen}
+                  aria-label="Toggle document timeline"
+                >
+                  {timelineOpen ? '−' : '+'}
+                </button>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Document Timeline</h3>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                    {timelineEntries.length}
+                  </span>
+                </div>
+              </div>
+              <Link
+                to={`/audit?docId=${encodeURIComponent(String(document.id))}`}
+                className="text-sm font-semibold text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                View Detailed Audit
+              </Link>
             </div>
-            {configLoading && visibleFields.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-500 dark:text-slate-300">Loading field configuration…</p>
-            ) : visibleFields.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-500 dark:text-slate-300">No metadata fields configured for this role.</p>
-            ) : (
-              <DynamicForm
-                fields={visibleFields}
-                initialValues={metadataValues}
-                onChange={handleMetadataChange}
-                onSubmit={canEdit ? handleMetadataUpdate : undefined}
-                submitLabel={canEdit ? 'Save Metadata' : null}
-                disabled={busy || !canEdit}
-                accessMap={accessMap}
-              />
-            )}
+            {timelineOpen ? (
+              <div className="mt-4 space-y-3">
+                {timelineLoading ? (
+                  <p className="text-sm text-slate-500 dark:text-slate-300">Loading timeline…</p>
+                ) : timelineError ? (
+                  <p className="text-sm text-red-600 dark:text-red-400">{timelineError}</p>
+                ) : timelineEntries.length === 0 ? (
+                  <p className="text-sm text-slate-500 dark:text-slate-300">No timeline events yet.</p>
+                ) : (
+                  <div className="overflow-hidden rounded border border-slate-200 dark:border-slate-700">
+                    <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
+                      <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                        <tr>
+                          <th className="px-3 py-2">Time</th>
+                          <th className="px-3 py-2">Event</th>
+                          <th className="px-3 py-2">User</th>
+                          <th className="px-3 py-2">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                        {timelineEntries.map((entry, index) => (
+                          <tr key={`${entry.eventCode}-${index}`} className="bg-white dark:bg-slate-900">
+                            <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
+                              {formatTimestamp(entry.time)}
+                            </td>
+                            <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{entry.eventLabel}</td>
+                            <td className="px-3 py-2 text-slate-700 dark:text-slate-200">
+                              {entry.actorName || entry.actorId}
+                            </td>
+                            <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
+                              {formatTimelineNotes(entry)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
-          {canPreview || availableActions.length > 0 ? (
-            <div className="space-y-4 rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Workflow Actions</h3>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                  Preview the uploaded file or trigger the next state transition permitted for your role.
-                </p>
-              </div>
-              {availableActions.length > 0 ? (
-                <label className="block text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Comment (optional)</span>
-                  <textarea
-                    className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-                    rows={3}
-                    value={actionComment}
-                    onChange={(event) => setActionComment(event.target.value)}
-                  />
-                </label>
-              ) : null}
-              <div className="flex flex-wrap gap-2">
-                {canPreview ? (
-                  <button
-                    type="button"
-                    className="inline-flex items-center rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
-                    onClick={handlePreview}
-                  >
-                    Preview
-                  </button>
-                ) : null}
-                {availableActions.map((action) => (
-                  <button
-                    key={action.key}
-                    type="button"
-                    className="inline-flex items-center rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 dark:disabled:bg-slate-700 dark:disabled:text-slate-300"
-                    onClick={() => handleWorkflowAction(action.key)}
-                    disabled={busy}
-                  >
-                    {busy ? 'Processing…' : action.label}
-                  </button>
-                ))}
+
+          <div className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-slate-300 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                  onClick={() => setRelatedEntityOpen((current) => !current)}
+                  aria-expanded={relatedEntityOpen}
+                  aria-label="Toggle related entity details"
+                >
+                  {relatedEntityOpen ? '−' : '+'}
+                </button>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+                    {relatedEntityLabel ?? 'Related Records'}
+                  </h3>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                    {relatedEntityRows.length}
+                  </span>
+                </div>
               </div>
             </div>
-          ) : null}
+            {relatedEntityOpen ? (
+              <div className="mt-4 space-y-3">
+                {relatedEntityLoading ? (
+                  <p className="text-sm text-slate-500 dark:text-slate-300">Loading related records…</p>
+                ) : relatedEntityError ? (
+                  <p className="text-sm text-red-600 dark:text-red-400">{relatedEntityError}</p>
+                ) : relatedEntityRows.length === 0 ? (
+                  <p className="text-sm text-slate-500 dark:text-slate-300">No related records found.</p>
+                ) : (
+                  <div className="overflow-hidden rounded border border-slate-200 dark:border-slate-700">
+                    <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
+                      <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                        <tr>
+                          {relatedEntityColumns.map((column) => (
+                            <th key={column.key} className="px-3 py-2">
+                              {column.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                        {relatedEntityRows.map((row, index) => (
+                          <tr key={`related-${index}`} className="bg-white dark:bg-slate-900">
+                            {relatedEntityColumns.map((column) => (
+                              <td key={column.key} className="px-3 py-2 text-slate-600 dark:text-slate-300">
+                                {formatRelatedValue(row[column.key])}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
         </div>
-      ) : null}
+      ) : (
+        <div className="rounded border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+          Select a document to view details.
+        </div>
+      )}
       <DocumentPreviewModal
         isOpen={previewOpen}
         onClose={handleClosePreview}
@@ -886,6 +1149,32 @@ function formatTimestamp(value: string | null | undefined): string {
   }
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function formatTimelineNotes(entry: TimelineEntry): string {
+  if (entry.comment) {
+    return entry.comment;
+  }
+  const fromStatus = entry.fromStatus ?? '—';
+  const toStatus = entry.toStatus ?? '—';
+  if (fromStatus === '—' && toStatus === '—') {
+    return '—';
+  }
+  return `${fromStatus} → ${toStatus}`;
+}
+
+function formatRelatedValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '—';
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
 }
 
 function extractFileName(filePath: string): string | null {

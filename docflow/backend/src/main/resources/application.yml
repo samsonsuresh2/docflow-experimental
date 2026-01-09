@@ -67,6 +67,7 @@ docflow:
         type: RELATIONAL
         joinToDocument:
           enabled: true
+          documentFkColumn: CLIENT_ID
           businessFkColumn: USER_ID
 excel:
   target-table: loan_data

@@ -5,6 +5,8 @@ import com.docflow.api.dto.DocumentActionRequest;
 import com.docflow.api.dto.DocumentResponse;
 import com.docflow.api.dto.DocumentSummary;
 import com.docflow.api.dto.DocumentUploadMetadata;
+import com.docflow.api.dto.DocumentTimelineEntryResponse;
+import com.docflow.api.dto.RelatedEntityResponse;
 import com.docflow.api.dto.UpdateMetadataRequest;
 import com.docflow.api.dto.UpdateStatusRequest;
 import com.docflow.context.RequestUser;
@@ -13,6 +15,8 @@ import com.docflow.domain.AuditLog;
 import com.docflow.domain.DocumentStatus;
 import com.docflow.service.DocumentFile;
 import com.docflow.service.DocumentService;
+import com.docflow.service.DocumentLifecycleEventCatalog;
+import com.docflow.service.RelatedEntityService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -45,13 +49,16 @@ import java.util.stream.Collectors;
 public class DocumentController {
 
     private final DocumentService documentService;
+    private final RelatedEntityService relatedEntityService;
     private final RequestUserContext requestUserContext;
     private final ObjectMapper objectMapper;
 
     public DocumentController(DocumentService documentService,
+                              RelatedEntityService relatedEntityService,
                               RequestUserContext requestUserContext,
                               ObjectMapper objectMapper) {
         this.documentService = documentService;
+        this.relatedEntityService = relatedEntityService;
         this.requestUserContext = requestUserContext;
         this.objectMapper = objectMapper;
     }
@@ -188,6 +195,24 @@ public class DocumentController {
         return ResponseEntity.ok(response);
     }
 
+    // ────────────────────────────── TIMELINE ──────────────────────────────
+    @GetMapping("/{id}/timeline")
+    public ResponseEntity<List<DocumentTimelineEntryResponse>> getTimeline(@PathVariable Long id) {
+        List<AuditLog> entries = documentService.getLifecycleTimeline(id);
+        List<DocumentTimelineEntryResponse> response = entries.stream()
+            .map(this::mapTimelineEntry)
+            .collect(Collectors.toList());
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/related-entities/{entityName}")
+    public ResponseEntity<RelatedEntityResponse> getRelatedEntity(@PathVariable Long id,
+                                                                  @PathVariable String entityName) {
+        documentService.getDocument(id);
+        RelatedEntityResponse response = relatedEntityService.getRelatedEntity(id, entityName);
+        return ResponseEntity.ok(response);
+    }
+
     // ────────────────────────────── APPROVE ──────────────────────────────
     @PutMapping("/{id}/approve")
     public ResponseEntity<DocumentResponse> approve(
@@ -257,6 +282,19 @@ public class DocumentController {
         response.setChangeType(log.getChangeType());
         response.setChangedBy(log.getChangedBy());
         response.setChangedAt(log.getChangedAt());
+        return response;
+    }
+
+    private DocumentTimelineEntryResponse mapTimelineEntry(AuditLog log) {
+        DocumentTimelineEntryResponse response = new DocumentTimelineEntryResponse();
+        response.setEventCode(log.getEventCode());
+        response.setEventLabel(DocumentLifecycleEventCatalog.labelFor(log.getEventCode()));
+        response.setActorId(log.getChangedBy());
+        response.setActorName(log.getChangedBy());
+        response.setTime(log.getChangedAt());
+        response.setComment(log.getComment());
+        response.setFromStatus(log.getFromStatus());
+        response.setToStatus(log.getToStatus());
         return response;
     }
 

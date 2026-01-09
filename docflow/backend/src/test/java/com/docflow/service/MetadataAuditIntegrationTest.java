@@ -2,6 +2,7 @@ package com.docflow.service;
 
 import com.docflow.context.RequestUser;
 import com.docflow.domain.AuditLog;
+import com.docflow.domain.AuditCategory;
 import com.docflow.domain.DocumentParent;
 import com.docflow.domain.DocumentStatus;
 import com.docflow.domain.repository.AuditLogRepository;
@@ -74,7 +75,8 @@ class MetadataAuditIntegrationTest {
         List<AuditLog> auditEntries = auditLogRepository.findByDocumentIdOrderByChangedAtAsc(saved.getId());
         assertThat(auditEntries)
                 .hasSize(3)
-                .allMatch(entry -> "maker1".equals(entry.getChangedBy()));
+                .allMatch(entry -> "maker1".equals(entry.getChangedBy()))
+                .allMatch(entry -> entry.getAuditCategory() == AuditCategory.FIELD_CHANGE);
 
         AuditLog updateEntry = auditEntries.get(2);
         assertThat(updateEntry.getFieldKey()).isEqualTo("loanAmount");
