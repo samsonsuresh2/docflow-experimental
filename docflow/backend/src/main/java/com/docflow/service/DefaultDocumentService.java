@@ -27,13 +27,14 @@ import java.io.InputStream;
 import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.ArrayList;
+import java.util.Set;
 
 @Service
 @Transactional
@@ -47,6 +48,7 @@ public class DefaultDocumentService implements DocumentService {
     private final ConfigService configService;
     private final com.docflow.context.RequestUserContext requestUserContext;
     private final UploadFieldConfigParser uploadFieldConfigParser;
+    private final WorkflowPermissionService workflowPermissionService;
 
     public DefaultDocumentService(DocumentRepository documentRepository,
                                   StorageAdapter storageAdapter,
@@ -55,6 +57,7 @@ public class DefaultDocumentService implements DocumentService {
                                   RuleService ruleService,
                                   ConfigService configService,
                                   com.docflow.context.RequestUserContext requestUserContext,
+                                  WorkflowPermissionService workflowPermissionService,
                                   ObjectMapper objectMapper) {
         this.documentRepository = documentRepository;
         this.storageAdapter = storageAdapter;
@@ -63,6 +66,7 @@ public class DefaultDocumentService implements DocumentService {
         this.ruleService = ruleService;
         this.configService = configService;
         this.requestUserContext = requestUserContext;
+        this.workflowPermissionService = workflowPermissionService;
         this.uploadFieldConfigParser = new UploadFieldConfigParser(objectMapper);
     }
 
@@ -128,7 +132,7 @@ public class DefaultDocumentService implements DocumentService {
 
     @Override
     public DocumentResponse submitDocument(Long id, RequestUser user) {
-        return updateStatus(id, DocumentStatus.OPEN, user, "SUBMIT", null);
+        return updateStatus(id, DocumentStatus.OPEN, user, WorkflowActionCodes.SUBMIT, null);
     }
 
     @Override
@@ -139,6 +143,8 @@ public class DefaultDocumentService implements DocumentService {
             Map<String, Object> metadata = metadataService.getMetadata(document);
             return mapToResponse(document, metadata);
         }
+        String resolvedAction = resolveActionCode(previousStatus, status, action);
+        workflowPermissionService.assertAllowed(user.activeRole(), previousStatus, resolvedAction);
 
         List<UploadFieldDefinition> definitions = uploadFieldConfigParser.parse(configService.getUploadFieldsConfig());
         Map<String, Object> existingMetadata = metadataService.getMetadata(document);
@@ -150,7 +156,7 @@ public class DefaultDocumentService implements DocumentService {
         document.setUpdatedAt(now);
         documentRepository.save(document);
 
-        auditService.logStatusChange(document, previousStatus, status, action, comment, user, now);
+        auditService.logStatusChange(document, previousStatus, status, resolvedAction, comment, user, now);
 
         Map<String, Object> metadata = metadataService.getMetadata(document);
         return mapToResponse(document, metadata);
@@ -203,7 +209,7 @@ public class DefaultDocumentService implements DocumentService {
 
     @Override
     public DocumentResponse approve(Long id, RequestUser user, String comment) {
-        return updateStatus(id, DocumentStatus.APPROVED, user, "APPROVE", comment);
+        return updateStatus(id, DocumentStatus.APPROVED, user, WorkflowActionCodes.APPROVE, comment);
     }
 
     @Override
@@ -212,22 +218,22 @@ public class DefaultDocumentService implements DocumentService {
         if (!ruleService.validateForClosure(document)) {
             throw new IllegalStateException("Document is not eligible for closure");
         }
-        return updateStatus(id, DocumentStatus.CLOSED, user, "CLOSE", comment);
+        return updateStatus(id, DocumentStatus.CLOSED, user, WorkflowActionCodes.CLOSE, comment);
     }
 
     @Override
     public DocumentResponse moveToUnderReview(Long id, RequestUser user, String comment) {
-        return updateStatus(id, DocumentStatus.UNDER_REVIEW, user, "UNDER_REVIEW", comment);
+        return updateStatus(id, DocumentStatus.UNDER_REVIEW, user, WorkflowActionCodes.START_REVIEW, comment);
     }
 
     @Override
     public DocumentResponse reject(Long id, RequestUser user, String comment) {
-        return updateStatus(id, DocumentStatus.REJECTED, user, "REJECT", comment);
+        return updateStatus(id, DocumentStatus.REJECTED, user, WorkflowActionCodes.REJECT, comment);
     }
 
     @Override
     public DocumentResponse rework(Long id, RequestUser user, String comment) {
-        return updateStatus(id, DocumentStatus.REWORK, user, "REWORK", comment);
+        return updateStatus(id, DocumentStatus.REWORK, user, WorkflowActionCodes.REWORK, comment);
     }
 
     private void enforceRequiredFields(List<UploadFieldDefinition> definitions,
@@ -395,6 +401,7 @@ public class DefaultDocumentService implements DocumentService {
     private DocumentResponse mapToResponse(DocumentParent document, Map<String, Object> metadata) {
         Map<String, Object> metadataCopy = metadata != null ? new LinkedHashMap<>(metadata) : new LinkedHashMap<>();
         DocumentResponse response = new DocumentResponse();
+        response.setAllowedActions(resolveAllowedActions(document));
         response.setId(document.getId());
         response.setDocumentNumber(document.getDocumentNumber());
         response.setTitle(document.getTitle());
@@ -406,6 +413,28 @@ public class DefaultDocumentService implements DocumentService {
         response.setFilePath(document.getFilePath());
         response.setMetadata(metadataCopy);
         return response;
+    }
+
+    private String resolveActionCode(DocumentStatus previousStatus, DocumentStatus targetStatus, String action) {
+        if (!"STATUS_UPDATE".equalsIgnoreCase(action) || previousStatus == null || targetStatus == null) {
+            return action;
+        }
+        return switch (targetStatus) {
+            case OPEN -> WorkflowActionCodes.SUBMIT;
+            case UNDER_REVIEW -> WorkflowActionCodes.START_REVIEW;
+            case APPROVED -> WorkflowActionCodes.APPROVE;
+            case REJECTED -> WorkflowActionCodes.REJECT;
+            case REWORK -> WorkflowActionCodes.REWORK;
+            case CLOSED -> WorkflowActionCodes.CLOSE;
+            default -> action;
+        };
+    }
+
+    private List<String> resolveAllowedActions(DocumentParent document) {
+        DocumentStatus status = document != null ? document.getStatus() : null;
+        String role = requestUserContext.getCurrentUser().map(RequestUser::activeRole).orElse(null);
+        Set<String> allowed = workflowPermissionService.getAllowedActions(role, status);
+        return allowed.stream().sorted().toList();
     }
 
     private List<DocumentSearchFilter> buildSearchFilters(Map<String, Object> dynamicFilters,
@@ -441,6 +470,7 @@ public class DefaultDocumentService implements DocumentService {
 
     private DocumentSummary mapToSummary(DocumentParent document) {
         DocumentSummary summary = new DocumentSummary();
+        summary.setAllowedActions(resolveAllowedActions(document));
         summary.setId(document.getId());
         summary.setDocumentNumber(document.getDocumentNumber());
         summary.setTitle(document.getTitle());

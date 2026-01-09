@@ -3,6 +3,7 @@ package com.docflow.api.dto;
 import com.docflow.domain.DocumentStatus;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 public class DocumentSummary {
 
@@ -14,6 +15,7 @@ public class DocumentSummary {
     private OffsetDateTime createdAt;
     private String updatedBy;
     private OffsetDateTime updatedAt;
+    private List<String> allowedActions;
 
     public Long getId() {
         return id;
@@ -77,5 +79,13 @@ public class DocumentSummary {
 
     public void setUpdatedAt(OffsetDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public List<String> getAllowedActions() {
+        return allowedActions;
+    }
+
+    public void setAllowedActions(List<String> allowedActions) {
+        this.allowedActions = allowedActions;
     }
 }

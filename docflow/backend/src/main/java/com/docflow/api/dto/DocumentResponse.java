@@ -17,6 +17,7 @@ public class DocumentResponse {
     private OffsetDateTime updatedAt;
     private Map<String, Object> metadata;
     private String filePath;
+    private java.util.List<String> allowedActions;
 
     public Long getId() {
         return id;
@@ -96,5 +97,13 @@ public class DocumentResponse {
 
     public void setFilePath(String filePath) {
         this.filePath = filePath;
+    }
+
+    public java.util.List<String> getAllowedActions() {
+        return allowedActions;
+    }
+
+    public void setAllowedActions(java.util.List<String> allowedActions) {
+        this.allowedActions = allowedActions;
     }
 }
