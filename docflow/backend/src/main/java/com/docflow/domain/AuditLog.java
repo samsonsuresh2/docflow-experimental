@@ -17,6 +17,22 @@ public class AuditLog {
     @JoinColumn(name = "document_id")
     private DocumentParent document;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "audit_category")
+    private AuditCategory auditCategory;
+
+    @Column(name = "event_code")
+    private String eventCode;
+
+    @Column(name = "from_status")
+    private String fromStatus;
+
+    @Column(name = "to_status")
+    private String toStatus;
+
+    @Column(name = "comment_text")
+    private String comment;
+
     @Column(name = "field_key")
     private String fieldKey;
 
@@ -47,6 +63,46 @@ public class AuditLog {
 
     public void setDocument(DocumentParent document) {
         this.document = document;
+    }
+
+    public AuditCategory getAuditCategory() {
+        return auditCategory;
+    }
+
+    public void setAuditCategory(AuditCategory auditCategory) {
+        this.auditCategory = auditCategory;
+    }
+
+    public String getEventCode() {
+        return eventCode;
+    }
+
+    public void setEventCode(String eventCode) {
+        this.eventCode = eventCode;
+    }
+
+    public String getFromStatus() {
+        return fromStatus;
+    }
+
+    public void setFromStatus(String fromStatus) {
+        this.fromStatus = fromStatus;
+    }
+
+    public String getToStatus() {
+        return toStatus;
+    }
+
+    public void setToStatus(String toStatus) {
+        this.toStatus = toStatus;
+    }
+
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
     }
 
     public String getFieldKey() {

@@ -20,6 +20,13 @@ public interface AuditService {
     void logStatusChange(DocumentParent document, DocumentStatus previousStatus, DocumentStatus newStatus, String action,
                          String comment, RequestUser user, OffsetDateTime when);
 
+    @Transactional
+    void logLifecycleEvent(DocumentParent document, DocumentStatus previousStatus, DocumentStatus newStatus, String eventCode,
+                           String comment, RequestUser user, OffsetDateTime when);
+
     @Transactional(readOnly = true)
     List<AuditLog> getAuditTrail(Long documentId);
+
+    @Transactional(readOnly = true)
+    List<AuditLog> getLifecycleTimeline(Long documentId);
 }

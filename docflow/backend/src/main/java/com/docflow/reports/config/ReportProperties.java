@@ -180,6 +180,7 @@ public class ReportProperties {
 
     public static class JoinProperties {
         private boolean enabled;
+        private String documentFkColumn;
         private String businessFkColumn;
 
         public boolean isEnabled() {
@@ -188,6 +189,14 @@ public class ReportProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+
+        public String getDocumentFkColumn() {
+            return documentFkColumn;
+        }
+
+        public void setDocumentFkColumn(String documentFkColumn) {
+            this.documentFkColumn = documentFkColumn;
         }
 
         public String getBusinessFkColumn() {

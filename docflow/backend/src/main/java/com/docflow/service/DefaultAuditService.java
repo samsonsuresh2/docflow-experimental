@@ -2,6 +2,7 @@ package com.docflow.service;
 
 import com.docflow.context.RequestUser;
 import com.docflow.domain.AuditLog;
+import com.docflow.domain.AuditCategory;
 import com.docflow.domain.DocumentParent;
 import com.docflow.domain.DocumentStatus;
 import com.docflow.domain.repository.AuditLogRepository;
@@ -32,6 +33,7 @@ public class DefaultAuditService implements AuditService {
                                RequestUser user, OffsetDateTime when) {
         AuditLog log = new AuditLog();
         log.setDocument(document);
+        log.setAuditCategory(AuditCategory.FIELD_CHANGE);
         log.setFieldKey(fieldKey);
         log.setOldValue(serialize(oldValue));
         log.setNewValue(serialize(newValue));
@@ -58,9 +60,33 @@ public class DefaultAuditService implements AuditService {
     }
 
     @Override
+    public void logLifecycleEvent(DocumentParent document, DocumentStatus previousStatus, DocumentStatus newStatus, String eventCode,
+                                  String comment, RequestUser user, OffsetDateTime when) {
+        AuditLog log = new AuditLog();
+        log.setDocument(document);
+        log.setAuditCategory(AuditCategory.LIFECYCLE);
+        log.setEventCode(eventCode);
+        log.setFromStatus(previousStatus != null ? previousStatus.name() : null);
+        log.setToStatus(newStatus != null ? newStatus.name() : null);
+        log.setComment(comment != null && !comment.isBlank() ? comment : null);
+        log.setChangedBy(user.userId());
+        log.setChangedAt(when != null ? when : OffsetDateTime.now());
+        auditLogRepository.save(log);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<AuditLog> getAuditTrail(Long documentId) {
         return auditLogRepository.findByDocumentIdOrderByChangedAtAsc(documentId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AuditLog> getLifecycleTimeline(Long documentId) {
+        return auditLogRepository.findByDocumentIdAndAuditCategoryOrderByChangedAtAsc(
+            documentId,
+            AuditCategory.LIFECYCLE
+        );
     }
 
     private String serialize(Object value) {

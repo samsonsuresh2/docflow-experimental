@@ -170,4 +170,24 @@ class DefaultDocumentServiceTest {
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("cannot perform action APPROVE");
     }
+
+    @Test
+    void updateStatusEmitsLifecycleAuditEntry() {
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
+        when(configService.getUploadFieldsConfig()).thenReturn("[]");
+        doNothing().when(workflowPermissionService).assertAllowed(eq("MAKER"), eq(DocumentStatus.DRAFT), eq(WorkflowActionCodes.SUBMIT));
+
+        service.updateStatus(
+            1L,
+            DocumentStatus.OPEN,
+            new RequestUser("maker1", Set.of("MAKER"), "MAKER"),
+            WorkflowActionCodes.SUBMIT,
+            null
+        );
+
+        verify(auditService).logStatusChange(eq(sampleDocument), eq(DocumentStatus.DRAFT), eq(DocumentStatus.OPEN),
+            eq(WorkflowActionCodes.SUBMIT), isNull(), any(), any());
+        verify(auditService).logLifecycleEvent(eq(sampleDocument), eq(DocumentStatus.DRAFT), eq(DocumentStatus.OPEN),
+            eq(DocumentLifecycleEventCatalog.SUBMITTED_FOR_REVIEW), isNull(), any(), any());
+    }
 }

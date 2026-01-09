@@ -146,6 +146,24 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="audit-log-lifecycle-columns" author="docflow">
+        <comment>Add lifecycle audit columns to audit_log</comment>
+        <addColumn tableName="audit_log">
+            <column name="document_id" type="NUMBER(19)"/>
+            <column name="audit_category" type="VARCHAR2(50)"/>
+            <column name="event_code" type="VARCHAR2(100)"/>
+            <column name="from_status" type="VARCHAR2(50)"/>
+            <column name="to_status" type="VARCHAR2(50)"/>
+            <column name="comment_text" type="VARCHAR2(4000)"/>
+            <column name="field_key" type="VARCHAR2(150)"/>
+            <column name="old_value" type="CLOB"/>
+            <column name="new_value" type="CLOB"/>
+            <column name="change_type" type="VARCHAR2(100)"/>
+            <column name="changed_by" type="VARCHAR2(100)"/>
+            <column name="changed_at" type="TIMESTAMP(6)"/>
+        </addColumn>
+    </changeSet>
+
     <changeSet id="seed-user-roles" author="docflow">
         <comment>Seed sample user roles (admin1/maker1/reviewer1/checker1)</comment>
         <createSequence sequenceName="user_roles_seq" startValue="1"/>

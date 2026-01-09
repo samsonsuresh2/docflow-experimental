@@ -85,6 +85,9 @@ public class DefaultDocumentService implements DocumentService {
         saved.setDocumentNumber(generateDocumentNumber(saved.getId()));
         DocumentParent numberedDocument = documentRepository.save(saved);
 
+        auditService.logLifecycleEvent(numberedDocument, null, DocumentStatus.DRAFT,
+            DocumentLifecycleEventCatalog.DOC_UPLOADED, null, user, now);
+
         Map<String, Object> storedMetadata = metadataService.persistMetadata(numberedDocument, metadata.getMetadata(), user);
         storeFileIfPresent(numberedDocument, file);
 
@@ -157,6 +160,15 @@ public class DefaultDocumentService implements DocumentService {
         documentRepository.save(document);
 
         auditService.logStatusChange(document, previousStatus, status, resolvedAction, comment, user, now);
+        auditService.logLifecycleEvent(
+            document,
+            previousStatus,
+            status,
+            resolveLifecycleEventCode(previousStatus, status),
+            comment,
+            user,
+            now
+        );
 
         Map<String, Object> metadata = metadataService.getMetadata(document);
         return mapToResponse(document, metadata);
@@ -190,6 +202,13 @@ public class DefaultDocumentService implements DocumentService {
     public List<AuditLog> getAuditTrailByDocumentNumber(String documentNumber) {
         DocumentParent document = requireDocumentByNumber(documentNumber);
         return auditService.getAuditTrail(document.getId());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AuditLog> getLifecycleTimeline(Long id) {
+        requireDocument(id);
+        return auditService.getLifecycleTimeline(id);
     }
 
     @Override
@@ -428,6 +447,35 @@ public class DefaultDocumentService implements DocumentService {
             case CLOSED -> WorkflowActionCodes.CLOSE;
             default -> action;
         };
+    }
+
+    private String resolveLifecycleEventCode(DocumentStatus previousStatus, DocumentStatus targetStatus) {
+        if (previousStatus == null || targetStatus == null) {
+            return DocumentLifecycleEventCatalog.STATUS_CHANGED;
+        }
+        if (previousStatus == DocumentStatus.DRAFT && targetStatus == DocumentStatus.OPEN) {
+            return DocumentLifecycleEventCatalog.SUBMITTED_FOR_REVIEW;
+        }
+        if (previousStatus == DocumentStatus.REWORK && targetStatus == DocumentStatus.OPEN) {
+            return DocumentLifecycleEventCatalog.RESUBMITTED;
+        }
+        if (previousStatus == DocumentStatus.OPEN && targetStatus == DocumentStatus.UNDER_REVIEW) {
+            return DocumentLifecycleEventCatalog.REVIEW_STARTED;
+        }
+        if (previousStatus == DocumentStatus.UNDER_REVIEW && targetStatus == DocumentStatus.REWORK) {
+            return DocumentLifecycleEventCatalog.SENT_BACK_TO_MAKER;
+        }
+        if (previousStatus == DocumentStatus.UNDER_REVIEW && targetStatus == DocumentStatus.APPROVED) {
+            return DocumentLifecycleEventCatalog.APPROVED;
+        }
+        if (previousStatus == DocumentStatus.UNDER_REVIEW && targetStatus == DocumentStatus.REJECTED) {
+            return DocumentLifecycleEventCatalog.REJECTED;
+        }
+        if ((previousStatus == DocumentStatus.APPROVED || previousStatus == DocumentStatus.REJECTED)
+            && targetStatus == DocumentStatus.CLOSED) {
+            return DocumentLifecycleEventCatalog.REVIEW_COMPLETED;
+        }
+        return DocumentLifecycleEventCatalog.STATUS_CHANGED;
     }
 
     private List<String> resolveAllowedActions(DocumentParent document) {

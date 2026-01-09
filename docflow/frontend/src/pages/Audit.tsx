@@ -1,4 +1,5 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import AuditTimeline, { type AuditEvent } from '../components/AuditTimeline';
 import api from '../lib/api';
 import { useUser } from '../lib/UserContext';
@@ -14,6 +15,7 @@ interface AuditEntryResponse {
 
 export default function Audit() {
   const { user } = useUser();
+  const [searchParams] = useSearchParams();
   const [documentNumberInput, setDocumentNumberInput] = useState('');
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -23,35 +25,49 @@ export default function Audit() {
     return <AuthRequired />;
   }
 
+  const loadAuditTrail = useCallback(
+    async (documentNumber: string) => {
+      setErrorMessage(null);
+      const trimmedDocumentNumber = documentNumber.trim();
+      if (!trimmedDocumentNumber) {
+        setErrorMessage('Please enter a document ID.');
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const endpoint = buildAuditEndpoint(trimmedDocumentNumber);
+        const response = await api.get<AuditEntryResponse[]>(endpoint);
+        const mapped = response.data.map<AuditEvent>((entry, index) => ({
+          id: `${entry.fieldKey}-${index}`,
+          action: `${entry.changeType} · ${entry.fieldKey}`,
+          actor: entry.changedBy,
+          timestamp: new Date(entry.changedAt).toLocaleString(),
+          details: buildDetails(entry),
+        }));
+        setEvents(mapped);
+      } catch (error) {
+        setEvents([]);
+        setErrorMessage('Unable to load audit trail for this document.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    setErrorMessage(null);
-    const trimmedDocumentNumber = documentNumberInput.trim();
-    if (!trimmedDocumentNumber) {
-      setErrorMessage('Please enter a document ID.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const response = await api.get<AuditEntryResponse[]>(
-        `/documents/by-number/${encodeURIComponent(trimmedDocumentNumber)}/audit`,
-      );
-      const mapped = response.data.map<AuditEvent>((entry, index) => ({
-        id: `${entry.fieldKey}-${index}`,
-        action: `${entry.changeType} · ${entry.fieldKey}`,
-        actor: entry.changedBy,
-        timestamp: new Date(entry.changedAt).toLocaleString(),
-        details: buildDetails(entry),
-      }));
-      setEvents(mapped);
-    } catch (error) {
-      setEvents([]);
-      setErrorMessage('Unable to load audit trail for this document.');
-    } finally {
-      setLoading(false);
-    }
+    await loadAuditTrail(documentNumberInput);
   };
+
+  useEffect(() => {
+    const queryDocumentId = searchParams.get('docId') ?? searchParams.get('documentNumber');
+    if (queryDocumentId && queryDocumentId !== documentNumberInput) {
+      setDocumentNumberInput(queryDocumentId);
+      void loadAuditTrail(queryDocumentId);
+    }
+  }, [searchParams, loadAuditTrail, documentNumberInput]);
 
   return (
     <div className="space-y-6">
@@ -88,6 +104,14 @@ function buildDetails(entry: AuditEntryResponse): string {
   const fromValue = formatValue(entry.oldValue);
   const toValue = formatValue(entry.newValue);
   return `From: ${fromValue} → To: ${toValue}`;
+}
+
+function buildAuditEndpoint(documentId: string): string {
+  const trimmed = documentId.trim();
+  if (/^\\d+$/.test(trimmed)) {
+    return `/documents/${encodeURIComponent(trimmed)}/audit`;
+  }
+  return `/documents/by-number/${encodeURIComponent(trimmed)}/audit`;
 }
 
 function formatValue(value: unknown): string {
