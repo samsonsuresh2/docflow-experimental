@@ -3,6 +3,7 @@ import Login from './pages/Login';
 import Home from './pages/Home';
 import Upload from './pages/Upload';
 import Review from './pages/Review';
+import FastTrackApproval from './pages/FastTrackApproval';
 import DataInjector from './pages/DataInjector';
 import Admin from './pages/Admin';
 import Audit from './pages/Audit';
@@ -14,6 +15,7 @@ import ThemeToggle from './components/ThemeToggle';
 import { useModules } from './lib/ModuleContext';
 import { ModuleCodes, type ModuleCode } from './types/modules';
 import NotAuthorized from './components/NotAuthorized';
+import { t } from './i18n';
 
 function App() {
   const navigate = useNavigate();
@@ -37,40 +39,45 @@ function App() {
             className="text-lg font-semibold transition-colors hover:text-blue-600 dark:hover:text-blue-300"
             onClick={() => navigate('/')}
           >
-            DocFlow Portal
+            {t('common.modulePortal')}
           </button>
           <nav className="flex flex-wrap items-center gap-2">
             <NavLink to="/" className={navLinkClass} end>
-              Home
+              {t('common.home')}
             </NavLink>
             {hasModule(ModuleCodes.UPLOAD) ? (
               <NavLink to="/upload" className={navLinkClass}>
-                Upload
+                {t('common.upload')}
               </NavLink>
             ) : null}
             {hasModule(ModuleCodes.REVIEW) ? (
               <NavLink to="/review" className={navLinkClass}>
-                Review
+                {t('common.review')}
+              </NavLink>
+            ) : null}
+            {hasModule(ModuleCodes.FAST_TRACK_APPROVAL) ? (
+              <NavLink to="/fast-track-approval" className={navLinkClass}>
+                {t('common.fastTrackApproval')}
               </NavLink>
             ) : null}
             {hasModule(ModuleCodes.AUDIT) ? (
               <NavLink to="/audit" className={navLinkClass}>
-                Audit
+                {t('common.audit')}
               </NavLink>
             ) : null}
             {hasModule(ModuleCodes.REPORTS) ? (
               <NavLink to="/reports" className={navLinkClass}>
-                Reports
+                {t('common.reports')}
               </NavLink>
             ) : null}
             {hasModule(ModuleCodes.REPORT_CONFIG) ? (
               <NavLink to="/report-config" className={navLinkClass}>
-                Report Config
+                {t('common.reportConfig')}
               </NavLink>
             ) : null}
             {hasModule(ModuleCodes.ADMIN) ? (
               <NavLink to="/admin" className={navLinkClass}>
-                Admin
+                {t('common.admin')}
               </NavLink>
             ) : null}
           </nav>
@@ -89,7 +96,7 @@ function App() {
                   }}
                   className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400"
                 >
-                  Logout
+                  {t('common.logout')}
                 </button>
               </>
             ) : (
@@ -98,14 +105,14 @@ function App() {
                 className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400"
                 onClick={() => navigate('/login')}
               >
-                Login
+                {t('common.login')}
               </button>
             )}
           </div>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-6 py-8">
-        {modulesError ? <NotAuthorized message="Unable to load module access for this user." /> : null}
+        {modulesError ? <NotAuthorized message={t('common.moduleAccessLoadFailed')} /> : null}
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
@@ -123,6 +130,14 @@ function App() {
             element={
               <ModuleGate module={ModuleCodes.REVIEW}>
                 <Review />
+              </ModuleGate>
+            }
+          />
+          <Route
+            path="/fast-track-approval"
+            element={
+              <ModuleGate module={ModuleCodes.FAST_TRACK_APPROVAL}>
+                <FastTrackApproval />
               </ModuleGate>
             }
           />
@@ -177,7 +192,7 @@ export default App;
 function ModuleGate({ children, module }: { children: JSX.Element; module: ModuleCode }) {
   const { hasModule, loading } = useModules();
   if (loading) {
-    return <div className="text-sm text-slate-500 dark:text-slate-400">Loading module access…</div>;
+    return <div className="text-sm text-slate-500 dark:text-slate-400">{t('common.loadingModuleAccess')}</div>;
   }
   if (!hasModule(module)) {
     return <NotAuthorized />;

@@ -21,6 +21,12 @@ export default function Home() {
       module: ModuleCodes.REVIEW,
     },
     {
+      title: 'Fast-Track Approval',
+      description: 'Bulk approve, hold, or reject documents that have completed review.',
+      to: '/fast-track-approval',
+      module: ModuleCodes.FAST_TRACK_APPROVAL,
+    },
+    {
       title: 'Administer Fields',
       description: 'Define upload field configuration using JSON to drive dynamic UI experiences.',
       to: '/admin',

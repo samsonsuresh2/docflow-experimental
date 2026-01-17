@@ -34,12 +34,22 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
                                                 List<DocumentSearchFilter> dynamicFilters,
                                                 Pageable pageable,
                                                 String createdBy) {
+        List<DocumentStatus> statuses = status != null ? List.of(status) : List.of();
+        return searchDocumentsByStatuses(documentNumber, statuses, dynamicFilters, pageable, createdBy);
+    }
+
+    @Override
+    public Page<DocumentParent> searchDocumentsByStatuses(String documentNumber,
+                                                          List<DocumentStatus> statuses,
+                                                          List<DocumentSearchFilter> dynamicFilters,
+                                                          Pageable pageable,
+                                                          String createdBy) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<DocumentParent> query = cb.createQuery(DocumentParent.class);
         Root<DocumentParent> root = query.from(DocumentParent.class);
         query.select(root).distinct(true);
 
-        List<Predicate> predicates = buildPredicates(cb, query, root, documentNumber, status, dynamicFilters, createdBy);
+        List<Predicate> predicates = buildPredicates(cb, query, root, documentNumber, statuses, dynamicFilters, createdBy);
         if (!predicates.isEmpty()) {
             query.where(predicates.toArray(Predicate[]::new));
         }
@@ -50,17 +60,20 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
         typedQuery.setMaxResults(pageable.getPageSize());
         List<DocumentParent> content = typedQuery.getResultList();
 
-        long total = count(documentNumber, status, dynamicFilters, createdBy);
+        long total = count(documentNumber, statuses, dynamicFilters, createdBy);
         return new PageImpl<>(content, pageable, total);
     }
 
-    private long count(String documentNumber, DocumentStatus status, List<DocumentSearchFilter> dynamicFilters, String createdBy) {
+    private long count(String documentNumber,
+                       List<DocumentStatus> statuses,
+                       List<DocumentSearchFilter> dynamicFilters,
+                       String createdBy) {
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Long> countQuery = cb.createQuery(Long.class);
         Root<DocumentParent> root = countQuery.from(DocumentParent.class);
         countQuery.select(cb.countDistinct(root));
 
-        List<Predicate> predicates = buildPredicates(cb, countQuery, root, documentNumber, status, dynamicFilters, createdBy);
+        List<Predicate> predicates = buildPredicates(cb, countQuery, root, documentNumber, statuses, dynamicFilters, createdBy);
         if (!predicates.isEmpty()) {
             countQuery.where(predicates.toArray(Predicate[]::new));
         }
@@ -71,7 +84,7 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
                                             CriteriaQuery<?> query,
                                             Root<DocumentParent> root,
                                             String documentNumber,
-                                            DocumentStatus status,
+                                            List<DocumentStatus> statuses,
                                             List<DocumentSearchFilter> dynamicFilters,
                                             String createdBy) {
         List<Predicate> predicates = new ArrayList<>();
@@ -80,8 +93,8 @@ public class DocumentRepositoryImpl implements DocumentRepositoryCustom {
             String likePattern = "%" + documentNumber.toLowerCase(Locale.ROOT) + "%";
             predicates.add(cb.like(cb.lower(root.get("documentNumber")), likePattern));
         }
-        if (status != null) {
-            predicates.add(cb.equal(root.get("status"), status));
+        if (statuses != null && !statuses.isEmpty()) {
+            predicates.add(root.get("status").in(statuses));
         }
         if (createdBy != null && !createdBy.isBlank()) {
             predicates.add(cb.equal(root.get("createdBy"), createdBy));

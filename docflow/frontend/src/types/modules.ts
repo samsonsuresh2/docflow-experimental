@@ -1,6 +1,7 @@
 export type ModuleCode =
   | 'UPLOAD'
   | 'REVIEW'
+  | 'FAST_TRACK_APPROVAL'
   | 'APPROVAL'
   | 'REPORTS'
   | 'REPORT_CONFIG'
@@ -11,6 +12,7 @@ export type ModuleCode =
 export const ModuleCodes: Record<ModuleCode, ModuleCode> = {
   UPLOAD: 'UPLOAD',
   REVIEW: 'REVIEW',
+  FAST_TRACK_APPROVAL: 'FAST_TRACK_APPROVAL',
   APPROVAL: 'APPROVAL',
   REPORTS: 'REPORTS',
   REPORT_CONFIG: 'REPORT_CONFIG',
