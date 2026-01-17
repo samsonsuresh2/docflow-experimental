@@ -29,6 +29,7 @@ vi.mock('./lib/UserContext', () => ({
 
 vi.mock('./pages/Upload', () => ({ default: () => <div>Upload Workspace</div> }));
 vi.mock('./pages/Review', () => ({ default: () => <div>Review Workspace</div> }));
+vi.mock('./pages/FastTrackApproval', () => ({ default: () => <div>Fast-Track Approval Workspace</div> }));
 vi.mock('./pages/DataInjector', () => ({ default: () => <div>Data Ingestor Workspace</div> }));
 vi.mock('./pages/Admin', () => ({ default: () => <div>Admin Workspace</div> }));
 vi.mock('./pages/Audit', () => ({ default: () => <div>Audit Workspace</div> }));

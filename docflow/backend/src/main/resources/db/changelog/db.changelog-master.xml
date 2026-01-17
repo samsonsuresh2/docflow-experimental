@@ -684,6 +684,14 @@ WHEN NOT MATCHED THEN
         ]]></sql>
     </changeSet>
 
+    <changeSet id="018-fast-track-approval-module" author="docflow">
+        <sql><![CDATA[
+        MERGE INTO ROLE_MODULE_ACCESS t
+        USING (SELECT 'APPROVER' role, 'FAST_TRACK_APPROVAL' module_code FROM dual) s
+        ON (t.role = s.role AND t.module_code = s.module_code)
+        WHEN NOT MATCHED THEN INSERT (role, module_code, enabled) VALUES (s.role, s.module_code, 'Y');
+        ]]></sql>
+    </changeSet>
 
     
 </databaseChangeLog>

@@ -17,4 +17,12 @@ public interface DocumentRepositoryCustom {
         Pageable pageable,
         String createdBy
     );
+
+    Page<DocumentParent> searchDocumentsByStatuses(
+        String documentNumber,
+        List<DocumentStatus> statuses,
+        List<DocumentSearchFilter> dynamicFilters,
+        Pageable pageable,
+        String createdBy
+    );
 }

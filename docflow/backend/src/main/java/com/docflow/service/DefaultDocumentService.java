@@ -134,6 +134,30 @@ public class DefaultDocumentService implements DocumentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Page<DocumentSummary> searchDocumentsByStatuses(
+        String documentNumber,
+        Set<DocumentStatus> statuses,
+        String metadataKey,
+        String metadataValue,
+        Map<String, Object> dynamicFilters,
+        Pageable pageable
+    ) {
+        List<DocumentSearchFilter> filters = buildSearchFilters(dynamicFilters, metadataKey, metadataValue);
+        String createdBy = DocumentScopeGuard.ownerConstraint(requestUserContext);
+        List<DocumentStatus> statusList = statuses == null ? List.of() : statuses.stream().filter(Objects::nonNull).toList();
+        Page<DocumentParent> documents = documentRepository.searchDocumentsByStatuses(
+            sanitize(documentNumber),
+            statusList,
+            filters,
+            pageable,
+            createdBy
+        );
+
+        return documents.map(this::mapToSummary);
+    }
+
+    @Override
     public DocumentResponse submitDocument(Long id, RequestUser user) {
         return updateStatus(id, DocumentStatus.OPEN, user, WorkflowActionCodes.SUBMIT, null);
     }

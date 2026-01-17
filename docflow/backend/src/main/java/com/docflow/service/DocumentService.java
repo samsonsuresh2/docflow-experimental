@@ -13,6 +13,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Transactional
 public interface DocumentService {
@@ -30,6 +31,16 @@ public interface DocumentService {
     Page<DocumentSummary> searchDocuments(
         String documentNumber,
         DocumentStatus status,
+        String metadataKey,
+        String metadataValue,
+        Map<String, Object> dynamicFilters,
+        Pageable pageable
+    );
+
+    @Transactional(readOnly = true)
+    Page<DocumentSummary> searchDocumentsByStatuses(
+        String documentNumber,
+        Set<DocumentStatus> statuses,
         String metadataKey,
         String metadataValue,
         Map<String, Object> dynamicFilters,
