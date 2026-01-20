@@ -10,6 +10,10 @@ const STATUS_STYLES: Record<DocumentStatus, { label: string; className: string }
     label: 'Under Review',
     className: 'bg-yellow-200 text-yellow-800 dark:bg-yellow-500/30 dark:text-yellow-100',
   },
+  REVIEWED: {
+    label: 'Reviewed',
+    className: 'bg-lime-200 text-lime-800 dark:bg-lime-500/30 dark:text-lime-100',
+  },
   ON_HOLD: {
     label: 'On Hold',
     className: 'bg-orange-200 text-orange-800 dark:bg-orange-500/30 dark:text-orange-100',

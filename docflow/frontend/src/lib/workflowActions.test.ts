@@ -3,9 +3,10 @@ import { mapAllowedActions } from './workflowActions';
 
 describe('mapAllowedActions', () => {
   it('maps known action codes to descriptors', () => {
-    const result = mapAllowedActions(['SUBMIT', 'APPROVE']);
+    const result = mapAllowedActions(['SUBMIT', 'REVIEW_APPROVE', 'APPROVE']);
     expect(result).toEqual([
       { key: 'submit', label: 'Submit for Review' },
+      { key: 'reviewApprove', label: 'Approve' },
       { key: 'approve', label: 'Approve' },
     ]);
   });

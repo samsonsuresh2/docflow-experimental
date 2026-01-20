@@ -1,4 +1,11 @@
-export type WorkflowActionKey = 'submit' | 'startReview' | 'approve' | 'reject' | 'rework' | 'close';
+export type WorkflowActionKey =
+  | 'submit'
+  | 'startReview'
+  | 'reviewApprove'
+  | 'approve'
+  | 'reject'
+  | 'rework'
+  | 'close';
 
 export type WorkflowActionDescriptor = {
   key: WorkflowActionKey;
@@ -8,6 +15,7 @@ export type WorkflowActionDescriptor = {
 const WORKFLOW_ACTIONS: Record<string, WorkflowActionDescriptor> = {
   SUBMIT: { key: 'submit', label: 'Submit for Review' },
   START_REVIEW: { key: 'startReview', label: 'Start Review' },
+  REVIEW_APPROVE: { key: 'reviewApprove', label: 'Approve' },
   APPROVE: { key: 'approve', label: 'Approve' },
   REJECT: { key: 'reject', label: 'Reject' },
   REWORK: { key: 'rework', label: 'Rework' },

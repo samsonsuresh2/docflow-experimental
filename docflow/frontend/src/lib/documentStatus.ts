@@ -2,6 +2,7 @@ export type DocumentStatus =
   | 'DRAFT'
   | 'OPEN'
   | 'UNDER_REVIEW'
+  | 'REVIEWED'
   | 'ON_HOLD'
   | 'REWORK'
   | 'APPROVED'
@@ -12,6 +13,7 @@ const VALID_STATUSES: DocumentStatus[] = [
   'DRAFT',
   'OPEN',
   'UNDER_REVIEW',
+  'REVIEWED',
   'ON_HOLD',
   'REWORK',
   'APPROVED',

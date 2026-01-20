@@ -174,6 +174,7 @@ public class DefaultDocumentService implements DocumentService {
             Map<String, Object> metadata = metadataService.getMetadata(document);
             return mapToResponse(document, metadata);
         }
+        enforceStageGuards(previousStatus, status, user);
         String resolvedAction = resolveActionCode(previousStatus, status, action);
         workflowPermissionService.assertAllowed(user.activeRole(), previousStatus, resolvedAction);
 
@@ -257,6 +258,11 @@ public class DefaultDocumentService implements DocumentService {
     @Override
     public DocumentResponse approve(Long id, RequestUser user, String comment) {
         return updateStatus(id, DocumentStatus.APPROVED, user, WorkflowActionCodes.APPROVE, comment);
+    }
+
+    @Override
+    public DocumentResponse reviewApprove(Long id, RequestUser user, String comment) {
+        return updateStatus(id, DocumentStatus.REVIEWED, user, WorkflowActionCodes.REVIEW_APPROVE, comment);
     }
 
     @Override
@@ -469,6 +475,7 @@ public class DefaultDocumentService implements DocumentService {
         return switch (targetStatus) {
             case OPEN -> WorkflowActionCodes.SUBMIT;
             case UNDER_REVIEW -> WorkflowActionCodes.START_REVIEW;
+            case REVIEWED -> WorkflowActionCodes.REVIEW_APPROVE;
             case APPROVED -> WorkflowActionCodes.APPROVE;
             case REJECTED -> WorkflowActionCodes.REJECT;
             case REWORK -> WorkflowActionCodes.REWORK;
@@ -493,10 +500,16 @@ public class DefaultDocumentService implements DocumentService {
         if (previousStatus == DocumentStatus.UNDER_REVIEW && targetStatus == DocumentStatus.REWORK) {
             return DocumentLifecycleEventCatalog.SENT_BACK_TO_MAKER;
         }
-        if (previousStatus == DocumentStatus.UNDER_REVIEW && targetStatus == DocumentStatus.APPROVED) {
+        if (previousStatus == DocumentStatus.UNDER_REVIEW && targetStatus == DocumentStatus.REVIEWED) {
+            return DocumentLifecycleEventCatalog.REVIEW_APPROVED;
+        }
+        if (previousStatus == DocumentStatus.REVIEWED && targetStatus == DocumentStatus.APPROVED) {
             return DocumentLifecycleEventCatalog.APPROVED;
         }
         if (previousStatus == DocumentStatus.UNDER_REVIEW && targetStatus == DocumentStatus.REJECTED) {
+            return DocumentLifecycleEventCatalog.REJECTED;
+        }
+        if (previousStatus == DocumentStatus.REVIEWED && targetStatus == DocumentStatus.REJECTED) {
             return DocumentLifecycleEventCatalog.REJECTED;
         }
         if ((previousStatus == DocumentStatus.APPROVED || previousStatus == DocumentStatus.REJECTED)
@@ -504,6 +517,48 @@ public class DefaultDocumentService implements DocumentService {
             return DocumentLifecycleEventCatalog.REVIEW_COMPLETED;
         }
         return DocumentLifecycleEventCatalog.STATUS_CHANGED;
+    }
+
+    private void enforceStageGuards(DocumentStatus previousStatus, DocumentStatus targetStatus, RequestUser user) {
+        if (previousStatus == null || targetStatus == null || user == null) {
+            return;
+        }
+        String activeRole = user.activeRole();
+        if (targetStatus == DocumentStatus.REVIEWED) {
+            if (previousStatus != DocumentStatus.UNDER_REVIEW) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Review approval requires UNDER_REVIEW status.");
+            }
+            if (!"REVIEWER".equalsIgnoreCase(activeRole)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only reviewers can approve review decisions.");
+            }
+        }
+        if (targetStatus == DocumentStatus.APPROVED) {
+            if (previousStatus != DocumentStatus.REVIEWED) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Final approval requires REVIEWED status.");
+            }
+            if (!"APPROVER".equalsIgnoreCase(activeRole)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only approvers can issue final approval.");
+            }
+        }
+        if (targetStatus == DocumentStatus.REJECTED) {
+            if (previousStatus == DocumentStatus.UNDER_REVIEW && !"REVIEWER".equalsIgnoreCase(activeRole)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only reviewers can reject during review.");
+            }
+            if (previousStatus == DocumentStatus.REVIEWED && !"APPROVER".equalsIgnoreCase(activeRole)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only approvers can reject after review.");
+            }
+        }
+        if (targetStatus == DocumentStatus.REWORK) {
+            if (previousStatus == DocumentStatus.UNDER_REVIEW && !"REVIEWER".equalsIgnoreCase(activeRole)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only reviewers can request rework.");
+            }
+            if (previousStatus == DocumentStatus.REVIEWED) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Rework is not allowed after review completion.");
+            }
+        }
+        if (targetStatus == DocumentStatus.UNDER_REVIEW && !"REVIEWER".equalsIgnoreCase(activeRole)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only reviewers can start review.");
+        }
     }
 
     private List<String> resolveAllowedActions(DocumentParent document) {
