@@ -75,7 +75,7 @@ class FastTrackApprovalServiceTest {
     @Test
     void submitDecisionsRequiresCommentForOnHold() {
         DocumentParent document = new DocumentParent();
-        document.setStatus(DocumentStatus.UNDER_REVIEW);
+        document.setStatus(DocumentStatus.REVIEWED);
         document.setCreatedBy("maker");
         document.setCreatedAt(OffsetDateTime.now().minusDays(1));
         when(documentRepository.findById(2L)).thenReturn(Optional.of(document));
@@ -100,7 +100,7 @@ class FastTrackApprovalServiceTest {
     void submitDecisionsUpdatesStatusAndLogsLifecycle() {
         OffsetDateTime updatedAt = OffsetDateTime.now().minusHours(2);
         DocumentParent document = new DocumentParent();
-        document.setStatus(DocumentStatus.UNDER_REVIEW);
+        document.setStatus(DocumentStatus.REVIEWED);
         document.setCreatedBy("maker");
         document.setCreatedAt(OffsetDateTime.now().minusDays(1));
         document.setUpdatedAt(updatedAt);
@@ -121,7 +121,7 @@ class FastTrackApprovalServiceTest {
         assertThat(result.isOk()).isTrue();
         assertThat(result.getNewStatus()).isEqualTo(DocumentStatus.APPROVED.name());
         assertThat(response.getSummary().getApproved()).isEqualTo(1);
-        verify(auditService).logLifecycleEvent(eq(document), eq(DocumentStatus.UNDER_REVIEW), eq(DocumentStatus.APPROVED),
+        verify(auditService).logLifecycleEvent(eq(document), eq(DocumentStatus.REVIEWED), eq(DocumentStatus.APPROVED),
             eq(DocumentLifecycleEventCatalog.FAST_TRACK_APPROVED), eq(null), eq(approver), any(OffsetDateTime.class));
     }
 }

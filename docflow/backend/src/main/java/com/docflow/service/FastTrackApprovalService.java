@@ -26,7 +26,7 @@ import java.util.Set;
 @Service
 public class FastTrackApprovalService {
 
-    private static final Set<DocumentStatus> ELIGIBLE_STATUSES = Set.of(DocumentStatus.UNDER_REVIEW);
+    private static final Set<DocumentStatus> ELIGIBLE_STATUSES = Set.of(DocumentStatus.REVIEWED);
 
     private final DocumentRepository documentRepository;
     private final DocumentService documentService;

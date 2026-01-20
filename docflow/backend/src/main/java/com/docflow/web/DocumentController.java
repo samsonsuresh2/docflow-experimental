@@ -215,6 +215,17 @@ public class DocumentController {
     }
 
     // ────────────────────────────── APPROVE ──────────────────────────────
+    @PutMapping("/{id}/review-approve")
+    public ResponseEntity<DocumentResponse> reviewApprove(
+        @PathVariable Long id,
+        @Valid @RequestBody(required = false) DocumentActionRequest request) {
+
+        RequestUser user = requestUserContext.requireUser();
+        String comment = (request != null) ? request.getComment() : null;
+        DocumentResponse response = documentService.reviewApprove(id, user, comment);
+        return ResponseEntity.ok(response);
+    }
+
     @PutMapping("/{id}/approve")
     public ResponseEntity<DocumentResponse> approve(
         @PathVariable Long id,

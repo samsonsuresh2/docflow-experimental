@@ -516,6 +516,9 @@ export default function FastTrackApproval() {
         case 'startReview':
           await api.put(`/documents/${document.id}/under-review`, commentPayload);
           break;
+        case 'reviewApprove':
+          await api.put(`/documents/${document.id}/review-approve`, commentPayload);
+          break;
         case 'approve':
           await api.put(`/documents/${document.id}/approve`, commentPayload);
           break;

@@ -9,6 +9,7 @@ public final class DocumentLifecycleEventCatalog {
     public static final String RESUBMITTED = "RESUBMITTED";
     public static final String REVIEW_STARTED = "REVIEW_STARTED";
     public static final String SENT_BACK_TO_MAKER = "SENT_BACK_TO_MAKER";
+    public static final String REVIEW_APPROVED = "REVIEW_APPROVED";
     public static final String APPROVED = "APPROVED";
     public static final String REJECTED = "REJECTED";
     public static final String REVIEW_COMPLETED = "REVIEW_COMPLETED";
@@ -23,6 +24,7 @@ public final class DocumentLifecycleEventCatalog {
         Map.entry(RESUBMITTED, "Resubmitted"),
         Map.entry(REVIEW_STARTED, "Review started"),
         Map.entry(SENT_BACK_TO_MAKER, "Sent back to maker"),
+        Map.entry(REVIEW_APPROVED, "Review approved"),
         Map.entry(APPROVED, "Approved"),
         Map.entry(REJECTED, "Rejected"),
         Map.entry(REVIEW_COMPLETED, "Review completed"),

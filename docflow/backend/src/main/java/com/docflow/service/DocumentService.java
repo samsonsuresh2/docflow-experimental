@@ -75,6 +75,9 @@ public interface DocumentService {
     DocumentResponse approve(Long id, RequestUser user, String comment);
 
     @Transactional
+    DocumentResponse reviewApprove(Long id, RequestUser user, String comment);
+
+    @Transactional
     DocumentResponse rework(Long id, RequestUser user, String comment);
 
     @Transactional
