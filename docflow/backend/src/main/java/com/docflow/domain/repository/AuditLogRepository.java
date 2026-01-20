@@ -8,7 +8,7 @@ import java.util.List;
 
 public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
 
-    List<AuditLog> findByDocumentIdOrderByChangedAtAsc(Long documentId);
+    List<AuditLog> findByDocument_IdOrderByChangedAtAsc(Long documentId);
 
-    List<AuditLog> findByDocumentIdAndAuditCategoryOrderByChangedAtAsc(Long documentId, AuditCategory auditCategory);
+    List<AuditLog> findByDocument_IdAndAuditCategoryOrderByChangedAtAsc(Long documentId, AuditCategory auditCategory);
 }

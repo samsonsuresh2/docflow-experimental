@@ -148,19 +148,112 @@
 
     <changeSet id="audit-log-lifecycle-columns" author="docflow">
         <comment>Add lifecycle audit columns to audit_log</comment>
-        <addColumn tableName="audit_log">
-            <column name="document_id" type="NUMBER(19)"/>
-            <column name="audit_category" type="VARCHAR2(50)"/>
-            <column name="event_code" type="VARCHAR2(100)"/>
-            <column name="from_status" type="VARCHAR2(50)"/>
-            <column name="to_status" type="VARCHAR2(50)"/>
-            <column name="comment_text" type="VARCHAR2(4000)"/>
-            <column name="field_key" type="VARCHAR2(150)"/>
-            <column name="old_value" type="CLOB"/>
-            <column name="new_value" type="CLOB"/>
-            <column name="change_type" type="VARCHAR2(100)"/>
-            <column name="changed_by" type="VARCHAR2(100)"/>
-            <column name="changed_at" type="TIMESTAMP(6)"/>
+        <preConditions onFail="CONTINUE">
+            <not>
+                <columnExists tableName="AUDIT_LOG" columnName="DOCUMENT_ID"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="AUDIT_LOG">
+            <column name="DOCUMENT_ID" type="NUMBER(19)"/>
+        </addColumn>
+
+        <preConditions onFail="CONTINUE">
+            <not>
+                <columnExists tableName="AUDIT_LOG" columnName="AUDIT_CATEGORY"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="AUDIT_LOG">
+            <column name="AUDIT_CATEGORY" type="VARCHAR2(50)"/>
+        </addColumn>
+
+        <preConditions onFail="CONTINUE">
+            <not>
+                <columnExists tableName="AUDIT_LOG" columnName="EVENT_CODE"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="AUDIT_LOG">
+            <column name="EVENT_CODE" type="VARCHAR2(100)"/>
+        </addColumn>
+
+        <preConditions onFail="CONTINUE">
+            <not>
+                <columnExists tableName="AUDIT_LOG" columnName="FROM_STATUS"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="AUDIT_LOG">
+            <column name="FROM_STATUS" type="VARCHAR2(50)"/>
+        </addColumn>
+
+        <preConditions onFail="CONTINUE">
+            <not>
+                <columnExists tableName="AUDIT_LOG" columnName="TO_STATUS"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="AUDIT_LOG">
+            <column name="TO_STATUS" type="VARCHAR2(50)"/>
+        </addColumn>
+
+        <preConditions onFail="CONTINUE">
+            <not>
+                <columnExists tableName="AUDIT_LOG" columnName="COMMENT_TEXT"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="AUDIT_LOG">
+            <column name="COMMENT_TEXT" type="VARCHAR2(4000)"/>
+        </addColumn>
+
+        <preConditions onFail="CONTINUE">
+            <not>
+                <columnExists tableName="AUDIT_LOG" columnName="FIELD_KEY"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="AUDIT_LOG">
+            <column name="FIELD_KEY" type="VARCHAR2(150)"/>
+        </addColumn>
+
+        <preConditions onFail="CONTINUE">
+            <not>
+                <columnExists tableName="AUDIT_LOG" columnName="OLD_VALUE"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="AUDIT_LOG">
+            <column name="OLD_VALUE" type="CLOB"/>
+        </addColumn>
+
+        <preConditions onFail="CONTINUE">
+            <not>
+                <columnExists tableName="AUDIT_LOG" columnName="NEW_VALUE"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="AUDIT_LOG">
+            <column name="NEW_VALUE" type="CLOB"/>
+        </addColumn>
+
+        <preConditions onFail="CONTINUE">
+            <not>
+                <columnExists tableName="AUDIT_LOG" columnName="CHANGE_TYPE"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="AUDIT_LOG">
+            <column name="CHANGE_TYPE" type="VARCHAR2(100)"/>
+        </addColumn>
+
+        <preConditions onFail="CONTINUE">
+            <not>
+                <columnExists tableName="AUDIT_LOG" columnName="CHANGED_BY"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="AUDIT_LOG">
+            <column name="CHANGED_BY" type="VARCHAR2(100)"/>
+        </addColumn>
+
+        <preConditions onFail="CONTINUE">
+            <not>
+                <columnExists tableName="AUDIT_LOG" columnName="CHANGED_AT"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="AUDIT_LOG">
+            <column name="CHANGED_AT" type="TIMESTAMP(6)"/>
         </addColumn>
     </changeSet>
 

@@ -77,13 +77,13 @@ public class DefaultAuditService implements AuditService {
     @Override
     @Transactional(readOnly = true)
     public List<AuditLog> getAuditTrail(Long documentId) {
-        return auditLogRepository.findByDocumentIdOrderByChangedAtAsc(documentId);
+        return auditLogRepository.findByDocument_IdOrderByChangedAtAsc(documentId);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<AuditLog> getLifecycleTimeline(Long documentId) {
-        return auditLogRepository.findByDocumentIdAndAuditCategoryOrderByChangedAtAsc(
+        return auditLogRepository.findByDocument_IdAndAuditCategoryOrderByChangedAtAsc(
             documentId,
             AuditCategory.LIFECYCLE
         );
