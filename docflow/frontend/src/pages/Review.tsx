@@ -69,6 +69,44 @@ const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: 'CLOSED', label: 'Closed' },
 ];
 
+const STATUS_FILTER_VALUES = new Set(STATUS_FILTER_OPTIONS.map((option) => option.value));
+
+type ReviewSearchParamsInput = {
+  statusFilter: StatusFilter;
+  documentId: string;
+  page: number;
+  size: number;
+  sortBy: SortColumn;
+  direction: 'asc' | 'desc';
+  filtersPayload: Record<string, string>;
+};
+
+export function buildReviewSearchParams({
+  statusFilter,
+  documentId,
+  page,
+  size,
+  sortBy,
+  direction,
+  filtersPayload,
+}: ReviewSearchParamsInput): Record<string, unknown> {
+  if (!STATUS_FILTER_VALUES.has(statusFilter)) {
+    throw new Error(`Unsupported status filter: ${statusFilter}`);
+  }
+  const params: Record<string, unknown> = {
+    status: statusFilter === 'ALL' ? '' : statusFilter,
+    id: documentId,
+    page,
+    size,
+    sortBy,
+    direction,
+  };
+  if (Object.keys(filtersPayload).length > 0) {
+    params.filters = JSON.stringify(filtersPayload);
+  }
+  return params;
+}
+
 export default function Review() {
   const { user } = useUser();
   const [configLoading, setConfigLoading] = useState(false);
@@ -297,19 +335,15 @@ export default function Review() {
         // const trimmedMetadataKey = metadataKeyFilter.trim();
         // const trimmedMetadataValue = metadataValueFilter.trim();
         const filtersPayload = collectFilterPayload();
-        const params: Record<string, unknown> = {
-            status: statusFilter === 'ALL' ? '' : statusFilter,
-            id: trimmedDocumentId,
-            page: pageToLoad,
-            size: PAGE_SIZE,
-            sortBy: sortToUse,
-            direction: directionToUse,
-            // metadataKey: trimmedMetadataKey,
-            // metadataValue: trimmedMetadataValue,
-        };
-        if (Object.keys(filtersPayload).length > 0) {
-          params.filters = JSON.stringify(filtersPayload);
-        }
+        const params = buildReviewSearchParams({
+          statusFilter,
+          documentId: trimmedDocumentId,
+          page: pageToLoad,
+          size: PAGE_SIZE,
+          sortBy: sortToUse,
+          direction: directionToUse,
+          filtersPayload,
+        });
         const response = await api.get<PageResponse<DocumentSummary>>('/documents/search', {
           params,
         });

@@ -1,6 +1,6 @@
 export type DocumentStatus =
   | 'DRAFT'
-  | 'SUBMITTED'
+  | 'OPEN'
   | 'UNDER_REVIEW'
   | 'ON_HOLD'
   | 'REWORK'
@@ -8,13 +8,9 @@ export type DocumentStatus =
   | 'REJECTED'
   | 'CLOSED';
 
-const LEGACY_STATUS_MAP: Record<string, DocumentStatus> = {
-  OPEN: 'SUBMITTED',
-};
-
 const VALID_STATUSES: DocumentStatus[] = [
   'DRAFT',
-  'SUBMITTED',
+  'OPEN',
   'UNDER_REVIEW',
   'ON_HOLD',
   'REWORK',
@@ -28,9 +24,6 @@ export function normalizeStatus(status: string | null | undefined): DocumentStat
     return null;
   }
   const upper = status.toUpperCase();
-  if (upper in LEGACY_STATUS_MAP) {
-    return LEGACY_STATUS_MAP[upper];
-  }
   if (VALID_STATUSES.includes(upper as DocumentStatus)) {
     return upper as DocumentStatus;
   }

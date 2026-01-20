@@ -5,6 +5,8 @@ import com.docflow.context.RequestUserContext;
 import com.docflow.domain.DocumentParent;
 import com.docflow.domain.DocumentStatus;
 import com.docflow.domain.repository.DocumentRepository;
+import com.docflow.api.dto.FilterDefinition;
+import com.docflow.api.dto.FilterSource;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -189,5 +191,26 @@ class DefaultDocumentServiceTest {
             eq(WorkflowActionCodes.SUBMIT), isNull(), any(), any());
         verify(auditService).logLifecycleEvent(eq(sampleDocument), eq(DocumentStatus.DRAFT), eq(DocumentStatus.OPEN),
             eq(DocumentLifecycleEventCatalog.SUBMITTED_FOR_REVIEW), isNull(), any(), any());
+    }
+
+    @Test
+    void searchDocumentsRejectsUnknownReviewFilters() {
+        FilterDefinition definition = new FilterDefinition();
+        definition.setKey("branch_code");
+        definition.setSource(FilterSource.META_DATA);
+        definition.setType("text");
+        when(configService.getReviewFilterDefinitions()).thenReturn(List.of(definition));
+        when(requestUserContext.getCurrentUser()).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.searchDocuments(
+            null,
+            DocumentStatus.OPEN,
+            null,
+            null,
+            Map.of("status", "OPEN"),
+            PageRequest.of(0, 10)
+        ))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Unsupported review filter");
     }
 }

@@ -72,6 +72,47 @@ class DocumentRepositoryImplTest {
         assertThat(results.getContent().get(0).getCreatedBy()).isEqualTo("maker-alpha");
     }
 
+    @Test
+    void searchDocumentsFiltersByStatus() {
+        DocumentParent open = createDocument("DOC-300", "KYC", DocumentStatus.OPEN, "maker-alpha");
+        DocumentParent review = createDocument("DOC-301", "KYC", DocumentStatus.UNDER_REVIEW, "maker-alpha");
+        documentRepository.saveAll(List.of(open, review));
+
+        Page<DocumentParent> results = documentRepository.searchDocuments(
+            null,
+            DocumentStatus.OPEN,
+            List.of(),
+            PageRequest.of(0, 10)
+        );
+
+        assertThat(results.getTotalElements()).isEqualTo(1);
+        assertThat(results.getContent().get(0).getStatus()).isEqualTo(DocumentStatus.OPEN);
+    }
+
+    @Test
+    void searchDocumentsCombinesStatusAndParentFilters() {
+        DocumentParent openMatch = createDocument("DOC-400", "KYC", DocumentStatus.OPEN, "maker-alpha");
+        DocumentParent openOther = createDocument("DOC-401", "KYC", DocumentStatus.OPEN, "maker-beta");
+        DocumentParent reviewMatch = createDocument("DOC-402", "KYC", DocumentStatus.UNDER_REVIEW, "maker-alpha");
+        documentRepository.saveAll(List.of(openMatch, openOther, reviewMatch));
+
+        FilterDefinition definition = new FilterDefinition();
+        definition.setKey("createdBy");
+        definition.setSource(FilterSource.DOCUMENT_PARENT);
+        definition.setType("text");
+
+        DocumentSearchFilter filter = DocumentSearchFilter.fromDefinition(definition, "maker-alpha");
+        Page<DocumentParent> results = documentRepository.searchDocuments(
+            null,
+            DocumentStatus.OPEN,
+            List.of(filter),
+            PageRequest.of(0, 10)
+        );
+
+        assertThat(results.getTotalElements()).isEqualTo(1);
+        assertThat(results.getContent().get(0).getDocumentNumber()).isEqualTo("DOC-400");
+    }
+
     private DocumentParent createDocument(String number, String title, DocumentStatus status, String createdBy) {
         DocumentParent document = new DocumentParent();
         document.setDocumentNumber(number);

@@ -37,6 +37,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -343,10 +344,18 @@ public class DocumentController {
         if (status == null || status.isBlank()) {
             return null;
         }
+        String normalized = status.trim().toUpperCase(Locale.ROOT);
         try {
-            return DocumentStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+            return DocumentStatus.valueOf(normalized);
         } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status value");
+            String allowed = Arrays.stream(DocumentStatus.values())
+                .map(Enum::name)
+                .sorted()
+                .collect(Collectors.joining(", "));
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Invalid status value '" + normalized + "'. Allowed values: " + allowed
+            );
         }
     }
 
