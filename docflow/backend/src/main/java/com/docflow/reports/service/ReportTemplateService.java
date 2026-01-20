@@ -4,7 +4,10 @@ import com.docflow.reports.dto.DynamicReportRequest;
 import com.docflow.reports.dto.ReportTemplateResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -26,6 +29,7 @@ import java.util.Objects;
 public class ReportTemplateService {
 
     private static final String TABLE_NAME = "REPORT_TEMPLATES";
+    private static final Logger LOGGER = LoggerFactory.getLogger(ReportTemplateService.class);
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -37,6 +41,10 @@ public class ReportTemplateService {
     }
 
     public ReportTemplateResponse save(String name, DynamicReportRequest request, String createdBy) {
+        return createTemplate(name, request, createdBy);
+    }
+
+    public ReportTemplateResponse createTemplate(String name, DynamicReportRequest request, String createdBy) {
         String trimmedName = optionalString(name);
         if (trimmedName == null || trimmedName.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Template name is required");
@@ -47,6 +55,9 @@ public class ReportTemplateService {
         if (author == null || author.isEmpty()) {
             author = "system";
         }
+
+        int filterCount = payload.getFilters() != null ? payload.getFilters().size() : 0;
+        LOGGER.info("Saving report template '{}' with {} filters", trimmedName, filterCount);
 
         String requestJson;
         try {
@@ -67,6 +78,11 @@ public class ReportTemplateService {
                     params,
                     keyHolder,
                     new String[]{"id"});
+        } catch (DataIntegrityViolationException e) {
+            if (isDuplicateTemplateName(e)) {
+                throw new DuplicateTemplateNameException("Duplicate report template name not allowed", e);
+            }
+            throw e;
         } catch (DataAccessException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to store report template", e);
         }
@@ -77,6 +93,54 @@ public class ReportTemplateService {
         }
 
         return getById(key.longValue());
+    }
+
+    public ReportTemplateResponse update(long templateId, String name, DynamicReportRequest request) {
+        String trimmedName = optionalString(name);
+        if (trimmedName == null || trimmedName.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Template name is required");
+        }
+
+        DynamicReportRequest payload = Objects.requireNonNull(request, "request");
+        ReportTemplateResponse existing = getById(templateId);
+        String author = optionalString(existing.getCreatedBy());
+        if (author == null || author.isEmpty()) {
+            author = "system";
+        }
+
+        int filterCount = payload.getFilters() != null ? payload.getFilters().size() : 0;
+        LOGGER.info("Updating report template {} ('{}') with {} filters", templateId, trimmedName, filterCount);
+
+        String requestJson;
+        try {
+            requestJson = objectMapper.writeValueAsString(new StoredTemplatePayload(payload, author));
+        } catch (JsonProcessingException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unable to serialise report request", e);
+        }
+
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("id", templateId)
+                .addValue("name", trimmedName)
+                .addValue("configJson", requestJson);
+
+        try {
+            int updated = jdbcTemplate.update(
+                    "UPDATE " + TABLE_NAME + " SET name = :name, config_json = :configJson WHERE id = :id",
+                    params
+            );
+            if (updated == 0) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Template not found");
+            }
+        } catch (DataIntegrityViolationException e) {
+            if (isDuplicateTemplateName(e)) {
+                throw new DuplicateTemplateNameException("Duplicate report template name not allowed", e);
+            }
+            throw e;
+        } catch (DataAccessException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to update report template", e);
+        }
+
+        return getById(templateId);
     }
 
     public List<ReportTemplateResponse> listTemplates() {
@@ -108,6 +172,10 @@ public class ReportTemplateService {
         String json = rs.getString("config_json");
         StoredTemplatePayload payload = deserializePayload(json);
         Instant created = createdAt != null ? createdAt.toInstant() : Instant.now();
+        int filterCount = payload.request() != null && payload.request().getFilters() != null
+                ? payload.request().getFilters().size()
+                : 0;
+        LOGGER.info("Loaded report template {} ('{}') with {} filters", id, name, filterCount);
         return new ReportTemplateResponse(id, name, description, payload.request(), payload.createdBy(), created);
     }
 
@@ -141,5 +209,19 @@ public class ReportTemplateService {
     }
 
     private record StoredTemplatePayload(DynamicReportRequest request, String createdBy) {
+    }
+
+    private boolean isDuplicateTemplateName(DataIntegrityViolationException e) {
+        String message = e.getMostSpecificCause() != null ? e.getMostSpecificCause().getMessage() : e.getMessage();
+        if (message == null) {
+            return false;
+        }
+        String normalized = message.toLowerCase();
+        if (normalized.contains("report_templates_name_uk")) {
+            return true;
+        }
+        return normalized.contains("report_templates")
+                && normalized.contains("name")
+                && (normalized.contains("unique") || normalized.contains("constraint") || normalized.contains("ora-00001"));
     }
 }

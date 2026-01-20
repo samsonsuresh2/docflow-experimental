@@ -13,10 +13,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -70,7 +72,13 @@ public class ReportController {
     @ResponseStatus(HttpStatus.CREATED)
     public ReportTemplateResponse saveTemplate(@Valid @RequestBody ReportTemplateRequest request,
                                                @RequestHeader(value = "X-USER-ID", required = false) String userId) {
-        return templateService.save(request.getName(), request.getRequest(), userId);
+        return templateService.createTemplate(request.getName(), request.getRequest(), userId);
+    }
+
+    @PutMapping("/templates/{id}")
+    public ReportTemplateResponse updateTemplate(@PathVariable("id") long templateId,
+                                                 @Valid @RequestBody ReportTemplateRequest request) {
+        return templateService.update(templateId, request.getName(), request.getRequest());
     }
 
     @GetMapping("/templates")

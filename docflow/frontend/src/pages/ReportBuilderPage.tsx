@@ -5,6 +5,7 @@ import {
   fetchReportTemplates,
   runDynamicReport,
   saveReportTemplate,
+  updateReportTemplate,
 } from '../lib/reports';
 import type { DynamicReportRequest, ReportBaseEntity, ReportRunResponse, ReportTemplate } from '../types/reports';
 
@@ -30,8 +31,14 @@ function normaliseError(error: unknown): string {
     return error;
   }
   if (error && typeof error === 'object') {
-    const maybeResponse = (error as { response?: { data?: unknown; statusText?: string } }).response;
+    const maybeResponse = (error as {
+      response?: { data?: { message?: unknown; code?: unknown }; statusText?: string };
+    }).response;
     if (maybeResponse?.data && typeof maybeResponse.data === 'object') {
+      const maybeCode = (maybeResponse.data as { code?: unknown }).code;
+      if (maybeCode === 'DUPLICATE_TEMPLATE_NAME') {
+        return 'Duplicate report template name not allowed.';
+      }
       const maybeMessage = (maybeResponse.data as { message?: unknown }).message;
       if (typeof maybeMessage === 'string') {
         return maybeMessage;
@@ -58,8 +65,8 @@ function normaliseTemplateKey(value: string): string {
   if (!value) {
     return value;
   }
-  if (value.startsWith('meta.')) {
-    return `meta:${value.slice('meta.'.length)}`;
+  if (value.startsWith('meta:')) {
+    return `meta.${value.slice('meta:'.length)}`;
   }
   return value;
 }
@@ -96,6 +103,7 @@ export default function ReportBuilderPage() {
   const [savingTemplate, setSavingTemplate] = useState<boolean>(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [pendingTemplate, setPendingTemplate] = useState<ReportTemplate | null>(null);
+  const [loadedTemplate, setLoadedTemplate] = useState<ReportTemplate | null>(null);
 
   const filterIdRef = useRef<number>(0);
 
@@ -345,6 +353,7 @@ export default function ReportBuilderPage() {
       setSelectedTemplateId(template.id);
       setTemplateName(template.name);
       setPendingTemplate(template);
+      setLoadedTemplate(template);
       setSelectedEntity(template.request.baseEntity);
     },
     [],
@@ -365,7 +374,61 @@ export default function ReportBuilderPage() {
     applyTemplate(template);
   };
 
-  const buildRequest = useCallback((): DynamicReportRequest | null => {
+  const buildTemplateRequest = useCallback((): DynamicReportRequest | null => {
+    if (!selectedEntity) {
+      return null;
+    }
+    const columns = Array.from(new Set(selectedColumns.map(normalizeKeyForBackend)));
+    if (columns.length === 0) {
+      return null;
+    }
+
+    const filtersPayload = filters
+      .map((filter) => {
+        if (!filter.key || !filter.op) {
+          return null;
+        }
+        if (filter.op === 'between') {
+          if (!filter.value || !filter.valueTo) {
+            return {
+              key: normalizeKeyForBackend(filter.key),
+              op: filter.op,
+              value: '',
+              mode: 'USER_INPUT' as const,
+            };
+          }
+          return {
+            key: normalizeKeyForBackend(filter.key),
+            op: filter.op,
+            value: `${filter.value},${filter.valueTo}`,
+            mode: 'FIXED_VALUE' as const,
+          };
+        }
+        if (!filter.value) {
+          return {
+            key: normalizeKeyForBackend(filter.key),
+            op: filter.op,
+            value: '',
+            mode: 'USER_INPUT' as const,
+          };
+        }
+        return {
+          key: normalizeKeyForBackend(filter.key),
+          op: filter.op,
+          value: filter.value,
+          mode: 'FIXED_VALUE' as const,
+        };
+      })
+      .filter((filter): filter is NonNullable<typeof filter> => Boolean(filter));
+
+    return {
+      baseEntity: selectedEntity,
+      columns,
+      filters: filtersPayload,
+    };
+  }, [selectedEntity, selectedColumns, filters]);
+
+  const buildRunRequest = useCallback((): DynamicReportRequest | null => {
     if (!selectedEntity) {
       return null;
     }
@@ -415,7 +478,7 @@ export default function ReportBuilderPage() {
       setTemplateSaveError('Provide a template name before saving.');
       return;
     }
-    const request = buildRequest();
+    const request = buildTemplateRequest();
     if (!request) {
       setTemplateSaveError('Define a report to save as a template.');
       return;
@@ -429,12 +492,80 @@ export default function ReportBuilderPage() {
       });
       setTemplateSaveSuccess('Template saved successfully.');
       setSelectedTemplateId(saved.id);
+      setLoadedTemplate(saved);
     } catch (error) {
       setTemplateSaveError(normaliseError(error));
     } finally {
       setSavingTemplate(false);
     }
-  }, [buildRequest, templateName]);
+  }, [buildTemplateRequest, templateName]);
+
+  const handleUpdateTemplate = useCallback(async () => {
+    if (!loadedTemplate) {
+      return;
+    }
+    setTemplateSaveError(null);
+    setTemplateSaveSuccess(null);
+    const name = templateName.trim();
+    if (!name) {
+      setTemplateSaveError('Provide a template name before saving.');
+      return;
+    }
+    const request = buildTemplateRequest();
+    if (!request) {
+      setTemplateSaveError('Define a report to save as a template.');
+      return;
+    }
+    setSavingTemplate(true);
+    try {
+      const saved = await updateReportTemplate(loadedTemplate.id, name, request);
+      setTemplates((prev) => prev.map((template) => (template.id === saved.id ? saved : template)));
+      setTemplateSaveSuccess('Template updated successfully.');
+      setSelectedTemplateId(saved.id);
+      setLoadedTemplate(saved);
+    } catch (error) {
+      setTemplateSaveError(normaliseError(error));
+    } finally {
+      setSavingTemplate(false);
+    }
+  }, [buildTemplateRequest, loadedTemplate, templateName]);
+
+  const handleSaveAsTemplate = useCallback(async () => {
+    if (!loadedTemplate) {
+      return;
+    }
+    setTemplateSaveError(null);
+    setTemplateSaveSuccess(null);
+    const name = templateName.trim();
+    if (!name) {
+      setTemplateSaveError('Provide a template name before saving.');
+      return;
+    }
+    if (name === loadedTemplate.name.trim()) {
+      setTemplateSaveError('Change the template name to save a new copy.');
+      return;
+    }
+    const request = buildTemplateRequest();
+    if (!request) {
+      setTemplateSaveError('Define a report to save as a template.');
+      return;
+    }
+    setSavingTemplate(true);
+    try {
+      const saved = await saveReportTemplate(name, request);
+      setTemplates((prev) => {
+        const filtered = prev.filter((template) => template.id !== saved.id);
+        return [saved, ...filtered];
+      });
+      setTemplateSaveSuccess('Template saved successfully.');
+      setSelectedTemplateId(saved.id);
+      setLoadedTemplate(saved);
+    } catch (error) {
+      setTemplateSaveError(normaliseError(error));
+    } finally {
+      setSavingTemplate(false);
+    }
+  }, [buildTemplateRequest, loadedTemplate, templateName]);
 
   const executeReport = useCallback(
     async (request: DynamicReportRequest, targetPage: number, targetSize: number) => {
@@ -456,7 +587,7 @@ export default function ReportBuilderPage() {
   );
 
   const handleRunReport = async () => {
-    const request = buildRequest();
+    const request = buildRunRequest();
     if (!request) {
       setRunError('Select a base entity and at least one column to run a report.');
       setHasRun(false);
@@ -519,14 +650,39 @@ export default function ReportBuilderPage() {
                 placeholder="e.g. Approved loans by agent"
                 className="w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
               />
-              <button
-                type="button"
-                className="inline-flex items-center justify-center rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300 dark:bg-emerald-500 dark:hover:bg-emerald-400"
-                onClick={handleSaveTemplate}
-                disabled={savingTemplate}
-              >
-                {savingTemplate ? 'Saving…' : 'Save Template'}
-              </button>
+              {loadedTemplate ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+                    onClick={handleUpdateTemplate}
+                    disabled={savingTemplate}
+                  >
+                    {savingTemplate ? 'Saving…' : 'Update Template'}
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center rounded border border-emerald-300 px-4 py-2 text-sm font-semibold text-emerald-700 shadow-sm transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:text-emerald-300 dark:border-emerald-400/60 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
+                    onClick={handleSaveAsTemplate}
+                    disabled={
+                      savingTemplate ||
+                      !templateName.trim() ||
+                      templateName.trim() === loadedTemplate.name.trim()
+                    }
+                  >
+                    Save As
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+                  onClick={handleSaveTemplate}
+                  disabled={savingTemplate}
+                >
+                  {savingTemplate ? 'Saving…' : 'Save Template'}
+                </button>
+              )}
             </div>
             {templateSaveError ? (
               <p className="text-xs text-red-600 dark:text-red-400">{templateSaveError}</p>

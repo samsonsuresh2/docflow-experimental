@@ -45,6 +45,18 @@ export async function saveReportTemplate(
   return response.data;
 }
 
+export async function updateReportTemplate(
+  templateId: number,
+  name: string,
+  request: DynamicReportRequest,
+): Promise<ReportTemplate> {
+  const response = await client.put<ReportTemplate>(`/reports/templates/${templateId}`, {
+    name,
+    request,
+  });
+  return response.data;
+}
+
 export async function runDynamicReport(
   request: DynamicReportRequest,
   page: number,
