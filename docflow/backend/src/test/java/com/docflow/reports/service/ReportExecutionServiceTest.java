@@ -51,12 +51,17 @@ class ReportExecutionServiceTest {
                 "columns", List.of("COL1"),
                 "rows", List.of(Map.of("COL1", "v1"))
         ));
-        when(builder.build(any())).thenAnswer(invocation -> {
+        when(builder.build(any(), any())).thenAnswer(invocation -> {
             DynamicReportRequest req = invocation.getArgument(0);
+            String context = invocation.getArgument(1);
             return new DynamicReportBuilder.BuiltReport(
                     "SELECT 1",
                     Map.of(),
-                    List.of(new DynamicReportBuilder.SelectColumn("c0", "COL1", "COL1"))
+                    List.of(new DynamicReportBuilder.SelectColumn("c0", "COL1", "COL1")),
+                    List.of(),
+                    "",
+                    "",
+                    context
             );
         });
     }
@@ -76,7 +81,7 @@ class ReportExecutionServiceTest {
 
         service.run(request, 0, 25);
 
-        verify(builder).build(requestCaptor.capture());
+        verify(builder).build(requestCaptor.capture(), any());
         assertThat(requestCaptor.getValue().getFilters()).isEmpty();
     }
 

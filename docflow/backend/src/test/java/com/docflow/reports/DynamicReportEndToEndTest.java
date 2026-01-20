@@ -65,7 +65,7 @@ class DynamicReportEndToEndTest {
         jdbcTemplate.update("INSERT INTO DOCUMENT_PARENT (ID, DOCUMENT_NUMBER, STATUS) VALUES (?,?,?)", 1, "KYC001", "PENDING");
         jdbcTemplate.update("INSERT INTO DOCUMENT_PARENT (ID, DOCUMENT_NUMBER, STATUS) VALUES (?,?,?)", 2, "KYC002", "DONE");
         jdbcTemplate.update("INSERT INTO LOAN_DATA (USER_ID, LOAN_AMOUNT, COMPLETION_DATE) VALUES (?,?,DATE '2025-12-31')", "KYC001", 2000000, null);
-        jdbcTemplate.update("INSERT INTO DOCUMENT_METADATA (DOCUMENT_ID, FIELD_KEY, FIELD_VALUE) VALUES (?,?,?)", 1, "state", "Tamil Nadu");
+        jdbcTemplate.update("INSERT INTO DOCUMENT_METADATA (DOCUMENT_ID, FIELD_KEY, FIELD_VALUE) VALUES (?,?,?)", 1, "state", "\"Tamil Nadu\"");
         jdbcTemplate.update("INSERT INTO DOCUMENT_METADATA (DOCUMENT_ID, FIELD_KEY, FIELD_VALUE) VALUES (?,?,?)", 1, "age", "45");
     }
 
@@ -121,6 +121,7 @@ class DynamicReportEndToEndTest {
         runCaseKycPending();
         runCaseMetadataAge();
         runCaseCompletionDateBetween();
+        runCaseLoanAmountAndMetadata();
     }
 
     private void runCaseLoansOver15L() throws Exception {
@@ -158,7 +159,8 @@ class DynamicReportEndToEndTest {
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
-        assertThat(json.get("rows").get(0).get("meta:state").asText()).isEqualTo("Tamil Nadu");
+        String state = json.get("rows").get(0).get("meta:state").asText();
+        assertThat(state.replace("\"", "")).isEqualTo("Tamil Nadu");
         assertSingleDocument(result, "KYC001");
     }
 
@@ -214,6 +216,60 @@ class DynamicReportEndToEndTest {
                 .andExpect(status().isOk())
                 .andReturn();
         assertSingleDocument(result, "KYC001");
+    }
+
+    private void runCaseLoanAmountAndMetadata() throws Exception {
+        String payload = """
+                {
+                  "baseEntity": "LOAN_DATA",
+                  "columns": ["DOCUMENT_PARENT.DOCUMENT_NUMBER", "LOAN_AMOUNT", "meta:state"],
+                  "filters": [
+                    {"key": "LOAN_AMOUNT", "op": ">", "value": "1500000"},
+                    {"key": "meta:state", "op": "=", "value": "Tamil Nadu"}
+                  ]
+                }
+                """;
+        MvcResult result = mockMvc.perform(post("/api/reports/run")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertSingleDocument(result, "KYC001");
+    }
+
+    @Test
+    void metadataFilterHonorsPagination() throws Exception {
+        jdbcTemplate.update("INSERT INTO DOCUMENT_PARENT (ID, DOCUMENT_NUMBER, STATUS) VALUES (?,?,?)", 3, "KYC003", "PENDING");
+        jdbcTemplate.update("INSERT INTO DOCUMENT_METADATA (DOCUMENT_ID, FIELD_KEY, FIELD_VALUE) VALUES (?,?,?)", 3, "state", "\"Tamil Nadu\"");
+
+        String payload = """
+                {
+                  "baseEntity": "DOCUMENT_PARENT",
+                  "columns": ["DOCUMENT_NUMBER"],
+                  "filters": [
+                    {"key": "meta:state", "op": "=", "value": "Tamil Nadu"}
+                  ]
+                }
+                """;
+        MvcResult firstPage = mockMvc.perform(post("/api/reports/run")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .param("page", "0")
+                        .param("size", "1")
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andReturn();
+        MvcResult secondPage = mockMvc.perform(post("/api/reports/run")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .param("page", "1")
+                        .param("size", "1")
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode firstJson = objectMapper.readTree(firstPage.getResponse().getContentAsString());
+        JsonNode secondJson = objectMapper.readTree(secondPage.getResponse().getContentAsString());
+        assertThat(firstJson.get("rows").size()).isEqualTo(1);
+        assertThat(secondJson.get("rows").size()).isEqualTo(1);
     }
 
     private void assertSingleDocument(MvcResult result, String expectedDocumentNumber) throws Exception {
