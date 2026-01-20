@@ -13,10 +13,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.support.ResourcelessTransactionManager;
 
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -24,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -123,5 +127,24 @@ class FastTrackApprovalServiceTest {
         assertThat(response.getSummary().getApproved()).isEqualTo(1);
         verify(auditService).logLifecycleEvent(eq(document), eq(DocumentStatus.REVIEWED), eq(DocumentStatus.APPROVED),
             eq(DocumentLifecycleEventCatalog.FAST_TRACK_APPROVED), eq(null), eq(approver), any(OffsetDateTime.class));
+    }
+
+    @Test
+    void searchDocumentsForcesReviewedStatusAndStripsStatusFilter() {
+        Map<String, Object> filters = new LinkedHashMap<>();
+        filters.put("status", "UNDER_REVIEW");
+        filters.put("branch", "HQ");
+
+        service.searchDocuments("DOC-1", null, null, filters, Pageable.unpaged());
+
+        verify(documentService).searchDocumentsByStatuses(
+            eq("DOC-1"),
+            eq(Set.of(DocumentStatus.REVIEWED)),
+            eq(null),
+            eq(null),
+            eq(Map.of("branch", "HQ")),
+            eq(Pageable.unpaged())
+        );
+        verifyNoMoreInteractions(documentService);
     }
 }

@@ -17,6 +17,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -27,6 +28,7 @@ import java.util.Set;
 public class FastTrackApprovalService {
 
     private static final Set<DocumentStatus> ELIGIBLE_STATUSES = Set.of(DocumentStatus.REVIEWED);
+    private static final String STATUS_FILTER_KEY = "status";
 
     private final DocumentRepository documentRepository;
     private final DocumentService documentService;
@@ -48,14 +50,26 @@ public class FastTrackApprovalService {
                                                  String metadataValue,
                                                  Map<String, Object> dynamicFilters,
                                                  Pageable pageable) {
+        Map<String, Object> safeFilters = sanitizeFilters(dynamicFilters);
         return documentService.searchDocumentsByStatuses(
             documentNumber,
             ELIGIBLE_STATUSES,
             metadataKey,
             metadataValue,
-            dynamicFilters,
+            safeFilters,
             pageable
         );
+    }
+
+    private Map<String, Object> sanitizeFilters(Map<String, Object> dynamicFilters) {
+        if (dynamicFilters == null || dynamicFilters.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Object> safeFilters = new LinkedHashMap<>(dynamicFilters);
+        safeFilters.entrySet().removeIf(entry ->
+            entry.getKey() != null && entry.getKey().trim().equalsIgnoreCase(STATUS_FILTER_KEY)
+        );
+        return safeFilters;
     }
 
     public FastTrackDecisionSubmitResponse submitDecisions(List<FastTrackDecisionRequest> decisions, RequestUser user) {

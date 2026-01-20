@@ -32,6 +32,10 @@ public class DynamicReportBuilder {
     }
 
     public BuiltReport build(DynamicReportRequest request) {
+        return build(request, "ad-hoc");
+    }
+
+    public BuiltReport build(DynamicReportRequest request, String contextLabel) {
         if (request == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Request required");
         }
@@ -64,7 +68,8 @@ public class DynamicReportBuilder {
             sql.append(" WHERE ").append(String.join(" AND ", whereClauses));
         }
 
-        BuiltReport built = new BuiltReport(sql.toString(), params.asMap(), selectColumns);
+        BuiltReport built = new BuiltReport(sql.toString(), params.asMap(), selectColumns,
+                ctx.metadataKeysUsed(), ctx.metadataTable(), ctx.metadataKeyColumn(), contextLabel);
         System.out.println("Generated SQL: " + built.sql());
         return built;
     }
@@ -135,10 +140,65 @@ public class DynamicReportBuilder {
                 .append(ctx.documentAlias()).append(".").append(ctx.documentInternalPk())
                 .append(" AND dm.").append(ctx.metadataKeyColumn()).append(" = :").append(params.add(filter.column()));
 
-        String valueExpr = metadataValueExpression("dm", ctx.clobLimit(), ctx.valueIsClob(), "number".equalsIgnoreCase(filter.dataType()));
-        exists.append(" AND ").append(valueExpr).append(" ").append(toSqlOperator(op, filter.value(), params));
+        boolean numeric = "number".equalsIgnoreCase(filter.dataType());
+        String valueExpr = metadataValueExpression("dm", ctx.clobLimit(), ctx.valueIsClob(), numeric);
+        if (numeric) {
+            exists.append(" AND ").append(valueExpr).append(" ").append(toSqlOperator(op, filter.value(), params));
+        } else {
+            exists.append(" AND ").append(buildMetadataStringPredicate(valueExpr, op, filter.value(), params));
+        }
         exists.append(")");
         return exists.toString();
+    }
+
+    private String buildMetadataStringPredicate(String valueExpr, String op, String value, ParameterCollector params) {
+        String loweredExpr = "LOWER(" + valueExpr + ")";
+        String normalizedValue = value == null ? "" : value.toLowerCase(Locale.ROOT);
+        return switch (op) {
+            case "like" -> {
+                String pattern = normalizedValue.contains("%") ? normalizedValue : "%" + normalizedValue + "%";
+                String quotedPattern = buildQuotedPattern(pattern);
+                String p1 = params.add(pattern);
+                String p2 = params.add(quotedPattern);
+                yield "(" + loweredExpr + " LIKE :" + p1 + " OR " + loweredExpr + " LIKE :" + p2 + ")";
+            }
+            case "between" -> {
+                String[] parts = splitBetweenValues(normalizedValue);
+                String p1 = params.add(parts[0]);
+                String p2 = params.add(parts[1]);
+                String p3 = params.add("\"" + parts[0] + "\"");
+                String p4 = params.add("\"" + parts[1] + "\"");
+                yield "(" + loweredExpr + " BETWEEN :" + p1 + " AND :" + p2
+                        + " OR " + loweredExpr + " BETWEEN :" + p3 + " AND :" + p4 + ")";
+            }
+            default -> {
+                String p1 = params.add(normalizedValue);
+                String p2 = params.add("\"" + normalizedValue + "\"");
+                String opSql = op.toUpperCase(Locale.ROOT);
+                yield "(" + loweredExpr + " " + opSql + " :" + p1 + " OR " + loweredExpr + " " + opSql + " :" + p2 + ")";
+            }
+        };
+    }
+
+    private String buildQuotedPattern(String pattern) {
+        boolean leadingWildcard = pattern.startsWith("%");
+        boolean trailingWildcard = pattern.endsWith("%");
+        String corePattern = pattern;
+        if (leadingWildcard) {
+            corePattern = corePattern.substring(1);
+        }
+        if (trailingWildcard && !corePattern.isEmpty()) {
+            corePattern = corePattern.substring(0, corePattern.length() - 1);
+        }
+
+        String quotedPattern = corePattern.isEmpty() ? "\"\"" : "\"" + corePattern + "\"";
+        if (leadingWildcard) {
+            quotedPattern = "%" + quotedPattern;
+        }
+        if (trailingWildcard) {
+            quotedPattern = quotedPattern + "%";
+        }
+        return quotedPattern;
     }
 
     private String columnPredicate(String columnExpression, String op, String value, String dataType, ParameterCollector params) {
@@ -184,7 +244,9 @@ public class DynamicReportBuilder {
         return base;
     }
 
-    public record BuiltReport(String sql, Map<String, Object> parameters, List<SelectColumn> columns) {
+    public record BuiltReport(String sql, Map<String, Object> parameters, List<SelectColumn> columns,
+                              List<String> metadataKeys, String metadataTable, String metadataKeyColumn,
+                              String contextLabel) {
     }
 
     public record SelectColumn(String label, String displayName, String expression) {
@@ -498,6 +560,15 @@ public class DynamicReportBuilder {
                     .map(RequestedColumn::column)
                     .distinct()
                     .toList();
+        }
+
+        List<String> metadataKeysUsed() {
+            Set<String> keys = new LinkedHashSet<>(selectedMetadataKeys());
+            filters.stream()
+                    .filter(f -> f.type() == ColumnType.METADATA)
+                    .map(RequestedFilter::column)
+                    .forEach(keys::add);
+            return new ArrayList<>(keys);
         }
 
         String metadataAlias(String key) {

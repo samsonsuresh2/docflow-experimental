@@ -101,7 +101,7 @@ public class ReportExecutionService {
         dynamicRequest.setColumns(ctx.columns());
         dynamicRequest.setFilters(filters);
 
-        DynamicReportBuilder.BuiltReport built = builder.build(dynamicRequest);
+        DynamicReportBuilder.BuiltReport built = builder.build(dynamicRequest, "template:" + ctx.templateId());
         Map<String, Object> raw = executor.execute(built, page, size);
 
         List<String> columns = safeList(raw.get("columns"));
@@ -273,6 +273,10 @@ public class ReportExecutionService {
 
         List<String> columns() {
             return columns;
+        }
+
+        long templateId() {
+            return templateId;
         }
 
         ReportExecutionModels.TemplateDetail toDetail() {
