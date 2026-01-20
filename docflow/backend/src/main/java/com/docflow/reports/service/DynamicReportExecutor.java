@@ -6,6 +6,8 @@ import org.springframework.web.server.ResponseStatusException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.docflow.reports.util.JsonSafeValueConverter;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +43,7 @@ public class DynamicReportExecutor {
             Map<String, Object> row = new LinkedHashMap<>();
             for (DynamicReportBuilder.SelectColumn column : report.columns()) {
                 Object value = rs.getObject(column.label());
-                row.put(column.displayName(), value);
+                row.put(column.displayName(), JsonSafeValueConverter.convert(value));
             }
             return row;
         });
