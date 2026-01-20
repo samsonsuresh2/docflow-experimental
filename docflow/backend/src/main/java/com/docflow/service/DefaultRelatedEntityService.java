@@ -3,6 +3,7 @@ package com.docflow.service;
 import com.docflow.api.dto.RelatedEntityColumn;
 import com.docflow.api.dto.RelatedEntityResponse;
 import com.docflow.reports.config.ReportProperties;
+import com.docflow.reports.util.JsonSafeValueConverter;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -84,7 +85,7 @@ public class DefaultRelatedEntityService implements RelatedEntityService {
             Map<String, Object> row = new LinkedHashMap<>();
             for (int i = 1; i <= columnCount; i++) {
                 String key = meta.getColumnLabel(i);
-                row.put(key, rs.getObject(i));
+                row.put(key, JsonSafeValueConverter.convert(rs.getObject(i)));
             }
             rows.add(row);
         }
