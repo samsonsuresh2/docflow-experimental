@@ -61,7 +61,11 @@ public class DefaultRelatedEntityService implements RelatedEntityService {
         }
 
         String sql = "SELECT * FROM " + entity.getName() + " WHERE " + businessFkColumn + " = ?";
-        return jdbcTemplate.query(sql, ps -> ps.setObject(1, joinValue), rs -> mapResponse(entity, rs));
+        return jdbcTemplate.query(
+            sql,
+            new Object[]{ joinValue },
+            (org.springframework.jdbc.core.ResultSetExtractor<RelatedEntityResponse>) rs -> mapResponse(entity, rs)
+        );
     }
 
     private RelatedEntityResponse mapResponse(ReportProperties.EntityProperties entity, ResultSet rs) throws SQLException {

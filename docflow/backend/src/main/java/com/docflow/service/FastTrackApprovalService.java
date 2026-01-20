@@ -105,7 +105,7 @@ public class FastTrackApprovalService {
                 FastTrackDecisionResult result = new FastTrackDecisionResult();
                 result.setDocumentId(request != null ? request.getDocumentId() : null);
                 result.setOk(false);
-                result.setErrorCode(ex.code());
+                result.setErrorCode(ex.getCode());
                 result.setMessage(ex.getMessage());
                 return result;
             } catch (RuntimeException ex) {
@@ -176,10 +176,17 @@ public class FastTrackApprovalService {
         }
     }
 
-    private record FastTrackDecisionException(String code, String message) extends RuntimeException {
-        @Override
-        public String getMessage() {
-            return message;
+    private static class FastTrackDecisionException extends RuntimeException {
+
+        private final String code;
+
+        public FastTrackDecisionException(String code, String message) {
+            super(message);
+            this.code = code;
+        }
+
+        public String getCode() {
+            return code;
         }
     }
 
