@@ -146,116 +146,102 @@
         </rollback>
     </changeSet>
 
-    <changeSet id="audit-log-lifecycle-columns" author="docflow">
-        <comment>Add lifecycle audit columns to audit_log</comment>
-        <preConditions onFail="CONTINUE">
-            <not>
-                <columnExists tableName="AUDIT_LOG" columnName="DOCUMENT_ID"/>
-            </not>
-        </preConditions>
-        <addColumn tableName="AUDIT_LOG">
-            <column name="DOCUMENT_ID" type="NUMBER(19)"/>
-        </addColumn>
+<changeSet id="audit-log-lifecycle-columns" author="docflow">
+    <comment>Add lifecycle audit columns to audit_log (idempotent for Oracle)</comment>
 
-        <preConditions onFail="CONTINUE">
-            <not>
-                <columnExists tableName="AUDIT_LOG" columnName="AUDIT_CATEGORY"/>
-            </not>
-        </preConditions>
-        <addColumn tableName="AUDIT_LOG">
-            <column name="AUDIT_CATEGORY" type="VARCHAR2(50)"/>
-        </addColumn>
+    <sql splitStatements="false" stripComments="true" endDelimiter="/">
+        DECLARE
+            v_count NUMBER;
+        BEGIN
+            -- DOCUMENT_ID
+            SELECT COUNT(*) INTO v_count FROM user_tab_cols
+            WHERE table_name = 'AUDIT_LOG' AND column_name = 'DOCUMENT_ID';
+            IF v_count = 0 THEN
+                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (DOCUMENT_ID NUMBER(19))';
+            END IF;
 
-        <preConditions onFail="CONTINUE">
-            <not>
-                <columnExists tableName="AUDIT_LOG" columnName="EVENT_CODE"/>
-            </not>
-        </preConditions>
-        <addColumn tableName="AUDIT_LOG">
-            <column name="EVENT_CODE" type="VARCHAR2(100)"/>
-        </addColumn>
+            -- AUDIT_CATEGORY
+            SELECT COUNT(*) INTO v_count FROM user_tab_cols
+            WHERE table_name = 'AUDIT_LOG' AND column_name = 'AUDIT_CATEGORY';
+            IF v_count = 0 THEN
+                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (AUDIT_CATEGORY VARCHAR2(50))';
+            END IF;
 
-        <preConditions onFail="CONTINUE">
-            <not>
-                <columnExists tableName="AUDIT_LOG" columnName="FROM_STATUS"/>
-            </not>
-        </preConditions>
-        <addColumn tableName="AUDIT_LOG">
-            <column name="FROM_STATUS" type="VARCHAR2(50)"/>
-        </addColumn>
+            -- EVENT_CODE
+            SELECT COUNT(*) INTO v_count FROM user_tab_cols
+            WHERE table_name = 'AUDIT_LOG' AND column_name = 'EVENT_CODE';
+            IF v_count = 0 THEN
+                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (EVENT_CODE VARCHAR2(100))';
+            END IF;
 
-        <preConditions onFail="CONTINUE">
-            <not>
-                <columnExists tableName="AUDIT_LOG" columnName="TO_STATUS"/>
-            </not>
-        </preConditions>
-        <addColumn tableName="AUDIT_LOG">
-            <column name="TO_STATUS" type="VARCHAR2(50)"/>
-        </addColumn>
+            -- FROM_STATUS
+            SELECT COUNT(*) INTO v_count FROM user_tab_cols
+            WHERE table_name = 'AUDIT_LOG' AND column_name = 'FROM_STATUS';
+            IF v_count = 0 THEN
+                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (FROM_STATUS VARCHAR2(50))';
+            END IF;
 
-        <preConditions onFail="CONTINUE">
-            <not>
-                <columnExists tableName="AUDIT_LOG" columnName="COMMENT_TEXT"/>
-            </not>
-        </preConditions>
-        <addColumn tableName="AUDIT_LOG">
-            <column name="COMMENT_TEXT" type="VARCHAR2(4000)"/>
-        </addColumn>
+            -- TO_STATUS
+            SELECT COUNT(*) INTO v_count FROM user_tab_cols
+            WHERE table_name = 'AUDIT_LOG' AND column_name = 'TO_STATUS';
+            IF v_count = 0 THEN
+                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (TO_STATUS VARCHAR2(50))';
+            END IF;
 
-        <preConditions onFail="CONTINUE">
-            <not>
-                <columnExists tableName="AUDIT_LOG" columnName="FIELD_KEY"/>
-            </not>
-        </preConditions>
-        <addColumn tableName="AUDIT_LOG">
-            <column name="FIELD_KEY" type="VARCHAR2(150)"/>
-        </addColumn>
+            -- COMMENT_TEXT
+            SELECT COUNT(*) INTO v_count FROM user_tab_cols
+            WHERE table_name = 'AUDIT_LOG' AND column_name = 'COMMENT_TEXT';
+            IF v_count = 0 THEN
+                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (COMMENT_TEXT VARCHAR2(4000))';
+            END IF;
 
-        <preConditions onFail="CONTINUE">
-            <not>
-                <columnExists tableName="AUDIT_LOG" columnName="OLD_VALUE"/>
-            </not>
-        </preConditions>
-        <addColumn tableName="AUDIT_LOG">
-            <column name="OLD_VALUE" type="CLOB"/>
-        </addColumn>
+            -- FIELD_KEY
+            SELECT COUNT(*) INTO v_count FROM user_tab_cols
+            WHERE table_name = 'AUDIT_LOG' AND column_name = 'FIELD_KEY';
+            IF v_count = 0 THEN
+                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (FIELD_KEY VARCHAR2(150))';
+            END IF;
 
-        <preConditions onFail="CONTINUE">
-            <not>
-                <columnExists tableName="AUDIT_LOG" columnName="NEW_VALUE"/>
-            </not>
-        </preConditions>
-        <addColumn tableName="AUDIT_LOG">
-            <column name="NEW_VALUE" type="CLOB"/>
-        </addColumn>
+            -- OLD_VALUE
+            SELECT COUNT(*) INTO v_count FROM user_tab_cols
+            WHERE table_name = 'AUDIT_LOG' AND column_name = 'OLD_VALUE';
+            IF v_count = 0 THEN
+                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (OLD_VALUE CLOB)';
+            END IF;
 
-        <preConditions onFail="CONTINUE">
-            <not>
-                <columnExists tableName="AUDIT_LOG" columnName="CHANGE_TYPE"/>
-            </not>
-        </preConditions>
-        <addColumn tableName="AUDIT_LOG">
-            <column name="CHANGE_TYPE" type="VARCHAR2(100)"/>
-        </addColumn>
+            -- NEW_VALUE
+            SELECT COUNT(*) INTO v_count FROM user_tab_cols
+            WHERE table_name = 'AUDIT_LOG' AND column_name = 'NEW_VALUE';
+            IF v_count = 0 THEN
+                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (NEW_VALUE CLOB)';
+            END IF;
 
-        <preConditions onFail="CONTINUE">
-            <not>
-                <columnExists tableName="AUDIT_LOG" columnName="CHANGED_BY"/>
-            </not>
-        </preConditions>
-        <addColumn tableName="AUDIT_LOG">
-            <column name="CHANGED_BY" type="VARCHAR2(100)"/>
-        </addColumn>
+            -- CHANGE_TYPE
+            SELECT COUNT(*) INTO v_count FROM user_tab_cols
+            WHERE table_name = 'AUDIT_LOG' AND column_name = 'CHANGE_TYPE';
+            IF v_count = 0 THEN
+                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (CHANGE_TYPE VARCHAR2(100))';
+            END IF;
 
-        <preConditions onFail="CONTINUE">
-            <not>
-                <columnExists tableName="AUDIT_LOG" columnName="CHANGED_AT"/>
-            </not>
-        </preConditions>
-        <addColumn tableName="AUDIT_LOG">
-            <column name="CHANGED_AT" type="TIMESTAMP(6)"/>
-        </addColumn>
-    </changeSet>
+            -- CHANGED_BY
+            SELECT COUNT(*) INTO v_count FROM user_tab_cols
+            WHERE table_name = 'AUDIT_LOG' AND column_name = 'CHANGED_BY';
+            IF v_count = 0 THEN
+                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (CHANGED_BY VARCHAR2(100))';
+            END IF;
+
+            -- CHANGED_AT
+            SELECT COUNT(*) INTO v_count FROM user_tab_cols
+            WHERE table_name = 'AUDIT_LOG' AND column_name = 'CHANGED_AT';
+            IF v_count = 0 THEN
+                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (CHANGED_AT TIMESTAMP(6))';
+            END IF;
+
+        END;
+        /
+    </sql>
+</changeSet>
+
 
     <changeSet id="seed-user-roles" author="docflow">
         <comment>Seed sample user roles (admin1/maker1/reviewer1/checker1)</comment>
