@@ -17,6 +17,9 @@ export type DynamicReportFilter = {
   key: string;
   op: string;
   value: string;
+  mode?: 'FIXED_VALUE' | 'USER_INPUT';
+  label?: string;
+  dataType?: string;
 };
 
 export type DynamicReportRequest = {

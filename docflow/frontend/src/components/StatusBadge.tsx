@@ -2,8 +2,8 @@ import { DocumentStatus, normalizeStatus } from '../lib/documentStatus';
 
 const STATUS_STYLES: Record<DocumentStatus, { label: string; className: string }> = {
   DRAFT: { label: 'Draft', className: 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-100' },
-  SUBMITTED: {
-    label: 'Submitted',
+  OPEN: {
+    label: 'Open',
     className: 'bg-blue-200 text-blue-800 dark:bg-blue-500/30 dark:text-blue-100',
   },
   UNDER_REVIEW: {

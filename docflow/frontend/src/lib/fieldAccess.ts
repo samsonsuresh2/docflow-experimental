@@ -122,15 +122,9 @@ function normalizeStatusForAccess(status: StatusValue): string | null {
     return null;
   }
   const normalized = typeof status === 'string' ? status.trim().toUpperCase() : String(status);
-  if (normalized === 'OPEN' || normalized === 'SUBMITTED') {
-    return 'OPEN';
-  }
   const mapped = normalizeStatus(normalized);
   if (!mapped) {
     return normalized;
-  }
-  if (mapped.toUpperCase() === 'SUBMITTED') {
-    return 'OPEN';
   }
   return mapped.toUpperCase();
 }

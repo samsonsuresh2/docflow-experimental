@@ -18,9 +18,11 @@ import com.docflow.storage.StorageAdapter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,6 +37,8 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -514,6 +518,29 @@ public class DefaultDocumentService implements DocumentService {
                                                           String metadataValue) {
         Map<String, Object> submittedFilters = dynamicFilters != null ? dynamicFilters : Map.of();
         List<FilterDefinition> definitions = configService.getReviewFilterDefinitions();
+        if (!submittedFilters.isEmpty()) {
+            Set<String> allowedKeys = definitions.stream()
+                .map(FilterDefinition::getKey)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(key -> !key.isEmpty())
+                .collect(Collectors.toCollection(TreeSet::new));
+            List<String> unknownKeys = submittedFilters.keySet().stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(key -> !key.isEmpty())
+                .filter(key -> !allowedKeys.contains(key))
+                .sorted()
+                .toList();
+            if (!unknownKeys.isEmpty()) {
+                String allowedList = allowedKeys.isEmpty() ? "(none)" : String.join(", ", allowedKeys);
+                throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Unsupported review filter(s): " + String.join(", ", unknownKeys)
+                        + ". Allowed filters: " + allowedList
+                );
+            }
+        }
         Map<String, Object> normalizedFilters = new LinkedHashMap<>(submittedFilters);
 
         List<DocumentSearchFilter> filters = new ArrayList<>();
