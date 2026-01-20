@@ -52,6 +52,7 @@ type StatusFilter =
   | 'DRAFT'
   | 'OPEN'
   | 'UNDER_REVIEW'
+  | 'REVIEWED'
   | 'APPROVED'
   | 'REJECTED'
   | 'CLOSED';
@@ -64,6 +65,7 @@ const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: 'DRAFT', label: 'Draft' },
   { value: 'OPEN', label: 'Open' },
   { value: 'UNDER_REVIEW', label: 'Under Review' },
+  { value: 'REVIEWED', label: 'Reviewed' },
   { value: 'APPROVED', label: 'Approved' },
   { value: 'REJECTED', label: 'Rejected' },
   { value: 'CLOSED', label: 'Closed' },
@@ -513,6 +515,9 @@ export default function Review() {
           break;
         case 'startReview':
           await api.put(`/documents/${document.id}/under-review`, commentPayload);
+          break;
+        case 'reviewApprove':
+          await api.put(`/documents/${document.id}/review-approve`, commentPayload);
           break;
         case 'approve':
           await api.put(`/documents/${document.id}/approve`, commentPayload);

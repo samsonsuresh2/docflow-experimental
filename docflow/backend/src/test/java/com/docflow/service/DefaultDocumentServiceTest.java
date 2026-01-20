@@ -119,9 +119,10 @@ class DefaultDocumentServiceTest {
     @Test
     void updateStatusRejectsMissingRequiredFieldsForStatus() {
         when(configService.getUploadFieldsConfig()).thenReturn("[{\"name\":\"field1\",\"requiredAtStatuses\":[\"APPROVED\"]}]");
+        sampleDocument.setStatus(DocumentStatus.REVIEWED);
         when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
         when(requestUserContext.getCurrentUser()).thenReturn(Optional.of(new RequestUser("approver", Set.of("APPROVER"), "APPROVER")));
-        doNothing().when(workflowPermissionService).assertAllowed(eq("APPROVER"), eq(DocumentStatus.DRAFT), eq(WorkflowActionCodes.APPROVE));
+        doNothing().when(workflowPermissionService).assertAllowed(eq("APPROVER"), eq(DocumentStatus.REVIEWED), eq(WorkflowActionCodes.APPROVE));
 
         assertThatThrownBy(() -> service.updateStatus(1L, DocumentStatus.APPROVED, new RequestUser("approver", Set.of("APPROVER"), "APPROVER"), WorkflowActionCodes.APPROVE, null))
             .isInstanceOf(ResponseStatusException.class)
@@ -160,17 +161,92 @@ class DefaultDocumentServiceTest {
         when(configService.getUploadFieldsConfig()).thenReturn("[]");
         doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Forbidden"))
             .when(workflowPermissionService)
-            .assertAllowed(eq("MAKER"), eq(DocumentStatus.DRAFT), eq(WorkflowActionCodes.APPROVE));
+            .assertAllowed(eq("MAKER"), eq(DocumentStatus.DRAFT), eq(WorkflowActionCodes.SUBMIT));
 
         assertThatThrownBy(() -> service.updateStatus(
             1L,
-            DocumentStatus.APPROVED,
+            DocumentStatus.OPEN,
             new RequestUser("maker1", Set.of("MAKER"), "MAKER"),
-            WorkflowActionCodes.APPROVE,
+            WorkflowActionCodes.SUBMIT,
             null
         ))
             .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("cannot perform action APPROVE");
+            .hasMessageContaining("cannot perform action SUBMIT");
+    }
+
+    @Test
+    void reviewerApproveMovesToReviewed() {
+        sampleDocument.setStatus(DocumentStatus.UNDER_REVIEW);
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
+        when(configService.getUploadFieldsConfig()).thenReturn("[]");
+        doNothing().when(workflowPermissionService)
+            .assertAllowed(eq("REVIEWER"), eq(DocumentStatus.UNDER_REVIEW), eq(WorkflowActionCodes.REVIEW_APPROVE));
+
+        service.reviewApprove(1L, new RequestUser("reviewer1", Set.of("REVIEWER"), "REVIEWER"), "Looks good");
+
+        assertThat(sampleDocument.getStatus()).isEqualTo(DocumentStatus.REVIEWED);
+        verify(auditService).logLifecycleEvent(eq(sampleDocument), eq(DocumentStatus.UNDER_REVIEW), eq(DocumentStatus.REVIEWED),
+            eq(DocumentLifecycleEventCatalog.REVIEW_APPROVED), eq("Looks good"), any(), any());
+    }
+
+    @Test
+    void approverApproveMovesToApproved() {
+        sampleDocument.setStatus(DocumentStatus.REVIEWED);
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
+        when(configService.getUploadFieldsConfig()).thenReturn("[]");
+        doNothing().when(workflowPermissionService)
+            .assertAllowed(eq("APPROVER"), eq(DocumentStatus.REVIEWED), eq(WorkflowActionCodes.APPROVE));
+
+        service.approve(1L, new RequestUser("approver1", Set.of("APPROVER"), "APPROVER"), null);
+
+        assertThat(sampleDocument.getStatus()).isEqualTo(DocumentStatus.APPROVED);
+        verify(auditService).logLifecycleEvent(eq(sampleDocument), eq(DocumentStatus.REVIEWED), eq(DocumentStatus.APPROVED),
+            eq(DocumentLifecycleEventCatalog.APPROVED), isNull(), any(), any());
+    }
+
+    @Test
+    void reviewerCannotFinalApproveFromUnderReview() {
+        sampleDocument.setStatus(DocumentStatus.UNDER_REVIEW);
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
+        when(configService.getUploadFieldsConfig()).thenReturn("[]");
+
+        assertThatThrownBy(() -> service.approve(
+            1L,
+            new RequestUser("reviewer1", Set.of("REVIEWER"), "REVIEWER"),
+            null
+        ))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Final approval requires REVIEWED");
+    }
+
+    @Test
+    void reviewerCannotFinalApproveFromReviewed() {
+        sampleDocument.setStatus(DocumentStatus.REVIEWED);
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
+        when(configService.getUploadFieldsConfig()).thenReturn("[]");
+
+        assertThatThrownBy(() -> service.approve(
+            1L,
+            new RequestUser("reviewer1", Set.of("REVIEWER"), "REVIEWER"),
+            null
+        ))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Only approvers can issue final approval");
+    }
+
+    @Test
+    void approverCannotFinalApproveFromUnderReview() {
+        sampleDocument.setStatus(DocumentStatus.UNDER_REVIEW);
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
+        when(configService.getUploadFieldsConfig()).thenReturn("[]");
+
+        assertThatThrownBy(() -> service.approve(
+            1L,
+            new RequestUser("approver1", Set.of("APPROVER"), "APPROVER"),
+            null
+        ))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Final approval requires REVIEWED");
     }
 
     @Test
