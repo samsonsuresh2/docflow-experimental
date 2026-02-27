@@ -1,10 +1,10 @@
 package com.docflow.web;
 
-import com.docflow.api.dto.UploadFieldsRequest;
-import com.docflow.api.dto.UploadFieldsResponse;
+import com.docflow.api.dto.*;
 import com.docflow.context.RequestUser;
 import com.docflow.context.RequestUserContext;
 import com.docflow.service.ConfigService;
+import com.docflow.service.schema.UploadSchemaAdminService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,10 +19,12 @@ public class AdminConfigController {
 
     private final ConfigService configService;
     private final RequestUserContext requestUserContext;
+    private final UploadSchemaAdminService uploadSchemaAdminService;
 
-    public AdminConfigController(ConfigService configService, RequestUserContext requestUserContext) {
+    public AdminConfigController(ConfigService configService, RequestUserContext requestUserContext, UploadSchemaAdminService uploadSchemaAdminService) {
         this.configService = configService;
         this.requestUserContext = requestUserContext;
+        this.uploadSchemaAdminService = uploadSchemaAdminService;
     }
 
     @GetMapping("/upload")
@@ -50,4 +52,28 @@ public class AdminConfigController {
         String configJson = configService.upsertReviewFilterConfig(request.getConfigJson(), user);
         return ResponseEntity.ok(new UploadFieldsResponse(configJson));
     }
+
+    @GetMapping("/upload-schema")
+    public ResponseEntity<SchemaAdminSnapshotResponse> getUploadSchemaSnapshot() {
+        UploadSchemaAdminService.UploadSchemaSnapshot snapshot = uploadSchemaAdminService.getCurrentSnapshot();
+        return ResponseEntity.ok(new SchemaAdminSnapshotResponse(
+            SchemaConfigResponse.from(snapshot.active()),
+            SchemaConfigResponse.from(snapshot.sandbox())
+        ));
+    }
+
+    @PostMapping("/upload-schema/sandbox")
+    public ResponseEntity<SchemaConfigResponse> saveSandbox(@Valid @RequestBody SandboxSchemaRequest request) {
+        RequestUser user = requestUserContext.requireUser();
+        return ResponseEntity.ok(SchemaConfigResponse.from(
+            uploadSchemaAdminService.saveSandbox(request.getAdminConfigJson(), request.getValidationSchemaJson(), user)
+        ));
+    }
+
+    @PostMapping("/upload-schema/promote")
+    public ResponseEntity<SchemaConfigResponse> promoteSandboxToActive() {
+        RequestUser user = requestUserContext.requireUser();
+        return ResponseEntity.ok(SchemaConfigResponse.from(uploadSchemaAdminService.promoteSandboxToActive(user)));
+    }
+
 }

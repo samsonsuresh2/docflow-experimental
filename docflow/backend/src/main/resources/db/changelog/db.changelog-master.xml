@@ -120,7 +120,7 @@
                 <constraints primaryKey="true" nullable="false"/>
             </column>
             <column name="config_key" type="VARCHAR2(150)">
-                <constraints nullable="false" unique="true"/>
+                <constraints nullable="false"/>
             </column>
             <column name="config_value" type="CLOB">
                 <constraints nullable="false"/>
@@ -816,5 +816,55 @@ WHEN NOT MATCHED THEN
         ]]></sql>
     </changeSet>
 
-    
+
+    <changeSet id="020-upload-schema-versioning" author="docflow">
+        <addColumn tableName="app_config">
+            <column name="schema_status" type="VARCHAR2(30)"/>
+            <column name="schema_version" type="NUMBER(10)"/>
+            <column name="validation_schema_json" type="CLOB"/>
+        </addColumn>
+
+        <addColumn tableName="document_parent">
+            <column name="schema_binding_mode" type="VARCHAR2(30)" defaultValue="FIXED_VERSION"/>
+            <column name="schema_version" type="NUMBER(10)" defaultValueNumeric="1"/>
+        </addColumn>
+        <addNotNullConstraint tableName="document_parent" columnName="schema_binding_mode" columnDataType="VARCHAR2(30)"/>
+        <addNotNullConstraint tableName="document_parent" columnName="schema_version" columnDataType="NUMBER(10)"/>
+
+        <createIndex tableName="document_parent" indexName="idx_document_parent_schema_bind">
+            <column name="schema_binding_mode"/>
+            <column name="schema_version"/>
+        </createIndex>
+        <createIndex tableName="app_config" indexName="idx_app_cfg_upload_schema_status">
+            <column name="config_key"/>
+            <column name="schema_status"/>
+        </createIndex>
+        <createIndex tableName="app_config" indexName="idx_app_cfg_upload_schema_version">
+            <column name="config_key"/>
+            <column name="schema_version"/>
+        </createIndex>
+
+        <sql splitStatements="false" stripComments="true" endDelimiter="/">
+            DECLARE
+                v_count NUMBER;
+                v_upload CLOB;
+            BEGIN
+                BEGIN
+                    SELECT config_value INTO v_upload FROM app_config WHERE config_key = 'UPLOAD_CONFIG' AND ROWNUM = 1;
+                EXCEPTION
+                    WHEN NO_DATA_FOUND THEN
+                        v_upload := '[]';
+                END;
+
+                SELECT COUNT(*) INTO v_count FROM app_config
+                WHERE config_key = 'UPLOAD_SCHEMA' AND schema_status = 'SANDBOX';
+                IF v_count = 0 THEN
+                    INSERT INTO app_config (config_key, config_value, schema_status, schema_version, validation_schema_json, created_by, created_at, updated_by, updated_at)
+                    VALUES ('UPLOAD_SCHEMA', v_upload, 'SANDBOX', 0, v_upload, 'SYSTEM', SYSTIMESTAMP, 'SYSTEM', SYSTIMESTAMP);
+                END IF;
+            END;
+            /
+        </sql>
+    </changeSet>
+
 </databaseChangeLog>
