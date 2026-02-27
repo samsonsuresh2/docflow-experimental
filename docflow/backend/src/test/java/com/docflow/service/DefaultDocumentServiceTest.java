@@ -8,6 +8,8 @@ import com.docflow.domain.repository.DocumentRepository;
 import com.docflow.api.dto.FilterDefinition;
 import com.docflow.api.dto.FilterSource;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.docflow.domain.AppConfig;
+import com.docflow.service.schema.DocumentSchemaResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -54,6 +56,8 @@ class DefaultDocumentServiceTest {
 
     @Mock
     private WorkflowPermissionService workflowPermissionService;
+    @Mock
+    private DocumentSchemaResolver documentSchemaResolver;
 
     @InjectMocks
     private DefaultDocumentService service;
@@ -71,6 +75,12 @@ class DefaultDocumentServiceTest {
         sampleDocument.setCreatedBy("maker1");
         sampleDocument.setStatus(DocumentStatus.DRAFT);
         when(metadataService.getMetadata(any())).thenReturn(Map.of());
+        AppConfig schemaConfig = new AppConfig();
+        schemaConfig.setConfigValue("[]");
+        when(documentSchemaResolver.resolveValidationSchema(any())).thenReturn(schemaConfig);
+        when(documentSchemaResolver.resolveForCreate()).thenReturn(
+            new DocumentSchemaResolver.SchemaBinding(com.docflow.domain.DocumentSchemaBindingMode.FIXED_VERSION, 1)
+        );
     }
 
     @Test
