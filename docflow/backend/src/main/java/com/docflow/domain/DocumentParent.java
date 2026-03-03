@@ -38,6 +38,13 @@ public class DocumentParent {
     @Column(name = "FILE_PATH")
     private String filePath;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "schema_binding_mode", nullable = false)
+    private DocumentSchemaBindingMode schemaBindingMode;
+
+    @Column(name = "schema_version", nullable = false)
+    private Integer schemaVersion;
+
     public Long getId() {
         return id;
     }
@@ -104,5 +111,21 @@ public class DocumentParent {
 
     public void setFilePath(String filePath) {
         this.filePath = filePath;
+    }
+
+    public DocumentSchemaBindingMode getSchemaBindingMode() {
+        return schemaBindingMode;
+    }
+
+    public void setSchemaBindingMode(DocumentSchemaBindingMode schemaBindingMode) {
+        this.schemaBindingMode = schemaBindingMode;
+    }
+
+    public Integer getSchemaVersion() {
+        return schemaVersion;
+    }
+
+    public void setSchemaVersion(Integer schemaVersion) {
+        this.schemaVersion = schemaVersion;
     }
 }

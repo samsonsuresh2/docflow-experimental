@@ -6,6 +6,20 @@ interface ConfigResponse {
   configJson: string | null;
 }
 
+interface SchemaConfigResponse {
+  status: 'SANDBOX' | 'ACTIVE' | 'DEPRECATED';
+  version: number;
+  adminConfigJson: string | null;
+  validationSchemaJson: string | null;
+  updatedAt?: string | null;
+}
+
+interface SchemaAdminSnapshotResponse {
+  bindingStrategy: 'SANDBOX_ONLY' | 'ACTIVE_ONLY';
+  active: SchemaConfigResponse | null;
+  sandbox: SchemaConfigResponse | null;
+}
+
 type AdminConfigView = 'upload' | 'reviewFilters';
 
 const UPLOAD_DEFAULT_TEMPLATE = `[
@@ -64,8 +78,19 @@ export default function Admin() {
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [schemaSnapshot, setSchemaSnapshot] = useState<SchemaAdminSnapshotResponse | null>(null);
 
   const currentOption = useMemo(() => ADMIN_CONFIG_OPTIONS[activeConfig], [activeConfig]);
+  const bindingStrategy = schemaSnapshot?.bindingStrategy ?? 'ACTIVE_ONLY';
+  const isSandboxMode = bindingStrategy === 'SANDBOX_ONLY';
+  const isUploadView = activeConfig === 'upload';
+  const uploadEditable = isUploadView && isSandboxMode;
+
+  const loadSchemaSnapshot = async () => {
+    const response = await api.get<SchemaAdminSnapshotResponse>('/admin/config/upload-schema');
+    setSchemaSnapshot(response.data);
+    return response.data;
+  };
 
   useEffect(() => {
     if (!user || user.role !== 'ADMIN') {
@@ -76,21 +101,40 @@ export default function Admin() {
     const loadConfig = async () => {
       try {
         setLoading(true);
-        const response = await api.get<ConfigResponse>(currentOption.endpoint);
-        if (!isMounted) {
-          return;
-        }
-        const raw = response.data.configJson;
-        if (raw) {
-          try {
-            setConfigText(JSON.stringify(JSON.parse(raw), null, 2));
-          } catch {
-            setConfigText(raw);
+        setErrorMessage(null);
+
+        if (activeConfig === 'upload') {
+          const snapshot = await loadSchemaSnapshot();
+          if (!isMounted) {
+            return;
+          }
+          const raw = snapshot.sandbox?.adminConfigJson;
+          if (raw) {
+            try {
+              setConfigText(JSON.stringify(JSON.parse(raw), null, 2));
+            } catch {
+              setConfigText(raw);
+            }
+          } else {
+            setConfigText(JSON.stringify(JSON.parse(currentOption.defaultTemplate), null, 2));
           }
         } else {
-          setConfigText(JSON.stringify(JSON.parse(currentOption.defaultTemplate), null, 2));
+          const response = await api.get<ConfigResponse>(currentOption.endpoint);
+          if (!isMounted) {
+            return;
+          }
+          const raw = response.data.configJson;
+          if (raw) {
+            try {
+              setConfigText(JSON.stringify(JSON.parse(raw), null, 2));
+            } catch {
+              setConfigText(raw);
+            }
+          } else {
+            setConfigText(JSON.stringify(JSON.parse(currentOption.defaultTemplate), null, 2));
+          }
         }
-      } catch (error) {
+      } catch {
         if (isMounted) {
           setErrorMessage('Failed to load configuration.');
           setConfigText(JSON.stringify(JSON.parse(currentOption.defaultTemplate), null, 2));
@@ -102,12 +146,12 @@ export default function Admin() {
       }
     };
 
-    loadConfig();
+    void loadConfig();
 
     return () => {
       isMounted = false;
     };
-  }, [currentOption, user]);
+  }, [currentOption, user, activeConfig]);
 
   if (!user) {
     return <AuthRequired message="Please sign in to administer configuration." />;
@@ -122,11 +166,24 @@ export default function Admin() {
     setStatusMessage(null);
     setErrorMessage(null);
 
+    if (isUploadView && !uploadEditable) {
+      setErrorMessage('Editing is disabled in Active mode. Use Sandbox mode in lower environments to draft/test, then promote.');
+      return;
+    }
+
     try {
       const parsed = JSON.parse(configText);
       const formatted = JSON.stringify(parsed);
       setSaving(true);
-      await api.post(currentOption.endpoint, { configJson: formatted });
+      if (activeConfig === 'upload') {
+        await api.post('/admin/config/upload-schema/sandbox', {
+          adminConfigJson: formatted,
+          validationSchemaJson: formatted,
+        });
+        await loadSchemaSnapshot();
+      } else {
+        await api.post(currentOption.endpoint, { configJson: formatted });
+      }
       setStatusMessage('Configuration saved successfully.');
       setConfigText(JSON.stringify(parsed, null, 2));
     } catch (error) {
@@ -140,13 +197,31 @@ export default function Admin() {
     }
   };
 
+  const handlePromote = async () => {
+    if (!window.confirm('This will create a new Active version from Sandbox and deprecate the previous Active. Continue?')) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const response = await api.post<SchemaConfigResponse>('/admin/config/upload-schema/promote');
+      await loadSchemaSnapshot();
+      setStatusMessage(`Released as Active version v${response.data.version}`);
+      setErrorMessage(null);
+    } catch {
+      setErrorMessage('Unable to promote Sandbox to Active.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handlePrettify = () => {
     try {
       const parsed = JSON.parse(configText);
       setConfigText(JSON.stringify(parsed, null, 2));
       setStatusMessage('Configuration formatted.');
       setErrorMessage(null);
-    } catch (error) {
+    } catch {
       setErrorMessage('Unable to format invalid JSON.');
     }
   };
@@ -158,6 +233,11 @@ export default function Admin() {
           <div>
             <h1 className="text-xl font-semibold text-slate-800 dark:text-slate-100">{currentOption.label}</h1>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{currentOption.description}</p>
+            {isUploadView ? (
+              <span className="mt-3 inline-flex rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
+                {isSandboxMode ? 'SANDBOX MODE (Draft)' : 'ACTIVE MODE (Released)'}
+              </span>
+            ) : null}
           </div>
           <div className="flex flex-col text-sm">
             <label
@@ -183,6 +263,21 @@ export default function Admin() {
           </div>
         </div>
       </div>
+
+      {isUploadView ? (
+        <div className="rounded border border-slate-200 bg-white p-4 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
+          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Schema State</h2>
+          <div className="mt-2 grid gap-2 text-sm text-slate-700 dark:text-slate-200 md:grid-cols-2">
+            <p>Sandbox Version: {schemaSnapshot?.sandbox?.version != null ? `v${schemaSnapshot.sandbox.version}` : 'Not available'}</p>
+            <p>Active Version: {schemaSnapshot?.active?.version != null ? `v${schemaSnapshot.active.version}` : 'Not promoted yet'}</p>
+            {schemaSnapshot?.sandbox?.updatedAt ? <p>Last updated: {new Date(schemaSnapshot.sandbox.updatedAt).toLocaleString()}</p> : null}
+          </div>
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+            Sandbox = editable draft used for lifecycle testing. Promote copies sandbox to a new active release.
+          </p>
+        </div>
+      ) : null}
+
       <form
         className="space-y-4 rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900"
         onSubmit={handleSave}
@@ -196,9 +291,14 @@ export default function Admin() {
             className="mt-1 w-full rounded border border-slate-300 px-3 py-2 font-mono text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
             value={configText}
             onChange={(event) => setConfigText(event.target.value)}
-            disabled={loading || saving}
+            disabled={loading || saving || (isUploadView && !uploadEditable)}
           />
         </label>
+        {isUploadView && !uploadEditable ? (
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            Editing is disabled in Active mode. Use Sandbox mode in lower environments to draft/test, then promote.
+          </p>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -211,10 +311,20 @@ export default function Admin() {
           <button
             type="submit"
             className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-400 dark:disabled:bg-blue-400/50"
-            disabled={loading || saving}
+            disabled={loading || saving || (isUploadView && !uploadEditable)}
           >
             {saving ? 'Saving…' : 'Save Configuration'}
           </button>
+          {isUploadView && isSandboxMode ? (
+            <button
+              type="button"
+              className="inline-flex items-center rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300 dark:bg-emerald-500 dark:hover:bg-emerald-400 dark:disabled:bg-emerald-400/50"
+              onClick={handlePromote}
+              disabled={loading || saving}
+            >
+              Promote to Active (Release)
+            </button>
+          ) : null}
         </div>
         {loading ? <p className="text-sm text-slate-500 dark:text-slate-300">Loading configuration…</p> : null}
         {errorMessage ? <p className="text-sm text-red-600 dark:text-red-400">{errorMessage}</p> : null}
