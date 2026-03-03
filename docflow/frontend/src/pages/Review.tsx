@@ -948,6 +948,7 @@ export default function Review() {
                     <div>
                       <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{document.title}</h2>
                       <p className="text-sm text-slate-600 dark:text-slate-300">Document #{document.documentNumber}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Schema: {document.schemaBindingMode === 'FLOATING_SANDBOX' ? 'SANDBOX v0' : `v${document.schemaVersion ?? '—'}`}</p>
                     </div>
                     <StatusBadge status={document.status} />
                   </div>

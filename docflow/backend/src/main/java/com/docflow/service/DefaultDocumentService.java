@@ -5,9 +5,11 @@ import com.docflow.api.dto.DocumentSummary;
 import com.docflow.api.dto.DocumentUploadMetadata;
 import com.docflow.api.dto.FilterDefinition;
 import com.docflow.context.RequestUser;
+import com.docflow.domain.AppConfig;
 import com.docflow.domain.AuditLog;
 import com.docflow.domain.DocumentParent;
 import com.docflow.domain.DocumentStatus;
+import com.docflow.domain.SchemaBindingMode;
 import com.docflow.domain.repository.DocumentRepository;
 import com.docflow.service.form.FieldAccessDecision;
 import com.docflow.service.form.FieldAccessEvaluator;
@@ -84,6 +86,7 @@ public class DefaultDocumentService implements DocumentService {
         document.setStatus(DocumentStatus.DRAFT);
         document.setCreatedBy(user.userId());
         document.setCreatedAt(now);
+        applySchemaBinding(document);
         DocumentParent saved = documentRepository.save(document);
 
         saved.setDocumentNumber(generateDocumentNumber(saved.getId()));
@@ -178,7 +181,7 @@ public class DefaultDocumentService implements DocumentService {
         String resolvedAction = resolveActionCode(previousStatus, status, action);
         workflowPermissionService.assertAllowed(user.activeRole(), previousStatus, resolvedAction);
 
-        List<UploadFieldDefinition> definitions = uploadFieldConfigParser.parse(configService.getUploadFieldsConfig());
+        List<UploadFieldDefinition> definitions = uploadFieldConfigParser.parse(resolveDocumentSchemaConfig(document));
         Map<String, Object> existingMetadata = metadataService.getMetadata(document);
         enforceRequiredFields(definitions, status, existingMetadata);
 
@@ -206,7 +209,7 @@ public class DefaultDocumentService implements DocumentService {
     @Override
     public DocumentResponse updateMetadata(Long id, Map<String, Object> requestedMetadata, RequestUser user) {
         DocumentParent document = requireDocument(id);
-        List<UploadFieldDefinition> definitions = uploadFieldConfigParser.parse(configService.getUploadFieldsConfig());
+        List<UploadFieldDefinition> definitions = uploadFieldConfigParser.parse(resolveDocumentSchemaConfig(document));
         Map<String, Object> safeMetadata = requestedMetadata != null ? requestedMetadata : Map.of();
         Map<String, Object> existingMetadata = metadataService.getMetadata(document);
         enforceEditability(definitions, document, existingMetadata, safeMetadata);
@@ -287,6 +290,35 @@ public class DefaultDocumentService implements DocumentService {
     @Override
     public DocumentResponse rework(Long id, RequestUser user, String comment) {
         return updateStatus(id, DocumentStatus.REWORK, user, WorkflowActionCodes.REWORK, comment);
+    }
+
+    private void applySchemaBinding(DocumentParent document) {
+        AppConfig schema = configService.resolveUploadSchemaForNewDocument();
+        Integer schemaVersion = schema.getSchemaVersion();
+        if (schemaVersion == null) {
+            throw new ResponseStatusException(HttpStatus.PRECONDITION_FAILED, "Schema version is missing");
+        }
+        if (schemaVersion == 0) {
+            document.setSchemaBindingMode(SchemaBindingMode.FLOATING_SANDBOX);
+            document.setSchemaVersion(0);
+        } else {
+            document.setSchemaBindingMode(SchemaBindingMode.FIXED_VERSION);
+            document.setSchemaVersion(schemaVersion);
+        }
+    }
+
+    private String resolveDocumentSchemaConfig(DocumentParent document) {
+        AppConfig binding = new AppConfig();
+        binding.setSchemaVersion(document.getSchemaVersion());
+        binding.setSchemaStatus((document.getSchemaBindingMode() == SchemaBindingMode.FLOATING_SANDBOX || Integer.valueOf(0).equals(document.getSchemaVersion()))
+            ? com.docflow.domain.SchemaStatus.SANDBOX
+            : com.docflow.domain.SchemaStatus.ACTIVE);
+        String config = configService.getUploadFieldsConfigForBinding(binding);
+        if (config == null) {
+            throw new ResponseStatusException(HttpStatus.PRECONDITION_FAILED,
+                "Schema configuration not found for document binding");
+        }
+        return config;
     }
 
     private void enforceRequiredFields(List<UploadFieldDefinition> definitions,
@@ -464,6 +496,8 @@ public class DefaultDocumentService implements DocumentService {
         response.setUpdatedBy(document.getUpdatedBy());
         response.setUpdatedAt(document.getUpdatedAt());
         response.setFilePath(document.getFilePath());
+        response.setSchemaBindingMode(document.getSchemaBindingMode());
+        response.setSchemaVersion(document.getSchemaVersion());
         response.setMetadata(metadataCopy);
         return response;
     }
