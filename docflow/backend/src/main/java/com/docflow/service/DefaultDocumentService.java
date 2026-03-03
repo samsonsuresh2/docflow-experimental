@@ -8,7 +8,6 @@ import com.docflow.context.RequestUser;
 import com.docflow.domain.AuditLog;
 import com.docflow.domain.DocumentParent;
 import com.docflow.domain.DocumentStatus;
-import com.docflow.service.schema.DocumentSchemaResolver;
 import com.docflow.domain.repository.DocumentRepository;
 import com.docflow.service.form.FieldAccessDecision;
 import com.docflow.service.form.FieldAccessEvaluator;
@@ -54,7 +53,6 @@ public class DefaultDocumentService implements DocumentService {
     private final com.docflow.context.RequestUserContext requestUserContext;
     private final UploadFieldConfigParser uploadFieldConfigParser;
     private final WorkflowPermissionService workflowPermissionService;
-    private final DocumentSchemaResolver documentSchemaResolver;
 
     public DefaultDocumentService(DocumentRepository documentRepository,
                                   StorageAdapter storageAdapter,
@@ -64,7 +62,6 @@ public class DefaultDocumentService implements DocumentService {
                                   ConfigService configService,
                                   com.docflow.context.RequestUserContext requestUserContext,
                                   WorkflowPermissionService workflowPermissionService,
-                                  DocumentSchemaResolver documentSchemaResolver,
                                   ObjectMapper objectMapper) {
         this.documentRepository = documentRepository;
         this.storageAdapter = storageAdapter;
@@ -74,7 +71,6 @@ public class DefaultDocumentService implements DocumentService {
         this.configService = configService;
         this.requestUserContext = requestUserContext;
         this.workflowPermissionService = workflowPermissionService;
-        this.documentSchemaResolver = documentSchemaResolver;
         this.uploadFieldConfigParser = new UploadFieldConfigParser(objectMapper);
     }
 
@@ -88,9 +84,6 @@ public class DefaultDocumentService implements DocumentService {
         document.setStatus(DocumentStatus.DRAFT);
         document.setCreatedBy(user.userId());
         document.setCreatedAt(now);
-        DocumentSchemaResolver.SchemaBinding binding = documentSchemaResolver.resolveForCreate();
-        document.setSchemaBindingMode(binding.mode());
-        document.setSchemaVersion(binding.version());
         DocumentParent saved = documentRepository.save(document);
 
         saved.setDocumentNumber(generateDocumentNumber(saved.getId()));
@@ -185,7 +178,7 @@ public class DefaultDocumentService implements DocumentService {
         String resolvedAction = resolveActionCode(previousStatus, status, action);
         workflowPermissionService.assertAllowed(user.activeRole(), previousStatus, resolvedAction);
 
-        List<UploadFieldDefinition> definitions = uploadFieldConfigParser.parse(resolveUploadConfig(document));
+        List<UploadFieldDefinition> definitions = uploadFieldConfigParser.parse(configService.getUploadFieldsConfig());
         Map<String, Object> existingMetadata = metadataService.getMetadata(document);
         enforceRequiredFields(definitions, status, existingMetadata);
 
@@ -213,7 +206,7 @@ public class DefaultDocumentService implements DocumentService {
     @Override
     public DocumentResponse updateMetadata(Long id, Map<String, Object> requestedMetadata, RequestUser user) {
         DocumentParent document = requireDocument(id);
-        List<UploadFieldDefinition> definitions = uploadFieldConfigParser.parse(resolveUploadConfig(document));
+        List<UploadFieldDefinition> definitions = uploadFieldConfigParser.parse(configService.getUploadFieldsConfig());
         Map<String, Object> safeMetadata = requestedMetadata != null ? requestedMetadata : Map.of();
         Map<String, Object> existingMetadata = metadataService.getMetadata(document);
         enforceEditability(definitions, document, existingMetadata, safeMetadata);
@@ -627,11 +620,6 @@ public class DefaultDocumentService implements DocumentService {
         }
 
         return filters;
-    }
-
-
-    private String resolveUploadConfig(DocumentParent document) {
-        return documentSchemaResolver.resolveValidationSchema(document).getConfigValue();
     }
 
     private DocumentSummary mapToSummary(DocumentParent document) {

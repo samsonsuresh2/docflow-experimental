@@ -3,9 +3,7 @@ package com.docflow.service;
 import com.docflow.api.dto.FilterDefinition;
 import com.docflow.context.RequestUser;
 import com.docflow.domain.AppConfig;
-import com.docflow.domain.UploadSchemaStatus;
 import com.docflow.domain.repository.AppConfigRepository;
-import com.docflow.service.schema.UploadSchemaAdminService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -26,49 +24,44 @@ public class DefaultConfigService implements ConfigService {
 
     private final AppConfigRepository appConfigRepository;
     private final ObjectMapper objectMapper;
-    private final UploadSchemaAdminService uploadSchemaAdminService;
 
-    public DefaultConfigService(AppConfigRepository appConfigRepository,
-                                ObjectMapper objectMapper,
-                                UploadSchemaAdminService uploadSchemaAdminService) {
+    public DefaultConfigService(AppConfigRepository appConfigRepository, ObjectMapper objectMapper) {
         this.appConfigRepository = appConfigRepository;
         this.objectMapper = objectMapper;
-        this.uploadSchemaAdminService = uploadSchemaAdminService;
     }
 
     @Override
     @Transactional(readOnly = true)
     public String getUploadFieldsConfig() {
-        return appConfigRepository.findFirstByConfigKeyAndSchemaStatus(UploadSchemaAdminService.UPLOAD_SCHEMA_KEY, UploadSchemaStatus.SANDBOX)
-            .map(AppConfig::getConfigValue)
-            .or(() -> findConfigValue(UPLOAD_CONFIG_KEY))
-            .or(() -> findConfigValue(LEGACY_UPLOAD_FIELDS_KEY))
-            .orElse(null);
+        return findConfigValue(UPLOAD_CONFIG_KEY)
+                .or(() -> findConfigValue(LEGACY_UPLOAD_FIELDS_KEY))
+                .orElse(null);
     }
 
     @Override
     public String upsertUploadFieldsConfig(String configJson, RequestUser requestUser) {
-        uploadSchemaAdminService.saveSandbox(configJson, configJson, requestUser);
-        return configJson;
+        AppConfig config = appConfigRepository.findByConfigKey(UPLOAD_CONFIG_KEY)
+                .orElseGet(AppConfig::new);
+        config.setConfigKey(UPLOAD_CONFIG_KEY);
+        config.setConfigValue(configJson);
+        config.setUpdatedBy(requestUser.userId());
+        config.setUpdatedAt(OffsetDateTime.now());
+        appConfigRepository.save(config);
+        return config.getConfigValue();
     }
 
     @Override
     @Transactional(readOnly = true)
     public String getReviewFilterConfig() {
-        return appConfigRepository.findFirstByConfigKeyAndSchemaStatusIsNull(REVIEW_FILTER_CONFIG_KEY)
-            .map(AppConfig::getConfigValue)
-            .orElse(null);
+        return findConfigValue(REVIEW_FILTER_CONFIG_KEY).orElse(null);
     }
 
     @Override
     public String upsertReviewFilterConfig(String configJson, RequestUser requestUser) {
-        AppConfig config = appConfigRepository.findFirstByConfigKeyAndSchemaStatusIsNull(REVIEW_FILTER_CONFIG_KEY)
+        AppConfig config = appConfigRepository.findByConfigKey(REVIEW_FILTER_CONFIG_KEY)
                 .orElseGet(AppConfig::new);
         config.setConfigKey(REVIEW_FILTER_CONFIG_KEY);
-        config.setSchemaStatus(null);
-        config.setSchemaVersion(null);
         config.setConfigValue(configJson);
-        config.setValidationSchemaJson(null);
         config.setUpdatedBy(requestUser.userId());
         config.setUpdatedAt(OffsetDateTime.now());
         appConfigRepository.save(config);
@@ -91,7 +84,7 @@ public class DefaultConfigService implements ConfigService {
     }
 
     private Optional<String> findConfigValue(String key) {
-        return appConfigRepository.findFirstByConfigKeyAndSchemaStatusIsNull(key)
+        return appConfigRepository.findByConfigKey(key)
                 .map(AppConfig::getConfigValue);
     }
 }

@@ -13,24 +13,12 @@ public class AppConfig {
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "app_config_seq")
     private Long id;
 
-    @Column(name = "config_key", nullable = false)
+    @Column(name = "config_key", nullable = false, unique = true)
     private String configKey;
 
     @Lob
     @Column(name = "config_value", nullable = false)
     private String configValue;
-
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "schema_status")
-    private UploadSchemaStatus schemaStatus;
-
-    @Column(name = "schema_version")
-    private Integer schemaVersion;
-
-    @Lob
-    @Column(name = "validation_schema_json")
-    private String validationSchemaJson;
 
     @Column(name = "updated_by")
     private String updatedBy;
@@ -56,31 +44,6 @@ public class AppConfig {
 
     public void setConfigValue(String configValue) {
         this.configValue = configValue;
-    }
-
-
-    public UploadSchemaStatus getSchemaStatus() {
-        return schemaStatus;
-    }
-
-    public void setSchemaStatus(UploadSchemaStatus schemaStatus) {
-        this.schemaStatus = schemaStatus;
-    }
-
-    public Integer getSchemaVersion() {
-        return schemaVersion;
-    }
-
-    public void setSchemaVersion(Integer schemaVersion) {
-        this.schemaVersion = schemaVersion;
-    }
-
-    public String getValidationSchemaJson() {
-        return validationSchemaJson;
-    }
-
-    public void setValidationSchemaJson(String validationSchemaJson) {
-        this.validationSchemaJson = validationSchemaJson;
     }
 
     public String getUpdatedBy() {

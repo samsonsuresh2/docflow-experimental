@@ -81,7 +81,3 @@ excel:
     "Branch": "branch"
     "Total Installment": "total_installment"
     "User ID": "user_id"
-
-
-schema:
-  bindingStrategy: ACTIVE_ONLY
