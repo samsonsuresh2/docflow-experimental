@@ -1,6 +1,7 @@
 package com.docflow.api.dto;
 
 import com.docflow.domain.DocumentStatus;
+import com.docflow.domain.SchemaBindingMode;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
@@ -18,6 +19,8 @@ public class DocumentResponse {
     private Map<String, Object> metadata;
     private String filePath;
     private java.util.List<String> allowedActions;
+    private SchemaBindingMode schemaBindingMode;
+    private Integer schemaVersion;
 
     public Long getId() {
         return id;
@@ -106,4 +109,21 @@ public class DocumentResponse {
     public void setAllowedActions(java.util.List<String> allowedActions) {
         this.allowedActions = allowedActions;
     }
+
+    public SchemaBindingMode getSchemaBindingMode() {
+        return schemaBindingMode;
+    }
+
+    public void setSchemaBindingMode(SchemaBindingMode schemaBindingMode) {
+        this.schemaBindingMode = schemaBindingMode;
+    }
+
+    public Integer getSchemaVersion() {
+        return schemaVersion;
+    }
+
+    public void setSchemaVersion(Integer schemaVersion) {
+        this.schemaVersion = schemaVersion;
+    }
 }
+

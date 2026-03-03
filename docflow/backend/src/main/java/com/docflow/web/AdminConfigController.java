@@ -2,9 +2,11 @@ package com.docflow.web;
 
 import com.docflow.api.dto.UploadFieldsRequest;
 import com.docflow.api.dto.UploadFieldsResponse;
+import com.docflow.api.dto.UploadSchemaStatusResponse;
 import com.docflow.context.RequestUser;
 import com.docflow.context.RequestUserContext;
 import com.docflow.service.ConfigService;
+import com.docflow.service.UploadSchemaStatusView;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,16 +28,30 @@ public class AdminConfigController {
     }
 
     @GetMapping("/upload")
-    public ResponseEntity<UploadFieldsResponse> getUploadConfig() {
-        String configJson = configService.getUploadFieldsConfig();
-        return ResponseEntity.ok(new UploadFieldsResponse(configJson));
+    public ResponseEntity<UploadSchemaStatusResponse> getUploadConfig() {
+        UploadSchemaStatusView view = configService.getUploadSchemaStatus();
+        return ResponseEntity.ok(new UploadSchemaStatusResponse(
+            view.bindingStrategy(),
+            view.activeVersion(),
+            view.sandboxVersion(),
+            view.configJson(),
+            view.updatedBy(),
+            view.updatedAt()
+        ));
     }
 
     @PostMapping("/upload")
     public ResponseEntity<UploadFieldsResponse> saveUploadConfig(@Valid @RequestBody UploadFieldsRequest request) {
         RequestUser user = requestUserContext.requireUser();
-        String configJson = configService.upsertUploadFieldsConfig(request.getConfigJson(), user);
+        String configJson = configService.saveSandboxUploadSchema(request.getConfigJson(), user);
         return ResponseEntity.ok(new UploadFieldsResponse(configJson));
+    }
+
+    @PostMapping("/upload/promote")
+    public ResponseEntity<Void> promoteUploadConfig() {
+        RequestUser user = requestUserContext.requireUser();
+        configService.promoteSandboxUploadSchema(user);
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/review-filters")

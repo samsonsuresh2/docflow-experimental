@@ -17,3 +17,36 @@ The UI now hides modules the active role cannot access. Module visibility is der
 ## Workflow permissions
 
 Workflow permissions are DB-driven via `WORKFLOW_ACTIONS` and `ROLE_WORKFLOW_ACTION_ACCESS`. The backend enforces allowed actions and returns `allowedActions` per document so the UI can render workflow buttons accordingly.
+
+## JSON Schema Versioning & Sandbox Mode
+
+DocFlow now versions upload JSON schema so existing documents remain stable even when admins evolve the schema later.
+
+- **SANDBOX** (`schema_version=0`): draft lane for schema edits and end-to-end lifecycle testing in SIT/UAT.
+- **ACTIVE** (`schema_version>=1`): released immutable lane used by production document creation.
+- **DEPRECATED**: older immutable active releases preserved for historical document validation.
+
+### End-to-end sandbox testing flow
+1. Admin saves updates into SANDBOX (editable).
+2. New documents bind according to server strategy:
+   - `SANDBOX_ONLY`: new docs bind as `FLOATING_SANDBOX` + version `0`.
+   - `ACTIVE_ONLY`: new docs bind as `FIXED_VERSION` + current active version.
+3. Document lifecycle validation always uses the bound schema:
+   - floating docs re-read current sandbox schema
+   - fixed docs always use their stored active version
+
+### Promotion flow
+- Admin promotes SANDBOX to a new ACTIVE release.
+- Promotion copies SANDBOX JSON into a brand-new ACTIVE row with incremented version.
+- Previous ACTIVE becomes DEPRECATED.
+- SANDBOX remains editable for future drafts.
+
+### Production behavior
+Set `schema.bindingStrategy=ACTIVE_ONLY` (default). In this mode document creation fails until an ACTIVE schema exists.
+
+### Configuration
+`application.yml`
+```yaml
+schema:
+  bindingStrategy: ACTIVE_ONLY # or SANDBOX_ONLY
+```

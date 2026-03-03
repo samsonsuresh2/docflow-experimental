@@ -816,5 +816,87 @@ WHEN NOT MATCHED THEN
         ]]></sql>
     </changeSet>
 
-    
+
+    <changeSet id="020-schema-versioning-app-config-document" author="docflow">
+        <comment>Add schema versioning metadata for upload schema and document bindings</comment>
+        <sql splitStatements="false"><![CDATA[
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count FROM user_tab_cols
+    WHERE table_name = 'APP_CONFIG' AND column_name = 'SCHEMA_STATUS';
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'ALTER TABLE APP_CONFIG ADD (SCHEMA_STATUS VARCHAR2(20))';
+    END IF;
+
+    SELECT COUNT(*) INTO v_count FROM user_tab_cols
+    WHERE table_name = 'APP_CONFIG' AND column_name = 'SCHEMA_VERSION';
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'ALTER TABLE APP_CONFIG ADD (SCHEMA_VERSION NUMBER(10))';
+    END IF;
+
+    FOR c IN (
+        SELECT constraint_name
+        FROM user_constraints
+        WHERE table_name = 'APP_CONFIG'
+          AND constraint_type = 'U'
+          AND constraint_name <> 'UQ_APP_CONFIG_KEY_VERSION'
+          AND constraint_name IN (
+              SELECT ucc.constraint_name
+              FROM user_cons_columns ucc
+              WHERE ucc.table_name = 'APP_CONFIG'
+              GROUP BY ucc.constraint_name
+              HAVING COUNT(*) = 1 AND MAX(ucc.column_name) = 'CONFIG_KEY'
+          )
+    ) LOOP
+        EXECUTE IMMEDIATE 'ALTER TABLE APP_CONFIG DROP CONSTRAINT ' || c.constraint_name;
+    END LOOP;
+
+    SELECT COUNT(*) INTO v_count FROM user_constraints
+    WHERE table_name = 'APP_CONFIG' AND constraint_name = 'UQ_APP_CONFIG_KEY_VERSION';
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'ALTER TABLE APP_CONFIG ADD CONSTRAINT UQ_APP_CONFIG_KEY_VERSION UNIQUE (CONFIG_KEY, SCHEMA_VERSION)';
+    END IF;
+
+    SELECT COUNT(*) INTO v_count FROM user_indexes
+    WHERE index_name = 'IDX_APP_CONFIG_KEY_STATUS';
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'CREATE INDEX IDX_APP_CONFIG_KEY_STATUS ON APP_CONFIG (CONFIG_KEY, SCHEMA_STATUS)';
+    END IF;
+
+    SELECT COUNT(*) INTO v_count FROM user_tab_cols
+    WHERE table_name = 'DOCUMENT_PARENT' AND column_name = 'SCHEMA_BINDING_MODE';
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_PARENT ADD (SCHEMA_BINDING_MODE VARCHAR2(30))';
+    END IF;
+
+    SELECT COUNT(*) INTO v_count FROM user_tab_cols
+    WHERE table_name = 'DOCUMENT_PARENT' AND column_name = 'SCHEMA_VERSION';
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_PARENT ADD (SCHEMA_VERSION NUMBER(10) DEFAULT 0)';
+        EXECUTE IMMEDIATE 'UPDATE DOCUMENT_PARENT SET SCHEMA_VERSION = 0 WHERE SCHEMA_VERSION IS NULL';
+        EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_PARENT MODIFY (SCHEMA_VERSION NOT NULL)';
+    END IF;
+
+    EXECUTE IMMEDIATE "UPDATE DOCUMENT_PARENT SET SCHEMA_BINDING_MODE = 'FLOATING_SANDBOX' WHERE SCHEMA_BINDING_MODE IS NULL AND SCHEMA_VERSION = 0";
+
+    SELECT COUNT(*) INTO v_count FROM user_indexes
+    WHERE index_name = 'IDX_DOC_SCHEMA_VERSION';
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'CREATE INDEX IDX_DOC_SCHEMA_VERSION ON DOCUMENT_PARENT (SCHEMA_VERSION)';
+    END IF;
+
+    SELECT COUNT(*) INTO v_count FROM APP_CONFIG
+    WHERE CONFIG_KEY = 'UPLOAD_CONFIG' AND SCHEMA_STATUS = 'SANDBOX';
+    IF v_count = 0 THEN
+        INSERT INTO APP_CONFIG (ID, CONFIG_KEY, CONFIG_VALUE, SCHEMA_STATUS, SCHEMA_VERSION, UPDATED_BY, UPDATED_AT)
+        SELECT APP_CONFIG_SEQ.NEXTVAL, 'UPLOAD_CONFIG', ac.CONFIG_VALUE, 'SANDBOX', 0, ac.UPDATED_BY, ac.UPDATED_AT
+        FROM APP_CONFIG ac
+        WHERE ac.CONFIG_KEY = 'UPLOAD_CONFIG' AND ac.SCHEMA_STATUS IS NULL
+        FETCH FIRST 1 ROWS ONLY;
+    END IF;
+END;
+        ]]></sql>
+    </changeSet>
+
 </databaseChangeLog>

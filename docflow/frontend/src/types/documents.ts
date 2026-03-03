@@ -12,6 +12,8 @@ export interface DocumentResponse {
   allowedActions?: string[];
   createdAt?: string;
   updatedAt?: string | null;
+  schemaBindingMode?: "FIXED_VERSION" | "FLOATING_SANDBOX";
+  schemaVersion?: number;
 }
 
 export interface DocumentSummary {

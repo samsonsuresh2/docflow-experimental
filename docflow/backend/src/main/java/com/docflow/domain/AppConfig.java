@@ -13,8 +13,15 @@ public class AppConfig {
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "app_config_seq")
     private Long id;
 
-    @Column(name = "config_key", nullable = false, unique = true)
+    @Column(name = "config_key", nullable = false)
     private String configKey;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "schema_status")
+    private SchemaStatus schemaStatus;
+
+    @Column(name = "schema_version")
+    private Integer schemaVersion;
 
     @Lob
     @Column(name = "config_value", nullable = false)
@@ -44,6 +51,22 @@ public class AppConfig {
 
     public void setConfigValue(String configValue) {
         this.configValue = configValue;
+    }
+
+    public SchemaStatus getSchemaStatus() {
+        return schemaStatus;
+    }
+
+    public void setSchemaStatus(SchemaStatus schemaStatus) {
+        this.schemaStatus = schemaStatus;
+    }
+
+    public Integer getSchemaVersion() {
+        return schemaVersion;
+    }
+
+    public void setSchemaVersion(Integer schemaVersion) {
+        this.schemaVersion = schemaVersion;
     }
 
     public String getUpdatedBy() {
