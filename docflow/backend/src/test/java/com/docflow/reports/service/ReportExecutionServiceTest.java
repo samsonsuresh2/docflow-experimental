@@ -23,6 +23,7 @@ class ReportExecutionServiceTest {
     private ReportTemplateService templateService;
     private DynamicReportBuilder builder;
     private DynamicReportExecutor executor;
+    private DatePresetService datePresetService;
     private ReportExecutionService service;
 
     @BeforeEach
@@ -30,7 +31,9 @@ class ReportExecutionServiceTest {
         templateService = mock(ReportTemplateService.class);
         builder = mock(DynamicReportBuilder.class);
         executor = mock(DynamicReportExecutor.class);
-        service = new ReportExecutionService(templateService, builder, executor);
+        datePresetService = mock(DatePresetService.class);
+        service = new ReportExecutionService(templateService, builder, executor, datePresetService);
+        when(datePresetService.listPresetsForFilter(any(), any())).thenReturn(List.of());
 
         DynamicReportBuilder.BuiltReport built = new DynamicReportBuilder.BuiltReport("SELECT 1", Map.of(), List.of(), List.of(), "", "", "ctx");
         when(builder.build(any(DynamicReportRequest.class), eq("template:10"))).thenReturn(built);
@@ -142,6 +145,32 @@ class ReportExecutionServiceTest {
         blankLikeRequest.setFilters(List.of(blankLike));
 
         service.run(blankLikeRequest, 0, 25);
+    }
+
+    @Test
+    void shouldResolvePresetModeDateFilterIntoRangeFilters() {
+        when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:applicationDate", ReportFilter.FilterLogicalType.DATE));
+        when(datePresetService.listPresetsForFilter(eq("r1"), eq("meta:applicationDate")))
+                .thenReturn(List.of(new ReportExecutionModels.DatePresetOption("THIS_WEEK", "This Week", 10)));
+        when(datePresetService.resolvePreset(eq("r1"), eq("meta:applicationDate"), eq("THIS_WEEK")))
+                .thenReturn(new DatePresetService.ResolvedDateRange(java.time.LocalDate.of(2026, 3, 2), java.time.LocalDate.of(2026, 3, 8), "THIS_WEEK"));
+
+        ReportExecutionModels.RunRequest presetRequest = new ReportExecutionModels.RunRequest();
+        presetRequest.setTemplateId(10L);
+        ReportExecutionModels.RunFilter datePreset = new ReportExecutionModels.RunFilter();
+        datePreset.setKey("meta:applicationDate");
+        datePreset.setMode(ReportExecutionModels.DateFilterMode.PRESET);
+        datePreset.setPresetCode("THIS_WEEK");
+        presetRequest.setFilters(List.of(datePreset));
+
+        service.run(presetRequest, 0, 25);
+
+        ArgumentCaptor<DynamicReportRequest> captor = ArgumentCaptor.forClass(DynamicReportRequest.class);
+        verify(builder, atLeastOnce()).build(captor.capture(), eq("template:10"));
+        List<ReportFilter> applied = captor.getValue().getFilters();
+        assertEquals(2, applied.size());
+        assertEquals("GE", applied.get(0).getOp());
+        assertEquals("LE", applied.get(1).getOp());
     }
 
     private ReportTemplateResponse templateWithUserFilter(String key, ReportFilter.FilterLogicalType type) {

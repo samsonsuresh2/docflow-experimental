@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 @Service
 public class DynamicReportBuilder {
 
-    private static final Set<String> ALLOWED_OPERATORS = Set.of("EQ", "LIKE", "LT", "GT");
+    private static final Set<String> ALLOWED_OPERATORS = Set.of("EQ", "LIKE", "LT", "GT", "GE", "LE");
 
     private final ReportMetadataService metadataService;
     private final ReportProperties properties;
@@ -206,6 +206,8 @@ public class DynamicReportBuilder {
             case "EQ" -> "=";
             case "LT" -> "<";
             case "GT" -> ">";
+            case "GE" -> ">=";
+            case "LE" -> "<=";
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed: " + opCode);
         };
     }

@@ -50,6 +50,7 @@ docflow:
   auth:
     implicitMakerEnabled: true
   reports:
+    weekStartDay: MONDAY
     documentTable:
       name: DOCUMENT_PARENT
       internalPk: ID

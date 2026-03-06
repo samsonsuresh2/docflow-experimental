@@ -65,6 +65,8 @@ export type ExecutableReportFilterField = {
   type: ExecutableReportFilterType;
   allowedOps: ('EQ' | 'LIKE' | 'LT' | 'GT')[];
   dateFormat?: string | null;
+  presetEnabled?: boolean;
+  presets?: { code: string; name: string; displayOrder: number }[];
 };
 
 export type ExecutableReportTemplateDetail = {
@@ -75,8 +77,12 @@ export type ExecutableReportTemplateDetail = {
 
 export type ReportExecutionFilterInput = {
   key: string;
-  op: string;
-  value: string;
+  op?: string;
+  value?: string;
+  mode?: 'MANUAL' | 'PRESET';
+  fromValue?: string;
+  toValue?: string;
+  presetCode?: string;
 };
 
 export type ReportExecutionRunRequest = {

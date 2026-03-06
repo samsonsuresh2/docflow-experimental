@@ -29,8 +29,13 @@ public class ReportExecutionModels {
             String label,
             FieldType type,
             List<String> allowedOps,
-            String dateFormat
+            String dateFormat,
+            boolean presetEnabled,
+            List<DatePresetOption> presets
     ) {
+    }
+
+    public record DatePresetOption(String code, String name, int displayOrder) {
     }
 
     public static class RunRequest {
@@ -66,6 +71,14 @@ public class ReportExecutionModels {
 
         private String value;
 
+        private DateFilterMode mode;
+
+        private String fromValue;
+
+        private String toValue;
+
+        private String presetCode;
+
         public String getKey() {
             return key;
         }
@@ -89,6 +102,43 @@ public class ReportExecutionModels {
         public void setValue(String value) {
             this.value = value;
         }
+
+        public DateFilterMode getMode() {
+            return mode;
+        }
+
+        public void setMode(DateFilterMode mode) {
+            this.mode = mode;
+        }
+
+        public String getFromValue() {
+            return fromValue;
+        }
+
+        public void setFromValue(String fromValue) {
+            this.fromValue = fromValue;
+        }
+
+        public String getToValue() {
+            return toValue;
+        }
+
+        public void setToValue(String toValue) {
+            this.toValue = toValue;
+        }
+
+        public String getPresetCode() {
+            return presetCode;
+        }
+
+        public void setPresetCode(String presetCode) {
+            this.presetCode = presetCode;
+        }
+    }
+
+    public enum DateFilterMode {
+        MANUAL,
+        PRESET
     }
 
     public record RunResponse(List<String> columns, List<java.util.Map<String, Object>> rows, int rowCount) {

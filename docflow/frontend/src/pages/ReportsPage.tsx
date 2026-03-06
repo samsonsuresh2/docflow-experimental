@@ -14,7 +14,10 @@ import type {
 } from '../types/reports';
 import { useUser } from '../lib/UserContext';
 
-type FilterState = Record<string, { op: string; value: string }>;
+type FilterState = Record<
+  string,
+  { op: string; value: string; mode?: 'MANUAL' | 'PRESET'; fromValue?: string; toValue?: string; presetCode?: string }
+>;
 
 const OPERATOR_LABELS: Record<string, string> = { EQ: '=', LIKE: 'Contains', LT: '<', GT: '>' };
 
@@ -113,7 +116,11 @@ export default function ReportsPage() {
           setTemplateDetail(detail);
           const initialFilters: FilterState = {};
           detail.filters.forEach((filter) => {
-            initialFilters[filter.key] = { op: defaultOperator(filter), value: '' };
+            initialFilters[filter.key] = {
+              op: defaultOperator(filter),
+              value: '',
+              mode: filter.type === 'DATE' && filter.presetEnabled ? 'PRESET' : 'MANUAL',
+            };
           });
           setFiltersState(initialFilters);
           setResult(null);
@@ -170,6 +177,20 @@ export default function ReportsPage() {
     });
   };
 
+  const handleDateModeChange = (key: string, mode: 'MANUAL' | 'PRESET') => {
+    setFiltersState((prev) => {
+      const current = prev[key] ?? { op: defaultOperator(templateDetail?.filters.find((f) => f.key === key)), value: '' };
+      return { ...prev, [key]: { ...current, mode } };
+    });
+  };
+
+  const handleDateRangeValueChange = (key: string, patch: Partial<{ fromValue: string; toValue: string; presetCode: string }>) => {
+    setFiltersState((prev) => {
+      const current = prev[key] ?? { op: defaultOperator(templateDetail?.filters.find((f) => f.key === key)), value: '' };
+      return { ...prev, [key]: { ...current, ...patch } };
+    });
+  };
+
   const handleFilterOpChange = (key: string, op: string) => {
     setFiltersState((prev) => {
       const current = prev[key] ?? { op: defaultOperator(templateDetail?.filters.find((f) => f.key === key)), value: '' };
@@ -184,6 +205,22 @@ export default function ReportsPage() {
     const filters = templateDetail.filters
       .map((filter) => {
         const state = filtersState[filter.key] ?? { op: defaultOperator(filter), value: '' };
+        if (filter.type === 'DATE' && filter.presetEnabled) {
+          const mode = state.mode ?? 'PRESET';
+          if (mode === 'PRESET') {
+            if (!state.presetCode) {
+              return null;
+            }
+            return { key: filter.key, mode, presetCode: state.presetCode };
+          }
+          const fromValue = state.fromValue?.trim() ?? '';
+          const toValue = state.toValue?.trim() ?? '';
+          if (!fromValue && !toValue) {
+            return null;
+          }
+          return { key: filter.key, mode, fromValue, toValue };
+        }
+
         const op = state.op || defaultOperator(filter);
         const value = state.value?.trim() ?? '';
         if (!value) {
@@ -346,6 +383,7 @@ export default function ReportsPage() {
                       id={`op-${filter.key}`}
                       value={state.op}
                       onChange={(event) => handleFilterOpChange(filter.key, event.target.value)}
+                      disabled={filter.type === 'DATE' && filter.presetEnabled && state.mode === 'PRESET'}
                       className="w-full rounded border border-slate-300 px-2 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
                     >
                       {filter.allowedOps.map((op) => (
@@ -359,15 +397,57 @@ export default function ReportsPage() {
                     <label className="sr-only" htmlFor={`value-${filter.key}`}>
                       Value
                     </label>
-                    <input
-                      id={`value-${filter.key}`}
-                      type={filter.type === 'NUMBER' ? 'number' : filter.type === 'DATE' ? 'date' : 'text'}
-                      inputMode={filter.type === 'NUMBER' ? 'decimal' : undefined}
-                      value={state.value}
-                      onChange={(event) => handleFilterValueChange(filter.key, event.target.value)}
-                      placeholder={filter.type === 'DATE' ? filter.dateFormat ?? 'YYYY-MM-DD' : ''}
-                      className="w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-                    />
+                    {filter.type === 'DATE' && filter.presetEnabled ? (
+                      <div className="space-y-2">
+                        <select
+                          value={state.mode ?? 'PRESET'}
+                          onChange={(event) => handleDateModeChange(filter.key, event.target.value as 'MANUAL' | 'PRESET')}
+                          className="w-full rounded border border-slate-300 px-2 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                        >
+                          <option value="PRESET">Preset</option>
+                          <option value="MANUAL">Manual</option>
+                        </select>
+                        {(state.mode ?? 'PRESET') === 'PRESET' ? (
+                          <select
+                            value={state.presetCode ?? ''}
+                            onChange={(event) => handleDateRangeValueChange(filter.key, { presetCode: event.target.value })}
+                            className="w-full rounded border border-slate-300 px-2 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                          >
+                            <option value="">Select preset…</option>
+                            {(filter.presets ?? []).map((preset) => (
+                              <option key={`${filter.key}-${preset.code}`} value={preset.code}>
+                                {preset.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="date"
+                              value={state.fromValue ?? ''}
+                              onChange={(event) => handleDateRangeValueChange(filter.key, { fromValue: event.target.value })}
+                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                            />
+                            <input
+                              type="date"
+                              value={state.toValue ?? ''}
+                              onChange={(event) => handleDateRangeValueChange(filter.key, { toValue: event.target.value })}
+                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <input
+                        id={`value-${filter.key}`}
+                        type={filter.type === 'NUMBER' ? 'number' : filter.type === 'DATE' ? 'date' : 'text'}
+                        inputMode={filter.type === 'NUMBER' ? 'decimal' : undefined}
+                        value={state.value}
+                        onChange={(event) => handleFilterValueChange(filter.key, event.target.value)}
+                        placeholder={filter.type === 'DATE' ? filter.dateFormat ?? 'YYYY-MM-DD' : ''}
+                        className="w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                      />
+                    )}
                     {hint ? <p className="text-xs text-slate-500 dark:text-slate-400">{hint}</p> : null}
                   </div>
                 </div>
