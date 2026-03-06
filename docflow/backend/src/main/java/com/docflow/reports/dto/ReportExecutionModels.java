@@ -13,7 +13,7 @@ public class ReportExecutionModels {
     }
 
     public enum FieldType {
-        TEXT,
+        STRING,
         NUMBER,
         DATE
     }

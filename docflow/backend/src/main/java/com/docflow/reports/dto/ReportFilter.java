@@ -3,6 +3,9 @@ package com.docflow.reports.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class ReportFilter {
 
     public enum Mode {
@@ -24,6 +27,14 @@ public class ReportFilter {
     private String label;
 
     private String dataType;
+
+    private FilterSourceType source;
+
+    private String field;
+
+    private FilterLogicalType logicalType;
+
+    private List<FilterOperator> allowedOperators = new ArrayList<>();
 
     public String getKey() {
         return key;
@@ -71,5 +82,56 @@ public class ReportFilter {
 
     public void setDataType(String dataType) {
         this.dataType = dataType;
+    }
+
+    public FilterSourceType getSource() {
+        return source;
+    }
+
+    public void setSource(FilterSourceType source) {
+        this.source = source;
+    }
+
+    public String getField() {
+        return field;
+    }
+
+    public void setField(String field) {
+        this.field = field;
+    }
+
+    public FilterLogicalType getLogicalType() {
+        return logicalType;
+    }
+
+    public void setLogicalType(FilterLogicalType logicalType) {
+        this.logicalType = logicalType;
+    }
+
+    public List<FilterOperator> getAllowedOperators() {
+        return allowedOperators;
+    }
+
+    public void setAllowedOperators(List<FilterOperator> allowedOperators) {
+        this.allowedOperators = allowedOperators != null ? allowedOperators : new ArrayList<>();
+    }
+
+    public enum FilterSourceType {
+        DOCUMENT,
+        DOCUMENT_METADATA,
+        THIRD_PARTY_ENTITY
+    }
+
+    public enum FilterLogicalType {
+        STRING,
+        NUMBER,
+        DATE
+    }
+
+    public enum FilterOperator {
+        EQ,
+        LIKE,
+        LT,
+        GT
     }
 }

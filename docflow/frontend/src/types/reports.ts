@@ -20,6 +20,10 @@ export type DynamicReportFilter = {
   mode?: 'FIXED_VALUE' | 'USER_INPUT';
   label?: string;
   dataType?: string;
+  source?: 'DOCUMENT' | 'DOCUMENT_METADATA' | 'THIRD_PARTY_ENTITY';
+  field?: string;
+  logicalType?: 'STRING' | 'NUMBER' | 'DATE';
+  allowedOperators?: ('EQ' | 'LIKE' | 'LT' | 'GT')[];
 };
 
 export type DynamicReportRequest = {
@@ -53,13 +57,13 @@ export type ExecutableReportTemplateSummary = {
   description?: string | null;
 };
 
-export type ExecutableReportFilterType = 'TEXT' | 'NUMBER' | 'DATE';
+export type ExecutableReportFilterType = 'STRING' | 'NUMBER' | 'DATE';
 
 export type ExecutableReportFilterField = {
   key: string;
   label: string;
   type: ExecutableReportFilterType;
-  allowedOps: ('=' | '<' | '>')[];
+  allowedOps: ('EQ' | 'LIKE' | 'LT' | 'GT')[];
   dateFormat?: string | null;
 };
 

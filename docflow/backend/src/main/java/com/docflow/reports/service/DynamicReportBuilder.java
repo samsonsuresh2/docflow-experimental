@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 @Service
 public class DynamicReportBuilder {
 
-    private static final Set<String> ALLOWED_OPERATORS = Set.of("=", "<", ">", "<=", ">=", "like", "between");
+    private static final Set<String> ALLOWED_OPERATORS = Set.of("EQ", "LIKE", "LT", "GT");
 
     private final ReportMetadataService metadataService;
     private final ReportProperties properties;
@@ -103,6 +103,7 @@ public class DynamicReportBuilder {
             if (!ALLOWED_OPERATORS.contains(op)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed: " + filter.operator());
             }
+            validateOperatorForType(op, filter.dataType());
 
             switch (filter.type()) {
                 case BASE -> clauses.add(columnPredicate(ctx.baseAlias() + "." + filter.column(), op, filter.value(), filter.dataType(), params));
@@ -117,7 +118,7 @@ public class DynamicReportBuilder {
         if (ctx.selectedMetadataKeys().isEmpty()) {
             return "";
         }
-        String valueExpr = metadataValueExpression("dm", ctx.clobLimit(), ctx.valueIsClob(), false);
+        String valueExpr = metadataValueExpression("dm", ctx.clobLimit(), ctx.valueIsClob(), false, false);
         List<String> projections = new ArrayList<>();
         int idx = 0;
         for (String key : ctx.selectedMetadataKeys()) {
@@ -140,9 +141,10 @@ public class DynamicReportBuilder {
                 .append(ctx.documentAlias()).append(".").append(ctx.documentInternalPk())
                 .append(" AND dm.").append(ctx.metadataKeyColumn()).append(" = :").append(params.add(filter.column()));
 
-        boolean numeric = "number".equalsIgnoreCase(filter.dataType());
-        String valueExpr = metadataValueExpression("dm", ctx.clobLimit(), ctx.valueIsClob(), numeric);
-        if (numeric) {
+        boolean numeric = "NUMBER".equalsIgnoreCase(filter.dataType());
+        boolean date = "DATE".equalsIgnoreCase(filter.dataType());
+        String valueExpr = metadataValueExpression("dm", ctx.clobLimit(), ctx.valueIsClob(), numeric, date);
+        if (numeric || date) {
             exists.append(" AND ").append(valueExpr).append(" ").append(toSqlOperator(op, filter.value(), params));
         } else {
             exists.append(" AND ").append(buildMetadataStringPredicate(valueExpr, op, filter.value(), params));
@@ -154,92 +156,78 @@ public class DynamicReportBuilder {
     private String buildMetadataStringPredicate(String valueExpr, String op, String value, ParameterCollector params) {
         String loweredExpr = "LOWER(" + valueExpr + ")";
         String normalizedValue = value == null ? "" : value.toLowerCase(Locale.ROOT);
-        return switch (op) {
-            case "like" -> {
-                String pattern = normalizedValue.contains("%") ? normalizedValue : "%" + normalizedValue + "%";
-                String quotedPattern = buildQuotedPattern(pattern);
-                String p1 = params.add(pattern);
-                String p2 = params.add(quotedPattern);
-                yield "(" + loweredExpr + " LIKE :" + p1 + " OR " + loweredExpr + " LIKE :" + p2 + ")";
-            }
-            case "between" -> {
-                String[] parts = splitBetweenValues(normalizedValue);
-                String p1 = params.add(parts[0]);
-                String p2 = params.add(parts[1]);
-                String p3 = params.add("\"" + parts[0] + "\"");
-                String p4 = params.add("\"" + parts[1] + "\"");
-                yield "(" + loweredExpr + " BETWEEN :" + p1 + " AND :" + p2
-                        + " OR " + loweredExpr + " BETWEEN :" + p3 + " AND :" + p4 + ")";
-            }
-            default -> {
-                String p1 = params.add(normalizedValue);
-                String p2 = params.add("\"" + normalizedValue + "\"");
-                String opSql = op.toUpperCase(Locale.ROOT);
-                yield "(" + loweredExpr + " " + opSql + " :" + p1 + " OR " + loweredExpr + " " + opSql + " :" + p2 + ")";
-            }
-        };
-    }
-
-    private String buildQuotedPattern(String pattern) {
-        boolean leadingWildcard = pattern.startsWith("%");
-        boolean trailingWildcard = pattern.endsWith("%");
-        String corePattern = pattern;
-        if (leadingWildcard) {
-            corePattern = corePattern.substring(1);
+        if ("LIKE".equals(op)) {
+            String containsPattern = "%" + normalizedValue + "%";
+            String quotedContainsPattern = "%\"" + normalizedValue + "\"%";
+            String p1 = params.add(containsPattern);
+            String p2 = params.add(quotedContainsPattern);
+            return "(" + loweredExpr + " LIKE :" + p1 + " OR " + loweredExpr + " LIKE :" + p2 + ")";
         }
-        if (trailingWildcard && !corePattern.isEmpty()) {
-            corePattern = corePattern.substring(0, corePattern.length() - 1);
-        }
-
-        String quotedPattern = corePattern.isEmpty() ? "\"\"" : "\"" + corePattern + "\"";
-        if (leadingWildcard) {
-            quotedPattern = "%" + quotedPattern;
-        }
-        if (trailingWildcard) {
-            quotedPattern = quotedPattern + "%";
-        }
-        return quotedPattern;
+        String p1 = params.add(normalizedValue);
+        String p2 = params.add("\"" + normalizedValue + "\"");
+        String opSql = toSqlComparisonOperator(op);
+        return "(" + loweredExpr + " " + opSql + " :" + p1 + " OR " + loweredExpr + " " + opSql + " :" + p2 + ")";
     }
 
     private String columnPredicate(String columnExpression, String op, String value, String dataType, ParameterCollector params) {
         String left = columnExpression;
-        if ("number".equalsIgnoreCase(dataType)) {
+        if ("NUMBER".equalsIgnoreCase(dataType)) {
             left = "TO_NUMBER(" + columnExpression + ")";
+        } else if ("DATE".equalsIgnoreCase(dataType)) {
+            left = "TO_DATE(" + columnExpression + ", 'YYYY-MM-DD')";
+        } else if ("LIKE".equals(op)) {
+            left = "LOWER(" + columnExpression + ")";
         }
         return left + " " + toSqlOperator(op, value, params);
     }
 
     private String toSqlOperator(String op, String value, ParameterCollector params) {
-        return switch (op) {
-            case "like" -> "LIKE :" + params.add(value);
-            case "between" -> {
-                String[] parts = splitBetweenValues(value);
-                String p1 = params.add(parts[0]);
-                String p2 = params.add(parts[1]);
-                yield "BETWEEN :" + p1 + " AND :" + p2;
-            }
-            default -> op.toUpperCase(Locale.ROOT) + " :" + params.add(value);
-        };
-    }
-
-    private String[] splitBetweenValues(String value) {
-        if (value == null || !value.contains(",")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Between requires two comma-separated values");
+        if ("LIKE".equals(op)) {
+            String normalized = value == null ? "" : value.toLowerCase(Locale.ROOT);
+            return "LIKE :" + params.add("%" + normalized + "%");
         }
-        String[] parts = value.split(",", 2);
-        return new String[]{parts[0].trim(), parts[1].trim()};
+        return toSqlComparisonOperator(op) + " :" + params.add(value);
     }
 
     private String normalizeOperator(String value) {
-        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        if (value == null) {
+            return "";
+        }
+        return switch (value.trim().toUpperCase(Locale.ROOT)) {
+            case "=" -> "EQ";
+            case "<" -> "LT";
+            case ">" -> "GT";
+            default -> value.trim().toUpperCase(Locale.ROOT);
+        };
     }
 
-    private String metadataValueExpression(String alias, int clobLimit, boolean valueIsClob, boolean numeric) {
+    private String toSqlComparisonOperator(String opCode) {
+        return switch (opCode) {
+            case "EQ" -> "=";
+            case "LT" -> "<";
+            case "GT" -> ">";
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed: " + opCode);
+        };
+    }
+
+    private void validateOperatorForType(String opCode, String dataType) {
+        if ("STRING".equalsIgnoreCase(dataType) && !"EQ".equals(opCode) && !"LIKE".equals(opCode)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed for STRING type: " + opCode);
+        }
+        if (("NUMBER".equalsIgnoreCase(dataType) || "DATE".equalsIgnoreCase(dataType)) && "LIKE".equals(opCode)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed for " + dataType + " type: " + opCode);
+        }
+    }
+
+    private String metadataValueExpression(String alias, int clobLimit, boolean valueIsClob, boolean numeric, boolean date) {
         String base = valueIsClob
                 ? "DBMS_LOB.SUBSTR(" + alias + "." + properties.getMetadataTable().getValueColumn() + ", " + clobLimit + ", 1)"
                 : alias + "." + properties.getMetadataTable().getValueColumn();
         if (numeric) {
             return "TO_NUMBER(" + base + ")";
+        }
+        if (date) {
+            return "TO_DATE(" + base + ", 'YYYY-MM-DD')";
         }
         return base;
     }
@@ -429,6 +417,9 @@ public class DynamicReportBuilder {
                 if (filter == null || !StringUtils.hasText(filter.getKey())) {
                     continue;
                 }
+                if (!StringUtils.hasText(filter.getValue())) {
+                    continue;
+                }
                 parsed.add(parseFilter(filter, base, documentTable, baseColumns, documentColumns, metadataKeys));
             }
             return parsed;
@@ -446,16 +437,12 @@ public class DynamicReportBuilder {
             if (!StringUtils.hasText(op)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Filter operator required");
             }
-            if (!StringUtils.hasText(value)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Filter value required for key " + key);
-            }
-
             if (key.toLowerCase(Locale.ROOT).startsWith("meta:")) {
                 String metaKey = key.substring(5);
                 if (metadataKeys.stream().noneMatch(k -> k.equalsIgnoreCase(metaKey))) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown metadata key: " + metaKey);
                 }
-                return new RequestedFilter(ColumnType.METADATA, metaKey, op, value, filter.getDataType());
+                return new RequestedFilter(ColumnType.METADATA, metaKey, op, value, resolveFilterType(filter));
             }
 
             String entity = base;
@@ -467,13 +454,20 @@ public class DynamicReportBuilder {
             }
             if (entity.equalsIgnoreCase(base)) {
                 ensureColumn(baseColumns, column, base);
-                return new RequestedFilter(ColumnType.BASE, column.toUpperCase(Locale.ROOT), op, value, filter.getDataType());
+                return new RequestedFilter(ColumnType.BASE, column.toUpperCase(Locale.ROOT), op, value, resolveFilterType(filter));
             }
             if (entity.equalsIgnoreCase(documentTable) || entity.equalsIgnoreCase("DOCUMENT") || entity.equalsIgnoreCase("DOCUMENT_PARENT")) {
                 ensureColumn(documentColumns, column, "document");
-                return new RequestedFilter(ColumnType.DOCUMENT, column.toUpperCase(Locale.ROOT), op, value, filter.getDataType());
+                return new RequestedFilter(ColumnType.DOCUMENT, column.toUpperCase(Locale.ROOT), op, value, resolveFilterType(filter));
             }
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid filter entity: " + entity);
+        }
+
+        private static String resolveFilterType(ReportFilter filter) {
+            if (filter.getLogicalType() != null) {
+                return filter.getLogicalType().name();
+            }
+            return filter.getDataType();
         }
 
         private static String requireEntity(String value) {

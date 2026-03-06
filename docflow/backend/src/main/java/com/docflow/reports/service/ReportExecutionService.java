@@ -25,8 +25,8 @@ import java.util.Set;
 @Service
 public class ReportExecutionService {
 
-    private static final List<String> DEFAULT_NUMERIC_OPS = List.of("=", "<", ">");
-    private static final List<String> DEFAULT_TEXT_OPS = List.of("=");
+    private static final List<String> STRING_OPS = List.of("EQ", "LIKE");
+    private static final List<String> NUMERIC_DATE_OPS = List.of("EQ", "LT", "GT");
     private static final String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)
             .withResolverStyle(ResolverStyle.STRICT);
@@ -75,7 +75,7 @@ public class ReportExecutionService {
             if (definition == null) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown filter key: " + input.getKey());
             }
-            String op = normalizeOp(input.getOp());
+            String op = normalizeOpCode(input.getOp());
             if (!definition.allowedOps().contains(op)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed for " + definition.label() + ": " + op);
             }
@@ -113,11 +113,14 @@ public class ReportExecutionService {
         return switch (type) {
             case NUMBER -> validateNumber(value);
             case DATE -> validateDate(value, dateFormat);
-            case TEXT -> validateText(value);
+            case STRING -> validateText(value);
         };
     }
 
     private String validateNumber(String value) {
+        if (!value.matches("^-?\\d+(\\.\\d+)?$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid number format: " + value);
+        }
         try {
             new BigDecimal(value);
             return value;
@@ -146,12 +149,17 @@ public class ReportExecutionService {
         return value.trim();
     }
 
-    private static String normalizeOp(String op) {
+    private static String normalizeOpCode(String op) {
         if (!StringUtils.hasText(op)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Filter operator required");
         }
-        String normalized = op.trim();
-        return normalized.toLowerCase(Locale.ROOT);
+        String normalized = op.trim().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "=" -> "EQ";
+            case "<" -> "LT";
+            case ">" -> "GT";
+            default -> normalized;
+        };
     }
 
     private static String normalizeKey(String key) {
@@ -240,7 +248,7 @@ public class ReportExecutionService {
                 }
                 userFilters.put(definition.lookupKey(), definition);
             } else if (StringUtils.hasText(filter.getValue())) {
-                String storedOp = normalizeFixedOp(filter.getOp());
+                String storedOp = normalizeOpCode(filter.getOp());
                 if (!definition.allowedOps().contains(storedOp)) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Fixed filter operator not allowed for " + definition.label());
                 }
@@ -295,9 +303,9 @@ public class ReportExecutionService {
         private static TemplateFilterDefinition toDefinition(ReportFilter filter) {
             String originalKey = filter.getKey().trim();
             String lookupKey = normalizeKey(filter.getKey());
-            ReportExecutionModels.FieldType type = resolveType(filter.getDataType());
+            ReportExecutionModels.FieldType type = resolveType(filter);
             String label = deriveLabel(filter.getLabel(), originalKey);
-            List<String> allowedOps = defaultOps(type);
+            List<String> allowedOps = resolveAllowedOps(filter, type);
             String dateFormat = type == ReportExecutionModels.FieldType.DATE ? DEFAULT_DATE_FORMAT : null;
             return new TemplateFilterDefinition(originalKey, lookupKey, label, type, allowedOps, dateFormat, normalizeDataType(type));
         }
@@ -316,29 +324,33 @@ public class ReportExecutionService {
             return key;
         }
 
-        private static String normalizeFixedOp(String op) {
-            if (!StringUtils.hasText(op)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Fixed filter operator is required");
+        private static List<String> resolveAllowedOps(ReportFilter filter, ReportExecutionModels.FieldType type) {
+            if (filter.getAllowedOperators() != null && !filter.getAllowedOperators().isEmpty()) {
+                return filter.getAllowedOperators().stream().map(Enum::name).toList();
             }
-            return op.trim().toLowerCase(Locale.ROOT);
-        }
-
-        private static List<String> defaultOps(ReportExecutionModels.FieldType type) {
             return switch (type) {
-                case NUMBER, DATE -> DEFAULT_NUMERIC_OPS;
-                case TEXT -> DEFAULT_TEXT_OPS;
+                case NUMBER, DATE -> NUMERIC_DATE_OPS;
+                case STRING -> STRING_OPS;
             };
         }
 
-        private static ReportExecutionModels.FieldType resolveType(String dataType) {
+        private static ReportExecutionModels.FieldType resolveType(ReportFilter filter) {
+            if (filter.getLogicalType() != null) {
+                return switch (filter.getLogicalType()) {
+                    case NUMBER -> ReportExecutionModels.FieldType.NUMBER;
+                    case DATE -> ReportExecutionModels.FieldType.DATE;
+                    case STRING -> ReportExecutionModels.FieldType.STRING;
+                };
+            }
+            String dataType = filter.getDataType();
             if (!StringUtils.hasText(dataType)) {
-                return ReportExecutionModels.FieldType.TEXT;
+                return ReportExecutionModels.FieldType.STRING;
             }
             String normalized = dataType.trim().toUpperCase(Locale.ROOT);
             return switch (normalized) {
                 case "NUMBER" -> ReportExecutionModels.FieldType.NUMBER;
                 case "DATE" -> ReportExecutionModels.FieldType.DATE;
-                default -> ReportExecutionModels.FieldType.TEXT;
+                default -> ReportExecutionModels.FieldType.STRING;
             };
         }
 
@@ -346,7 +358,7 @@ public class ReportExecutionService {
             return switch (type) {
                 case NUMBER -> "NUMBER";
                 case DATE -> "DATE";
-                case TEXT -> "TEXT";
+                case STRING -> "STRING";
             };
         }
 

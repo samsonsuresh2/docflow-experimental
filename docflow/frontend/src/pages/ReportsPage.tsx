@@ -16,6 +16,8 @@ import { useUser } from '../lib/UserContext';
 
 type FilterState = Record<string, { op: string; value: string }>;
 
+const OPERATOR_LABELS: Record<string, string> = { EQ: '=', LIKE: 'Contains', LT: '<', GT: '>' };
+
 function normaliseError(error: unknown): string {
   if (typeof error === 'string') {
     return error;
@@ -37,12 +39,12 @@ function normaliseError(error: unknown): string {
 
 function defaultOperator(field: ExecutableReportFilterField | undefined): string {
   if (!field) {
-    return '=';
+    return 'EQ';
   }
   if (Array.isArray(field.allowedOps) && field.allowedOps.length > 0) {
     return field.allowedOps[0];
   }
-  return '=';
+  return 'EQ';
 }
 
 export default function ReportsPage() {
@@ -348,7 +350,7 @@ export default function ReportsPage() {
                     >
                       {filter.allowedOps.map((op) => (
                         <option key={`${filter.key}-${op}`} value={op}>
-                          {op.toUpperCase()}
+                          {OPERATOR_LABELS[op] ?? op.toUpperCase()}
                         </option>
                       ))}
                     </select>
@@ -359,7 +361,7 @@ export default function ReportsPage() {
                     </label>
                     <input
                       id={`value-${filter.key}`}
-                      type={filter.type === 'NUMBER' ? 'number' : 'text'}
+                      type={filter.type === 'NUMBER' ? 'number' : filter.type === 'DATE' ? 'date' : 'text'}
                       inputMode={filter.type === 'NUMBER' ? 'decimal' : undefined}
                       value={state.value}
                       onChange={(event) => handleFilterValueChange(filter.key, event.target.value)}

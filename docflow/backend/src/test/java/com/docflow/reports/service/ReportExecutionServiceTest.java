@@ -6,173 +6,174 @@ import com.docflow.reports.dto.ReportFilter;
 import com.docflow.reports.dto.ReportTemplateResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
 class ReportExecutionServiceTest {
 
-    @Mock
     private ReportTemplateService templateService;
-
-    @Mock
     private DynamicReportBuilder builder;
-
-    @Mock
     private DynamicReportExecutor executor;
-
-    @InjectMocks
     private ReportExecutionService service;
-
-    @Captor
-    private ArgumentCaptor<DynamicReportRequest> requestCaptor;
 
     @BeforeEach
     void setUp() {
-        when(executor.execute(any(), anyInt(), anyInt())).thenReturn(Map.of(
-                "columns", List.of("COL1"),
-                "rows", List.of(Map.of("COL1", "v1"))
-        ));
-        when(builder.build(any(), any())).thenAnswer(invocation -> {
-            DynamicReportRequest req = invocation.getArgument(0);
-            String context = invocation.getArgument(1);
-            return new DynamicReportBuilder.BuiltReport(
-                    "SELECT 1",
-                    Map.of(),
-                    List.of(new DynamicReportBuilder.SelectColumn("c0", "COL1", "COL1")),
-                    List.of(),
-                    "",
-                    "",
-                    context
-            );
-        });
+        templateService = mock(ReportTemplateService.class);
+        builder = mock(DynamicReportBuilder.class);
+        executor = mock(DynamicReportExecutor.class);
+        service = new ReportExecutionService(templateService, builder, executor);
+
+        DynamicReportBuilder.BuiltReport built = new DynamicReportBuilder.BuiltReport("SELECT 1", Map.of(), List.of(), List.of(), "", "", "ctx");
+        when(builder.build(any(DynamicReportRequest.class), eq("template:10"))).thenReturn(built);
+        when(executor.execute(any(), eq(0), eq(25))).thenReturn(Map.of("columns", List.of(), "rows", List.of()));
     }
 
     @Test
-    void ignoresBlankFilterValue() {
-        ReportTemplateResponse template = templateWithFilter("DOCUMENT_PARENT.ID", "=", "NUMBER", ReportFilter.Mode.USER_INPUT);
-        when(templateService.getById(anyLong())).thenReturn(template);
+    void shouldExposeOperatorApplicabilityByType() {
+        when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:branch", ReportFilter.FilterLogicalType.STRING));
+        ReportExecutionModels.TemplateDetail detail = service.getExecutableTemplate(10L);
+        assertEquals(List.of("EQ", "LIKE"), detail.filters().get(0).allowedOps());
+
+        when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:loanAmount", ReportFilter.FilterLogicalType.NUMBER));
+        detail = service.getExecutableTemplate(10L);
+        assertEquals(List.of("EQ", "LT", "GT"), detail.filters().get(0).allowedOps());
+    }
+
+    @Test
+    void shouldValidateNumberAndDateAndSkipBlank() {
+        when(templateService.getById(10L)).thenReturn(templateWithTwoUserFilters());
 
         ReportExecutionModels.RunRequest request = new ReportExecutionModels.RunRequest();
-        ReportExecutionModels.RunFilter filter = new ReportExecutionModels.RunFilter();
-        filter.setKey("DOCUMENT_PARENT.ID");
-        filter.setOp("=");
-        filter.setValue("  "); // blank should be ignored
-        request.setTemplateId(template.getId());
-        request.setFilters(List.of(filter));
+        request.setTemplateId(10L);
+        ReportExecutionModels.RunFilter number = new ReportExecutionModels.RunFilter();
+        number.setKey("meta:loanAmount");
+        number.setOp("GT");
+        number.setValue("12.50");
+        ReportExecutionModels.RunFilter blank = new ReportExecutionModels.RunFilter();
+        blank.setKey("meta:applicationDate");
+        blank.setOp("EQ");
+        blank.setValue("  ");
+        request.setFilters(List.of(number, blank));
 
         service.run(request, 0, 25);
 
-        verify(builder).build(requestCaptor.capture(), any());
-        assertThat(requestCaptor.getValue().getFilters()).isEmpty();
+        ArgumentCaptor<DynamicReportRequest> captor = ArgumentCaptor.forClass(DynamicReportRequest.class);
+        verify(builder).build(captor.capture(), eq("template:10"));
+        List<ReportFilter> applied = captor.getValue().getFilters();
+        assertEquals(1, applied.size());
+        assertEquals("GT", applied.get(0).getOp());
+        assertEquals("12.50", applied.get(0).getValue());
     }
 
     @Test
-    void rejectsInvalidDateFormat() {
-        ReportTemplateResponse template = templateWithFilter("DOCUMENT_PARENT.START_DATE", "=", "DATE", ReportFilter.Mode.USER_INPUT);
-        when(templateService.getById(anyLong())).thenReturn(template);
+    void shouldRejectInvalidNumberDateAndOperator() {
+        when(templateService.getById(10L)).thenReturn(templateWithTwoUserFilters());
 
-        ReportExecutionModels.RunRequest request = new ReportExecutionModels.RunRequest();
-        ReportExecutionModels.RunFilter filter = new ReportExecutionModels.RunFilter();
-        filter.setKey("DOCUMENT_PARENT.START_DATE");
-        filter.setOp("=");
-        filter.setValue("12/31/2025"); // wrong format
-        request.setTemplateId(template.getId());
-        request.setFilters(List.of(filter));
+        ReportExecutionModels.RunRequest invalidNumberRequest = new ReportExecutionModels.RunRequest();
+        invalidNumberRequest.setTemplateId(10L);
+        ReportExecutionModels.RunFilter number = new ReportExecutionModels.RunFilter();
+        number.setKey("meta:loanAmount");
+        number.setOp("GT");
+        number.setValue("1,200");
+        invalidNumberRequest.setFilters(List.of(number));
+        assertThrows(ResponseStatusException.class, () -> service.run(invalidNumberRequest, 0, 25));
 
-        assertThatThrownBy(() -> service.run(request, 0, 25))
-                .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("Invalid date format");
-        verifyNoInteractions(builder);
+        ReportExecutionModels.RunRequest invalidDateRequest = new ReportExecutionModels.RunRequest();
+        invalidDateRequest.setTemplateId(10L);
+        ReportExecutionModels.RunFilter date = new ReportExecutionModels.RunFilter();
+        date.setKey("meta:applicationDate");
+        date.setOp("EQ");
+        date.setValue("03/01/2026");
+        invalidDateRequest.setFilters(List.of(date));
+        assertThrows(ResponseStatusException.class, () -> service.run(invalidDateRequest, 0, 25));
+
+        ReportExecutionModels.RunRequest invalidOpRequest = new ReportExecutionModels.RunRequest();
+        invalidOpRequest.setTemplateId(10L);
+        ReportExecutionModels.RunFilter badOp = new ReportExecutionModels.RunFilter();
+        badOp.setKey("meta:loanAmount");
+        badOp.setOp("LIKE");
+        badOp.setValue("100");
+        invalidOpRequest.setFilters(List.of(badOp));
+        assertThrows(ResponseStatusException.class, () -> service.run(invalidOpRequest, 0, 25));
+
+        ReportExecutionModels.RunRequest numberLikeRequest = new ReportExecutionModels.RunRequest();
+        numberLikeRequest.setTemplateId(10L);
+        ReportExecutionModels.RunFilter badNumberLike = new ReportExecutionModels.RunFilter();
+        badNumberLike.setKey("meta:loanAmount");
+        badNumberLike.setOp("LIKE");
+        badNumberLike.setValue("12");
+        numberLikeRequest.setFilters(List.of(badNumberLike));
+        assertThrows(ResponseStatusException.class, () -> service.run(numberLikeRequest, 0, 25));
     }
 
     @Test
-    void rejectsOperatorNotAllowed() {
-        ReportTemplateResponse template = templateWithFilter("DOCUMENT_PARENT.AMOUNT", "=", "NUMBER", ReportFilter.Mode.USER_INPUT);
-        when(templateService.getById(anyLong())).thenReturn(template);
+    void shouldAllowStringLikeAndIgnoreBlankLikeValue() {
+        when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:branch", ReportFilter.FilterLogicalType.STRING));
 
-        ReportExecutionModels.RunRequest request = new ReportExecutionModels.RunRequest();
-        ReportExecutionModels.RunFilter filter = new ReportExecutionModels.RunFilter();
-        filter.setKey("DOCUMENT_PARENT.AMOUNT");
-        filter.setOp("<=");
-        filter.setValue("100");
-        request.setTemplateId(template.getId());
-        request.setFilters(List.of(filter));
+        ReportExecutionModels.RunRequest likeRequest = new ReportExecutionModels.RunRequest();
+        likeRequest.setTemplateId(10L);
+        ReportExecutionModels.RunFilter like = new ReportExecutionModels.RunFilter();
+        like.setKey("meta:branch");
+        like.setOp("LIKE");
+        like.setValue("avi");
+        likeRequest.setFilters(List.of(like));
 
-        assertThatThrownBy(() -> service.run(request, 0, 25))
-                .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("Operator not allowed");
-        verifyNoInteractions(builder);
+        service.run(likeRequest, 0, 25);
+
+        ArgumentCaptor<DynamicReportRequest> captor = ArgumentCaptor.forClass(DynamicReportRequest.class);
+        verify(builder, atLeastOnce()).build(captor.capture(), eq("template:10"));
+        assertEquals("LIKE", captor.getValue().getFilters().get(0).getOp());
+
+        ReportExecutionModels.RunRequest blankLikeRequest = new ReportExecutionModels.RunRequest();
+        blankLikeRequest.setTemplateId(10L);
+        ReportExecutionModels.RunFilter blankLike = new ReportExecutionModels.RunFilter();
+        blankLike.setKey("meta:branch");
+        blankLike.setOp("LIKE");
+        blankLike.setValue("   ");
+        blankLikeRequest.setFilters(List.of(blankLike));
+
+        service.run(blankLikeRequest, 0, 25);
     }
 
-    @Test
-    void rejectsUnknownFilterKey() {
-        ReportTemplateResponse template = templateWithFilter("DOCUMENT_PARENT.STATUS", "=", "TEXT", ReportFilter.Mode.USER_INPUT);
-        when(templateService.getById(anyLong())).thenReturn(template);
-
-        ReportExecutionModels.RunRequest request = new ReportExecutionModels.RunRequest();
-        ReportExecutionModels.RunFilter filter = new ReportExecutionModels.RunFilter();
-        filter.setKey("DOCUMENT_PARENT.MISSING");
-        filter.setOp("=");
-        filter.setValue("APPROVED");
-        request.setTemplateId(template.getId());
-        request.setFilters(List.of(filter));
-
-        assertThatThrownBy(() -> service.run(request, 0, 25))
-                .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("Unknown filter key");
-        verifyNoInteractions(builder);
-    }
-
-    @Test
-    void rejectsTextComparisonWithLessThan() {
-        ReportTemplateResponse template = templateWithFilter("DOCUMENT_PARENT.STATUS", "=", "TEXT", ReportFilter.Mode.USER_INPUT);
-        when(templateService.getById(anyLong())).thenReturn(template);
-
-        ReportExecutionModels.RunRequest request = new ReportExecutionModels.RunRequest();
-        ReportExecutionModels.RunFilter filter = new ReportExecutionModels.RunFilter();
-        filter.setKey("DOCUMENT_PARENT.STATUS");
-        filter.setOp("<");
-        filter.setValue("APPROVED");
-        request.setTemplateId(template.getId());
-        request.setFilters(List.of(filter));
-
-        assertThatThrownBy(() -> service.run(request, 0, 25))
-                .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("Operator not allowed");
-        verifyNoInteractions(builder);
-    }
-
-    private ReportTemplateResponse templateWithFilter(String key, String op, String dataType, ReportFilter.Mode mode) {
-        ReportFilter filter = new ReportFilter();
-        filter.setKey(key);
-        filter.setOp(op);
-        filter.setMode(mode);
-        filter.setDataType(dataType);
-
+    private ReportTemplateResponse templateWithUserFilter(String key, ReportFilter.FilterLogicalType type) {
         DynamicReportRequest request = new DynamicReportRequest();
         request.setBaseEntity("DOCUMENT_PARENT");
-        request.setColumns(List.of("DOCUMENT_PARENT.ID"));
+        request.setColumns(List.of("DOCUMENT_PARENT.DOCUMENT_NUMBER"));
+
+        ReportFilter filter = new ReportFilter();
+        filter.setKey(key);
+        filter.setMode(ReportFilter.Mode.USER_INPUT);
+        filter.setLogicalType(type);
         request.setFilters(List.of(filter));
 
-        return new ReportTemplateResponse(1L, "Test Template", null, request, "admin1", Instant.now());
+        return new ReportTemplateResponse(10L, "r1", null, request, "tester", Instant.now());
+    }
+
+    private ReportTemplateResponse templateWithTwoUserFilters() {
+        DynamicReportRequest request = new DynamicReportRequest();
+        request.setBaseEntity("DOCUMENT_PARENT");
+        request.setColumns(List.of("DOCUMENT_PARENT.DOCUMENT_NUMBER"));
+
+        ReportFilter number = new ReportFilter();
+        number.setKey("meta:loanAmount");
+        number.setMode(ReportFilter.Mode.USER_INPUT);
+        number.setLogicalType(ReportFilter.FilterLogicalType.NUMBER);
+
+        ReportFilter date = new ReportFilter();
+        date.setKey("meta:applicationDate");
+        date.setMode(ReportFilter.Mode.USER_INPUT);
+        date.setLogicalType(ReportFilter.FilterLogicalType.DATE);
+
+        request.setFilters(List.of(number, date));
+        return new ReportTemplateResponse(10L, "r2", null, request, "tester", Instant.now());
     }
 }

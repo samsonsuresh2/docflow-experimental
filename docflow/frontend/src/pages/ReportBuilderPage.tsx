@@ -9,16 +9,33 @@ import {
 } from '../lib/reports';
 import type { DynamicReportRequest, ReportBaseEntity, ReportRunResponse, ReportTemplate } from '../types/reports';
 
-const OPERATORS = ['=', '<', '>', '<=', '>=', 'like', 'between'] as const;
+const OPERATORS = ['EQ', 'LIKE', 'LT', 'GT'] as const;
 type Operator = (typeof OPERATORS)[number];
+const LOGICAL_TYPES = ['STRING', 'NUMBER', 'DATE'] as const;
+type LogicalType = (typeof LOGICAL_TYPES)[number];
 
 type FilterRow = {
   id: number;
   key: string;
   op: Operator;
   value: string;
-  valueTo?: string;
+  logicalType: LogicalType;
 };
+
+function allowedOperators(type: LogicalType): Operator[] {
+  if (type === 'STRING') {
+    return ['EQ', 'LIKE'];
+  }
+  return ['EQ', 'LT', 'GT'];
+}
+
+function normalizeOperatorForBackend(op: string): Operator {
+  const upper = op.toUpperCase();
+  if (upper === '=' || upper === 'EQ') return 'EQ';
+  if (upper === '<' || upper === 'LT') return 'LT';
+  if (upper === '>' || upper === 'GT') return 'GT';
+  return 'EQ';
+}
 
 type ColumnOption = {
   value: string;
@@ -218,23 +235,17 @@ export default function ReportBuilderPage() {
 
     const nextFilters: FilterRow[] = Array.isArray(pendingTemplate.request.filters)
       ? pendingTemplate.request.filters.map((filter) => {
-          const rawOp = (filter?.op ?? '=') as Operator;
-          const operator: Operator = OPERATORS.includes(rawOp) ? rawOp : '=';
-          let value = filter?.value ?? '';
-          let valueTo: string | undefined;
-          if (operator === 'between') {
-            const parts = value.split(',', 2);
-            value = parts[0]?.trim() ?? '';
-            valueTo = parts[1]?.trim() ?? '';
-          }
+          const operator = normalizeOperatorForBackend(filter?.op ?? 'EQ');
+          const logicalType = (filter?.logicalType ?? filter?.dataType ?? 'STRING').toUpperCase() as LogicalType;
+          const safeType: LogicalType = LOGICAL_TYPES.includes(logicalType) ? logicalType : 'STRING';
           const id = filterIdRef.current + 1;
           filterIdRef.current = id;
             return {
               id,
               key: normaliseTemplateKey(filter?.key ?? ''),
               op: operator,
-              value,
-              valueTo,
+              value: filter?.value ?? '',
+              logicalType: safeType,
             };
           })
       : [];
@@ -306,22 +317,22 @@ export default function ReportBuilderPage() {
   const handleAddFilter = () => {
     const nextId = filterIdRef.current + 1;
     filterIdRef.current = nextId;
-    setFilters((prev) => [...prev, { id: nextId, key: '', op: '=', value: '' }]);
+    setFilters((prev) => [...prev, { id: nextId, key: '', op: 'EQ', value: '', logicalType: 'STRING' }]);
   };
 
   const handleFilterChange = (
     id: number,
-    update: Partial<Pick<FilterRow, 'key' | 'op' | 'value' | 'valueTo'>>,
+    update: Partial<Pick<FilterRow, 'key' | 'op' | 'value' | 'logicalType'>>,
   ) => {
     setFilters((prev) =>
       prev.map((filter) =>
-        filter.id === id
-          ? {
+        filter.id !== id
+          ? filter
+          : {
               ...filter,
               ...update,
-              valueTo: update.op && update.op !== 'between' ? '' : update.valueTo ?? filter.valueTo,
-            }
-          : filter,
+              op: update.logicalType ? allowedOperators(update.logicalType)[0] : update.op ?? filter.op,
+            },
       ),
     );
   };
@@ -388,35 +399,36 @@ export default function ReportBuilderPage() {
         if (!filter.key || !filter.op) {
           return null;
         }
-        if (filter.op === 'between') {
-          if (!filter.value || !filter.valueTo) {
-            return {
-              key: normalizeKeyForBackend(filter.key),
-              op: filter.op,
-              value: '',
-              mode: 'USER_INPUT' as const,
-            };
-          }
-          return {
-            key: normalizeKeyForBackend(filter.key),
-            op: filter.op,
-            value: `${filter.value},${filter.valueTo}`,
-            mode: 'FIXED_VALUE' as const,
-          };
-        }
+        const normalizedKey = normalizeKeyForBackend(filter.key);
+        const source = normalizedKey.startsWith('meta:')
+          ? 'DOCUMENT_METADATA'
+          : normalizedKey.startsWith(`${documentEntityName}.`) || normalizedKey.startsWith('DOCUMENT.')
+          ? 'DOCUMENT'
+          : 'THIRD_PARTY_ENTITY';
+        const field = normalizedKey.includes('.') ? normalizedKey.split('.', 2)[1] : normalizedKey.replace('meta:', '');
         if (!filter.value) {
           return {
-            key: normalizeKeyForBackend(filter.key),
+            key: normalizedKey,
             op: filter.op,
             value: '',
             mode: 'USER_INPUT' as const,
+            source,
+            field,
+            logicalType: filter.logicalType,
+            dataType: filter.logicalType,
+            allowedOperators: allowedOperators(filter.logicalType),
           };
         }
         return {
-          key: normalizeKeyForBackend(filter.key),
+          key: normalizedKey,
           op: filter.op,
           value: filter.value,
           mode: 'FIXED_VALUE' as const,
+          source,
+          field,
+          logicalType: filter.logicalType,
+          dataType: filter.logicalType,
+          allowedOperators: allowedOperators(filter.logicalType),
         };
       })
       .filter((filter): filter is NonNullable<typeof filter> => Boolean(filter));
@@ -426,7 +438,7 @@ export default function ReportBuilderPage() {
       columns,
       filters: filtersPayload,
     };
-  }, [selectedEntity, selectedColumns, filters]);
+  }, [selectedEntity, selectedColumns, filters, documentEntityName]);
 
   const buildRunRequest = useCallback((): DynamicReportRequest | null => {
     if (!selectedEntity) {
@@ -442,16 +454,6 @@ export default function ReportBuilderPage() {
         if (!filter.key || !filter.op) {
           return null;
         }
-        if (filter.op === 'between') {
-          if (!filter.value || !filter.valueTo) {
-            return null;
-          }
-          return {
-            key: normalizeKeyForBackend(filter.key),
-            op: filter.op,
-            value: `${filter.value},${filter.valueTo}`,
-          };
-        }
         if (!filter.value) {
           return null;
         }
@@ -459,6 +461,8 @@ export default function ReportBuilderPage() {
           key: normalizeKeyForBackend(filter.key),
           op: filter.op,
           value: filter.value,
+          logicalType: filter.logicalType,
+          dataType: filter.logicalType,
         };
       })
       .filter((filter): filter is NonNullable<typeof filter> => Boolean(filter));
@@ -832,7 +836,7 @@ export default function ReportBuilderPage() {
               {filters.map((filter) => (
                 <div
                   key={filter.id}
-                  className="grid gap-2 rounded border border-slate-200 p-3 text-sm transition-colors dark:border-slate-700 md:grid-cols-[1.5fr_1fr_1.5fr_1.5fr_auto]"
+                  className="grid gap-2 rounded border border-slate-200 p-3 text-sm transition-colors dark:border-slate-700 md:grid-cols-[1.5fr_1fr_1fr_1.5fr_auto]"
                 >
                   <select
                     value={filter.key}
@@ -857,39 +861,35 @@ export default function ReportBuilderPage() {
                     })}
                   </select>
                   <select
-                    value={filter.op}
-                    onChange={(event) =>
-                      handleFilterChange(filter.id, {
-                        op: event.target.value as Operator,
-                        valueTo: event.target.value === 'between' ? filter.valueTo ?? '' : '',
-                      })
-                    }
+                    value={filter.logicalType}
+                    onChange={(event) => handleFilterChange(filter.id, { logicalType: event.target.value as LogicalType })}
                     className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
                   >
-                    {OPERATORS.map((operator) => (
+                    {LOGICAL_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={filter.op}
+                    onChange={(event) => handleFilterChange(filter.id, { op: event.target.value as Operator })}
+                    className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                  >
+                    {allowedOperators(filter.logicalType).map((operator) => (
                       <option key={operator} value={operator}>
-                        {operator.toUpperCase()}
+                        {operator}
                       </option>
                     ))}
                   </select>
                   <input
-                    type="text"
+                    type={filter.logicalType === 'NUMBER' ? 'number' : filter.logicalType === 'DATE' ? 'date' : 'text'}
                     value={filter.value}
                     onChange={(event) => handleFilterChange(filter.id, { value: event.target.value })}
-                    placeholder={filter.op === 'between' ? 'From value' : 'Value'}
+                    inputMode={filter.logicalType === 'NUMBER' ? 'decimal' : undefined}
+                    placeholder="Value"
                     className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
                   />
-                  {filter.op === 'between' ? (
-                    <input
-                      type="text"
-                      value={filter.valueTo ?? ''}
-                      onChange={(event) => handleFilterChange(filter.id, { valueTo: event.target.value })}
-                      placeholder="To value"
-                      className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-                    />
-                  ) : (
-                    <div className="hidden md:block" />
-                  )}
                   <button
                     type="button"
                     className="self-start rounded border border-red-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-red-600 transition hover:bg-red-50 dark:border-red-400/40 dark:text-red-300 dark:hover:bg-red-500/10"
@@ -905,7 +905,7 @@ export default function ReportBuilderPage() {
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
           <div className="text-xs text-slate-500 dark:text-slate-400">
-            Operators support LIKE wildcards (%) and BETWEEN accepts a start and end value.
+            Type-driven operators: STRING → EQ, NUMBER/DATE → EQ, LT, GT.
           </div>
           <button
             type="button"
