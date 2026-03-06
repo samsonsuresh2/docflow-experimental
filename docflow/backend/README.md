@@ -136,7 +136,6 @@ Execution service enforces:
 Not supported yet:
 - `DATETIME`
 - `BETWEEN`
-- date presets / quick ranges
 - regex-style operators
 - starts-with / ends-with operator variants
 
@@ -154,6 +153,237 @@ Not supported yet:
 
 4. Blank `Branch` value
    - filter ignored, query runs without that predicate
+
+## Date Presets for Report Filters
+
+### Overview
+
+The **Date Preset** feature allows reports to support commonly used date ranges (e.g., *This Week*, *Previous Week*, *This Month*) without requiring users to manually enter date values. Presets are **configuration-driven**, stored in the database, and resolved by the backend before the report query executes.
+
+The design ensures:
+
+* Presets apply **only to DATE-type filters**
+* Presets are **defined by backend/app teams**, not end users
+* Each DATE filter in a report can **independently support presets**
+* The report query engine still receives **normal date ranges**, keeping existing query logic unchanged.
+
+---
+
+### Core Concept
+
+A preset does **not execute a query directly**.
+It simply resolves into a **date range (from / to)**.
+
+Example:
+
+Preset selected by user:
+
+```text
+PREVIOUS_WEEK
+```
+
+Backend resolves:
+
+```text
+from = 2026-02-23
+to   = 2026-03-01
+```
+
+Report query then applies the filter normally:
+
+```text
+dispatch_date BETWEEN from AND to
+```
+
+---
+
+### Database Configuration
+
+#### 1. `date_preset_master`
+
+Stores reusable preset definitions.
+
+Example fields:
+
+* `preset_code`
+* `preset_name`
+* `preset_description`
+* `start_rule`
+* `end_rule`
+* `enabled`
+* `display_order`
+
+Example rows:
+
+| preset_code    | start_rule           | end_rule           |
+| -------------- | -------------------- | ------------------ |
+| THIS_WEEK      | CURRENT_WEEK_START   | TODAY              |
+| PREVIOUS_WEEK  | PREVIOUS_WEEK_START  | PREVIOUS_WEEK_END  |
+| THIS_MONTH     | CURRENT_MONTH_START  | TODAY              |
+| PREVIOUS_MONTH | PREVIOUS_MONTH_START | PREVIOUS_MONTH_END |
+
+---
+
+#### 2. `report_filter_preset_map`
+
+Maps presets to specific report filters.
+
+Example fields:
+
+* `report_code`
+* `filter_key`
+* `preset_code`
+* `enabled`
+* `display_order`
+
+Example mapping:
+
+| report_code | filter_key    | preset_code   |
+| ----------- | ------------- | ------------- |
+| LOAN_REPORT | disbursalDate | THIS_WEEK     |
+| LOAN_REPORT | disbursalDate | PREVIOUS_WEEK |
+| LOAN_REPORT | postingDate   | THIS_MONTH    |
+
+This mapping determines **which presets appear for which filter in a report**.
+
+---
+
+### How Presets Are Created
+
+Preset definitions are **inserted by backend/application teams**.
+
+Typical method:
+
+* Added via **Liquibase/Flyway migration scripts**
+* Inserted into `date_preset_master`
+* Mapped to report filters via `report_filter_preset_map`
+
+No code change is required to introduce a new preset.
+
+---
+
+### Supported Preset Rules
+
+Preset rules use a controlled vocabulary such as:
+
+```text
+TODAY
+CURRENT_WEEK_START
+CURRENT_WEEK_END
+PREVIOUS_WEEK_START
+PREVIOUS_WEEK_END
+CURRENT_MONTH_START
+CURRENT_MONTH_END
+PREVIOUS_MONTH_START
+PREVIOUS_MONTH_END
+PREVIOUS_<DAY_OF_WEEK>
+CURRENT_<DAY_OF_WEEK>
+```
+
+Optional day offsets may also be supported (e.g., anchor − 7 days).
+
+Example:
+
+```text
+start_rule = PREVIOUS_WEDNESDAY
+end_rule   = TODAY
+```
+
+---
+
+### How App Teams Use It
+
+1. Insert a new preset definition in `date_preset_master`.
+2. Map the preset to the desired report filter using `report_filter_preset_map`.
+3. Ensure the report filter is a **DATE logical type** and preset-enabled.
+
+Example workflow:
+
+```text
+Add preset: PREVIOUS_WEDNESDAY_TO_TODAY
+Map to: LOAN_DISBURSAL_REPORT → disbursalDate
+```
+
+Once deployed, the preset automatically becomes available in the report UI.
+
+---
+
+### How Users Use Presets
+
+For each DATE filter that supports presets, users can choose between:
+
+#### Manual Mode
+
+User enters a date range manually:
+
+```text
+From Date
+To Date
+```
+
+#### Preset Mode
+
+User selects a preset:
+
+```text
+This Week
+Previous Week
+This Month
+```
+
+Each DATE filter operates **independently**, so multiple presets can be used in one report.
+
+Example:
+
+```text
+Disbursal Date → Previous Week
+Posting Date   → This Month
+```
+
+---
+
+### Execution Flow
+
+1. UI sends report request with filter modes.
+2. Backend checks each DATE filter.
+3. If filter mode = `PRESET`, the **Preset Resolver** converts the preset into actual dates.
+4. Filters are normalized into `from / to` values.
+5. Existing report query builder executes normally.
+
+---
+
+### Design Principles
+
+* Presets are **metadata-driven**, not hardcoded.
+* Backend is the **source of truth** for date resolution.
+* Query builder receives only **normalized date ranges**.
+* Multiple date filters can use presets simultaneously.
+* New presets can be added **without code changes**.
+
+---
+
+### Current Scope
+
+Supported:
+
+* DATE filters only
+* reusable preset catalog
+* backend resolution
+* multiple preset-enabled filters in a report
+
+Not supported:
+
+* presets affecting non-date fields
+* holiday calendar logic
+* conditional branching rules
+* user-defined runtime formulas
+
+---
+
+### Summary
+
+Date Presets provide a **configurable and reusable mechanism** for common report date windows.
+They improve user experience while keeping the reporting engine simple by converting presets into standard date ranges before query execution.
 
 ---
 
