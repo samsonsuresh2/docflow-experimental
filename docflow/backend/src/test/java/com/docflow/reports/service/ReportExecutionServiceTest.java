@@ -48,7 +48,11 @@ class ReportExecutionServiceTest {
 
         when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:loanAmount", ReportFilter.FilterLogicalType.NUMBER));
         detail = service.getExecutableTemplate(10L);
-        assertEquals(List.of("EQ", "LT", "GT"), detail.filters().get(0).allowedOps());
+        assertEquals(List.of("EQ", "LT", "GT", "RANGE"), detail.filters().get(0).allowedOps());
+
+        when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:applicationDate", ReportFilter.FilterLogicalType.DATE));
+        detail = service.getExecutableTemplate(10L);
+        assertEquals(List.of("EQ", "LT", "GT", "BETWEEN"), detail.filters().get(0).allowedOps());
     }
 
     @Test
@@ -116,6 +120,100 @@ class ReportExecutionServiceTest {
         badNumberLike.setValue("12");
         numberLikeRequest.setFilters(List.of(badNumberLike));
         assertThrows(ResponseStatusException.class, () -> service.run(numberLikeRequest, 0, 25));
+    }
+
+    @Test
+    void shouldAcceptValidNumberRange() {
+        when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:loanAmount", ReportFilter.FilterLogicalType.NUMBER));
+
+        ReportExecutionModels.RunRequest request = new ReportExecutionModels.RunRequest();
+        request.setTemplateId(10L);
+        ReportExecutionModels.RunFilter range = new ReportExecutionModels.RunFilter();
+        range.setKey("meta:loanAmount");
+        range.setOp("RANGE");
+        range.setValueFrom("10");
+        range.setValueTo("25");
+        request.setFilters(List.of(range));
+
+        service.run(request, 0, 25);
+
+        ArgumentCaptor<DynamicReportRequest> captor = ArgumentCaptor.forClass(DynamicReportRequest.class);
+        verify(builder, atLeastOnce()).build(captor.capture(), eq("template:10"));
+        ReportFilter applied = captor.getValue().getFilters().get(0);
+        assertEquals("RANGE", applied.getOp());
+        assertEquals("10", applied.getValueFrom());
+        assertEquals("25", applied.getValueTo());
+    }
+
+    @Test
+    void shouldRejectIncompleteOrDescendingNumberRange() {
+        when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:loanAmount", ReportFilter.FilterLogicalType.NUMBER));
+
+        ReportExecutionModels.RunRequest missingSide = new ReportExecutionModels.RunRequest();
+        missingSide.setTemplateId(10L);
+        ReportExecutionModels.RunFilter incomplete = new ReportExecutionModels.RunFilter();
+        incomplete.setKey("meta:loanAmount");
+        incomplete.setOp("RANGE");
+        incomplete.setValueFrom("10");
+        missingSide.setFilters(List.of(incomplete));
+        assertThrows(ResponseStatusException.class, () -> service.run(missingSide, 0, 25));
+
+        ReportExecutionModels.RunRequest descending = new ReportExecutionModels.RunRequest();
+        descending.setTemplateId(10L);
+        ReportExecutionModels.RunFilter backwards = new ReportExecutionModels.RunFilter();
+        backwards.setKey("meta:loanAmount");
+        backwards.setOp("RANGE");
+        backwards.setValueFrom("25");
+        backwards.setValueTo("10");
+        descending.setFilters(List.of(backwards));
+        assertThrows(ResponseStatusException.class, () -> service.run(descending, 0, 25));
+    }
+
+    @Test
+    void shouldAcceptValidDateBetween() {
+        when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:applicationDate", ReportFilter.FilterLogicalType.DATE));
+
+        ReportExecutionModels.RunRequest request = new ReportExecutionModels.RunRequest();
+        request.setTemplateId(10L);
+        ReportExecutionModels.RunFilter between = new ReportExecutionModels.RunFilter();
+        between.setKey("meta:applicationDate");
+        between.setOp("BETWEEN");
+        between.setValueFrom("2026-03-01");
+        between.setValueTo("2026-03-31");
+        request.setFilters(List.of(between));
+
+        service.run(request, 0, 25);
+
+        ArgumentCaptor<DynamicReportRequest> captor = ArgumentCaptor.forClass(DynamicReportRequest.class);
+        verify(builder, atLeastOnce()).build(captor.capture(), eq("template:10"));
+        ReportFilter applied = captor.getValue().getFilters().get(0);
+        assertEquals("BETWEEN", applied.getOp());
+        assertEquals("2026-03-01", applied.getValueFrom());
+        assertEquals("2026-03-31", applied.getValueTo());
+    }
+
+    @Test
+    void shouldRejectIncompleteOrDescendingDateBetween() {
+        when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:applicationDate", ReportFilter.FilterLogicalType.DATE));
+
+        ReportExecutionModels.RunRequest missingSide = new ReportExecutionModels.RunRequest();
+        missingSide.setTemplateId(10L);
+        ReportExecutionModels.RunFilter incomplete = new ReportExecutionModels.RunFilter();
+        incomplete.setKey("meta:applicationDate");
+        incomplete.setOp("BETWEEN");
+        incomplete.setValueFrom("2026-03-01");
+        missingSide.setFilters(List.of(incomplete));
+        assertThrows(ResponseStatusException.class, () -> service.run(missingSide, 0, 25));
+
+        ReportExecutionModels.RunRequest descending = new ReportExecutionModels.RunRequest();
+        descending.setTemplateId(10L);
+        ReportExecutionModels.RunFilter backwards = new ReportExecutionModels.RunFilter();
+        backwards.setKey("meta:applicationDate");
+        backwards.setOp("BETWEEN");
+        backwards.setValueFrom("2026-03-31");
+        backwards.setValueTo("2026-03-01");
+        descending.setFilters(List.of(backwards));
+        assertThrows(ResponseStatusException.class, () -> service.run(descending, 0, 25));
     }
 
     @Test

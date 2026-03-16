@@ -15,6 +15,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.ResolverStyle;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -26,9 +27,10 @@ import java.util.Set;
 public class ReportExecutionService {
 
     private static final List<String> STRING_OPS = List.of("EQ", "LIKE");
-    private static final List<String> NUMERIC_DATE_OPS = List.of("EQ", "LT", "GT");
+    private static final List<String> NUMBER_OPS = List.of("EQ", "LT", "GT", "RANGE");
+    private static final List<String> DATE_OPS = List.of("EQ", "LT", "GT", "BETWEEN");
     private static final String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
-    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd")
             .withResolverStyle(ResolverStyle.STRICT);
 
     private final ReportTemplateService templateService;
@@ -91,11 +93,35 @@ public class ReportExecutionService {
             if (!definition.allowedOps().contains(op)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed for " + definition.label() + ": " + op);
             }
-            String value = input.getValue();
+            if (requiresRangeValues(op)) {
+                String valueFrom = normalizeOptional(input.getValueFrom());
+                String valueTo = normalizeOptional(input.getValueTo());
+                if (!StringUtils.hasText(valueFrom) && !StringUtils.hasText(valueTo)) {
+                    continue;
+                }
+                if (!StringUtils.hasText(valueFrom) || !StringUtils.hasText(valueTo)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Both values are required for " + definition.label() + " " + op.toLowerCase(Locale.ROOT));
+                }
+                String cleanFrom = sanitizeValue(definition.type(), valueFrom, definition.dateFormat());
+                String cleanTo = sanitizeValue(definition.type(), valueTo, definition.dateFormat());
+                validateRange(definition, cleanFrom, cleanTo, op);
+
+                ReportFilter filter = new ReportFilter();
+                filter.setKey(definition.originalKey());
+                filter.setOp(op);
+                filter.setValueFrom(cleanFrom);
+                filter.setValueTo(cleanTo);
+                filter.setDataType(definition.dataType());
+                filters.add(filter);
+                continue;
+            }
+
+            String value = normalizeOptional(input.getValue());
             if (!StringUtils.hasText(value)) {
                 continue;
             }
-            String cleanedValue = sanitizeValue(definition.type(), value.trim(), definition.dateFormat());
+            String cleanedValue = sanitizeValue(definition.type(), value, definition.dateFormat());
 
             ReportFilter filter = new ReportFilter();
             filter.setKey(definition.originalKey());
@@ -131,19 +157,54 @@ public class ReportExecutionService {
             return rangeFilters(definition, range.fromDate(), range.toDate());
         }
         if (mode == ReportExecutionModels.DateFilterMode.MANUAL) {
-            if (!StringUtils.hasText(input.getFromValue()) && !StringUtils.hasText(input.getToValue())) {
+            String op = normalizeOpCode(input.getOp());
+            if (!StringUtils.hasText(op)) {
+                op = definition.allowedOps().contains("BETWEEN") ? "BETWEEN" : "EQ";
+            }
+            if (!definition.allowedOps().contains(op)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed for " + definition.label() + ": " + op);
+            }
+
+            String legacyFrom = normalizeOptional(input.getFromValue());
+            String legacyTo = normalizeOptional(input.getToValue());
+            String valueFrom = normalizeOptional(input.getValueFrom());
+            String valueTo = normalizeOptional(input.getValueTo());
+            String singleValue = normalizeOptional(input.getValue());
+
+            if ("BETWEEN".equals(op)) {
+                String fromCandidate = StringUtils.hasText(valueFrom) ? valueFrom : legacyFrom;
+                String toCandidate = StringUtils.hasText(valueTo) ? valueTo : legacyTo;
+                if (!StringUtils.hasText(fromCandidate) && !StringUtils.hasText(toCandidate)) {
+                    return List.of();
+                }
+                if (!StringUtils.hasText(fromCandidate) || !StringUtils.hasText(toCandidate)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Both valueFrom and valueTo are required for " + definition.label());
+                }
+                LocalDate from = LocalDate.parse(validateDate(fromCandidate, definition.dateFormat()), DATE_FORMATTER);
+                LocalDate to = LocalDate.parse(validateDate(toCandidate, definition.dateFormat()), DATE_FORMATTER);
+                if (from.isAfter(to)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid manual date range for " + definition.label());
+                }
+                ReportFilter between = new ReportFilter();
+                between.setKey(definition.originalKey());
+                between.setOp("BETWEEN");
+                between.setValueFrom(from.format(DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
+                between.setValueTo(to.format(DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT)));
+                between.setDataType(definition.dataType());
+                return List.of(between);
+            }
+
+            if (!StringUtils.hasText(singleValue)) {
                 return List.of();
             }
-            if (!StringUtils.hasText(input.getFromValue()) || !StringUtils.hasText(input.getToValue())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Both fromValue and toValue are required in MANUAL mode for " + definition.label());
-            }
-            LocalDate from = LocalDate.parse(validateDate(input.getFromValue().trim(), definition.dateFormat()), DATE_FORMATTER);
-            LocalDate to = LocalDate.parse(validateDate(input.getToValue().trim(), definition.dateFormat()), DATE_FORMATTER);
-            if (from.isAfter(to)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid manual date range for " + definition.label());
-            }
-            return rangeFilters(definition, from, to);
+            String cleanedValue = validateDate(singleValue, definition.dateFormat());
+            ReportFilter manual = new ReportFilter();
+            manual.setKey(definition.originalKey());
+            manual.setOp(op);
+            manual.setValue(cleanedValue);
+            manual.setDataType(definition.dataType());
+            return List.of(manual);
         }
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown date filter mode for " + definition.label());
     }
@@ -172,6 +233,24 @@ public class ReportExecutionService {
         };
     }
 
+    private void validateRange(TemplateFilterDefinition definition, String fromValue, String toValue, String op) {
+        if (definition.type() == ReportExecutionModels.FieldType.NUMBER) {
+            BigDecimal from = new BigDecimal(fromValue);
+            BigDecimal to = new BigDecimal(toValue);
+            if (from.compareTo(to) > 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid range for " + definition.label());
+            }
+            return;
+        }
+        if (definition.type() == ReportExecutionModels.FieldType.DATE) {
+            LocalDate from = LocalDate.parse(fromValue, DATE_FORMATTER);
+            LocalDate to = LocalDate.parse(toValue, DATE_FORMATTER);
+            if (from.isAfter(to)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid " + op.toLowerCase(Locale.ROOT) + " for " + definition.label());
+            }
+        }
+    }
+
     private String validateNumber(String value) {
         if (!value.matches("^-?\\d+(\\.\\d+)?$")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid number format: " + value);
@@ -186,11 +265,14 @@ public class ReportExecutionService {
 
     private String validateDate(String value, String dateFormat) {
         String pattern = StringUtils.hasText(dateFormat) ? dateFormat : DEFAULT_DATE_FORMAT;
-        DateTimeFormatter formatter = DEFAULT_DATE_FORMAT.equals(pattern)
-                ? DATE_FORMATTER
-                : DateTimeFormatter.ofPattern(pattern).withResolverStyle(ResolverStyle.STRICT);
         try {
-            LocalDate parsed = LocalDate.parse(value, formatter);
+            LocalDate parsed;
+            if (DEFAULT_DATE_FORMAT.equals(pattern)) {
+                parsed = LocalDate.parse(value, DATE_FORMATTER);
+                return parsed.format(DateTimeFormatter.ofPattern(DEFAULT_DATE_FORMAT));
+            }
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern(pattern).withResolverStyle(ResolverStyle.STRICT);
+            parsed = LocalDate.parse(value, formatter);
             return parsed.format(formatter);
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date format, expected " + pattern);
@@ -202,6 +284,14 @@ public class ReportExecutionService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Value is required");
         }
         return value.trim();
+    }
+
+    private static boolean requiresRangeValues(String op) {
+        return "RANGE".equals(op) || "BETWEEN".equals(op);
+    }
+
+    private static String normalizeOptional(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private static String normalizeOpCode(String op) {
@@ -393,10 +483,21 @@ public class ReportExecutionService {
 
         private static List<String> resolveAllowedOps(ReportFilter filter, ReportExecutionModels.FieldType type) {
             if (filter.getAllowedOperators() != null && !filter.getAllowedOperators().isEmpty()) {
-                return filter.getAllowedOperators().stream().map(Enum::name).toList();
+                LinkedHashSet<String> normalized = filter.getAllowedOperators().stream()
+                        .filter(Objects::nonNull)
+                        .map(Enum::name)
+                        .map(String::toUpperCase)
+                        .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+                switch (type) {
+                    case NUMBER -> normalized.addAll(NUMBER_OPS);
+                    case DATE -> normalized.addAll(DATE_OPS);
+                    case STRING -> normalized.retainAll(STRING_OPS);
+                }
+                return List.copyOf(normalized);
             }
             return switch (type) {
-                case NUMBER, DATE -> NUMERIC_DATE_OPS;
+                case NUMBER -> NUMBER_OPS;
+                case DATE -> DATE_OPS;
                 case STRING -> STRING_OPS;
             };
         }

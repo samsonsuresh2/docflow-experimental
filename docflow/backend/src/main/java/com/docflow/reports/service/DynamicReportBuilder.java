@@ -8,6 +8,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.ResolverStyle;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -21,7 +25,9 @@ import java.util.stream.Collectors;
 @Service
 public class DynamicReportBuilder {
 
-    private static final Set<String> ALLOWED_OPERATORS = Set.of("EQ", "LIKE", "LT", "GT", "GE", "LE");
+    private static final Set<String> ALLOWED_OPERATORS = Set.of("EQ", "LIKE", "LT", "GT", "GE", "LE", "RANGE", "BETWEEN");
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd")
+            .withResolverStyle(ResolverStyle.STRICT);
 
     private final ReportMetadataService metadataService;
     private final ReportProperties properties;
@@ -104,10 +110,11 @@ public class DynamicReportBuilder {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed: " + filter.operator());
             }
             validateOperatorForType(op, filter.dataType());
+            validateFilterValueShape(filter, op);
 
             switch (filter.type()) {
-                case BASE -> clauses.add(columnPredicate(ctx.baseAlias() + "." + filter.column(), op, filter.value(), filter.dataType(), params));
-                case DOCUMENT -> clauses.add(columnPredicate(ctx.documentAlias() + "." + filter.column(), op, filter.value(), filter.dataType(), params));
+                case BASE -> clauses.add(columnPredicate(ctx.baseAlias() + "." + filter.column(), op, filter, params));
+                case DOCUMENT -> clauses.add(columnPredicate(ctx.documentAlias() + "." + filter.column(), op, filter, params));
                 case METADATA -> clauses.add(buildMetadataExists(ctx, filter, op, params));
             }
         }
@@ -145,7 +152,8 @@ public class DynamicReportBuilder {
         boolean date = "DATE".equalsIgnoreCase(filter.dataType());
         String valueExpr = metadataValueExpression("dm", ctx.clobLimit(), ctx.valueIsClob(), numeric, date);
         if (numeric || date) {
-            exists.append(" AND ").append(valueExpr).append(" ").append(toSqlOperator(op, filter.value(), params));
+            exists.append(" AND ").append(valueExpr).append(" ")
+                    .append(toSqlOperator(op, filter.value(), filter.valueFrom(), filter.valueTo(), filter.dataType(), params));
         } else {
             exists.append(" AND ").append(buildMetadataStringPredicate(valueExpr, op, filter.value(), params));
         }
@@ -169,24 +177,42 @@ public class DynamicReportBuilder {
         return "(" + loweredExpr + " " + opSql + " :" + p1 + " OR " + loweredExpr + " " + opSql + " :" + p2 + ")";
     }
 
-    private String columnPredicate(String columnExpression, String op, String value, String dataType, ParameterCollector params) {
+    private String columnPredicate(String columnExpression, String op, RequestedFilter filter, ParameterCollector params) {
+        String dataType = filter.dataType();
         String left = columnExpression;
         if ("NUMBER".equalsIgnoreCase(dataType)) {
             left = "TO_NUMBER(" + columnExpression + ")";
         } else if ("DATE".equalsIgnoreCase(dataType)) {
-            left = "TO_DATE(" + columnExpression + ", 'YYYY-MM-DD')";
+            // Treat Oracle DATE and TIMESTAMP columns the same for current "date-only" filters.
+            left = "TRUNC(" + columnExpression + ")";
         } else if ("LIKE".equals(op)) {
             left = "LOWER(" + columnExpression + ")";
         }
-        return left + " " + toSqlOperator(op, value, params);
+        return left + " " + toSqlOperator(op, filter.value(), filter.valueFrom(), filter.valueTo(), dataType, params);
     }
 
-    private String toSqlOperator(String op, String value, ParameterCollector params) {
+    private String toSqlOperator(String op, String value, String valueFrom, String valueTo, String dataType, ParameterCollector params) {
         if ("LIKE".equals(op)) {
             String normalized = value == null ? "" : value.toLowerCase(Locale.ROOT);
             return "LIKE :" + params.add("%" + normalized + "%");
         }
-        return toSqlComparisonOperator(op) + " :" + params.add(value);
+        if ("RANGE".equals(op) || "BETWEEN".equals(op)) {
+            String fromParam = params.add(valueFrom);
+            String toParam = params.add(valueTo);
+            return "BETWEEN " + sqlParameterExpression(fromParam, dataType) + " AND " + sqlParameterExpression(toParam, dataType);
+        }
+        String paramName = params.add(value);
+        return toSqlComparisonOperator(op) + " " + sqlParameterExpression(paramName, dataType);
+    }
+
+    private String sqlParameterExpression(String paramName, String dataType) {
+        if ("NUMBER".equalsIgnoreCase(dataType)) {
+            return "TO_NUMBER(:" + paramName + ")";
+        }
+        if ("DATE".equalsIgnoreCase(dataType)) {
+            return "TO_DATE(:" + paramName + ", 'YYYY-MM-DD')";
+        }
+        return ":" + paramName;
     }
 
     private String normalizeOperator(String value) {
@@ -216,8 +242,66 @@ public class DynamicReportBuilder {
         if ("STRING".equalsIgnoreCase(dataType) && !"EQ".equals(opCode) && !"LIKE".equals(opCode)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed for STRING type: " + opCode);
         }
+        if ("NUMBER".equalsIgnoreCase(dataType)
+                && !"EQ".equals(opCode)
+                && !"LT".equals(opCode)
+                && !"GT".equals(opCode)
+                && !"RANGE".equals(opCode)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed for NUMBER type: " + opCode);
+        }
+        if ("DATE".equalsIgnoreCase(dataType)
+                && !"EQ".equals(opCode)
+                && !"LT".equals(opCode)
+                && !"GT".equals(opCode)
+                && !"BETWEEN".equals(opCode)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed for DATE type: " + opCode);
+        }
         if (("NUMBER".equalsIgnoreCase(dataType) || "DATE".equalsIgnoreCase(dataType)) && "LIKE".equals(opCode)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed for " + dataType + " type: " + opCode);
+        }
+    }
+
+    private void validateFilterValueShape(RequestedFilter filter, String opCode) {
+        if ("RANGE".equals(opCode) || "BETWEEN".equals(opCode)) {
+            if (!StringUtils.hasText(filter.valueFrom()) || !StringUtils.hasText(filter.valueTo())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Both range values are required for operator " + opCode);
+            }
+            validateRangeOrdering(filter, opCode);
+            return;
+        }
+        if (!StringUtils.hasText(filter.value())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Value is required for operator " + opCode);
+        }
+    }
+
+    private void validateRangeOrdering(RequestedFilter filter, String opCode) {
+        if ("NUMBER".equalsIgnoreCase(filter.dataType())) {
+            try {
+                BigDecimal from = new BigDecimal(filter.valueFrom());
+                BigDecimal to = new BigDecimal(filter.valueTo());
+                if (from.compareTo(to) > 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Invalid numeric " + opCode.toLowerCase(Locale.ROOT) + ": start must be <= end");
+                }
+            } catch (NumberFormatException ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid number format for operator " + opCode);
+            }
+        }
+        if ("DATE".equalsIgnoreCase(filter.dataType())) {
+            try {
+                LocalDate from = LocalDate.parse(filter.valueFrom(), DATE_FORMATTER);
+                LocalDate to = LocalDate.parse(filter.valueTo(), DATE_FORMATTER);
+                if (from.isAfter(to)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Invalid date " + opCode.toLowerCase(Locale.ROOT) + ": start must be <= end");
+                }
+            } catch (ResponseStatusException ex) {
+                throw ex;
+            } catch (Exception ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date format for operator " + opCode);
+            }
         }
     }
 
@@ -419,12 +503,18 @@ public class DynamicReportBuilder {
                 if (filter == null || !StringUtils.hasText(filter.getKey())) {
                     continue;
                 }
-                if (!StringUtils.hasText(filter.getValue())) {
+                if (!hasAnyFilterValue(filter)) {
                     continue;
                 }
                 parsed.add(parseFilter(filter, base, documentTable, baseColumns, documentColumns, metadataKeys));
             }
             return parsed;
+        }
+
+        private static boolean hasAnyFilterValue(ReportFilter filter) {
+            return StringUtils.hasText(filter.getValue())
+                    || StringUtils.hasText(filter.getValueFrom())
+                    || StringUtils.hasText(filter.getValueTo());
         }
 
         private static RequestedFilter parseFilter(ReportFilter filter,
@@ -444,7 +534,8 @@ public class DynamicReportBuilder {
                 if (metadataKeys.stream().noneMatch(k -> k.equalsIgnoreCase(metaKey))) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown metadata key: " + metaKey);
                 }
-                return new RequestedFilter(ColumnType.METADATA, metaKey, op, value, resolveFilterType(filter));
+                return new RequestedFilter(ColumnType.METADATA, metaKey, op, value,
+                        optionalTrim(filter.getValueFrom()), optionalTrim(filter.getValueTo()), resolveFilterType(filter));
             }
 
             String entity = base;
@@ -456,13 +547,19 @@ public class DynamicReportBuilder {
             }
             if (entity.equalsIgnoreCase(base)) {
                 ensureColumn(baseColumns, column, base);
-                return new RequestedFilter(ColumnType.BASE, column.toUpperCase(Locale.ROOT), op, value, resolveFilterType(filter));
+                return new RequestedFilter(ColumnType.BASE, column.toUpperCase(Locale.ROOT), op, value,
+                        optionalTrim(filter.getValueFrom()), optionalTrim(filter.getValueTo()), resolveFilterType(filter));
             }
             if (entity.equalsIgnoreCase(documentTable) || entity.equalsIgnoreCase("DOCUMENT") || entity.equalsIgnoreCase("DOCUMENT_PARENT")) {
                 ensureColumn(documentColumns, column, "document");
-                return new RequestedFilter(ColumnType.DOCUMENT, column.toUpperCase(Locale.ROOT), op, value, resolveFilterType(filter));
+                return new RequestedFilter(ColumnType.DOCUMENT, column.toUpperCase(Locale.ROOT), op, value,
+                        optionalTrim(filter.getValueFrom()), optionalTrim(filter.getValueTo()), resolveFilterType(filter));
             }
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid filter entity: " + entity);
+        }
+
+        private static String optionalTrim(String value) {
+            return value == null ? null : value.trim();
         }
 
         private static String resolveFilterType(ReportFilter filter) {
@@ -580,7 +677,8 @@ public class DynamicReportBuilder {
     private record RequestedColumn(ColumnType type, String entity, String column, String original) {
     }
 
-    private record RequestedFilter(ColumnType type, String column, String operator, String value, String dataType) {
+    private record RequestedFilter(ColumnType type, String column, String operator, String value,
+                                   String valueFrom, String valueTo, String dataType) {
     }
 
     private enum ColumnType {

@@ -70,6 +70,8 @@ public class ReportExecutionModels {
         private String op;
 
         private String value;
+        private String valueFrom;
+        private String valueTo;
 
         private DateFilterMode mode;
 
@@ -101,6 +103,22 @@ public class ReportExecutionModels {
 
         public void setValue(String value) {
             this.value = value;
+        }
+
+        public String getValueFrom() {
+            return valueFrom;
+        }
+
+        public void setValueFrom(String valueFrom) {
+            this.valueFrom = valueFrom;
+        }
+
+        public String getValueTo() {
+            return valueTo;
+        }
+
+        public void setValueTo(String valueTo) {
+            this.valueTo = valueTo;
         }
 
         public DateFilterMode getMode() {

@@ -122,6 +122,7 @@ class DynamicReportEndToEndTest {
         runCaseKycPending();
         runCaseMetadataAge();
         runCaseCompletionDateBetween();
+        runCaseLoanAmountRange();
         runCaseLoanAmountAndMetadata();
         runCaseCreatedAt();
     }
@@ -208,7 +209,25 @@ class DynamicReportEndToEndTest {
                   "baseEntity": "LOAN_DATA",
                   "columns": ["DOCUMENT_PARENT.DOCUMENT_NUMBER", "COMPLETION_DATE"],
                   "filters": [
-                    {"key": "COMPLETION_DATE", "op": "between", "value": "2025-01-01,2025-12-31"}
+                    {"key": "COMPLETION_DATE", "op": "BETWEEN", "valueFrom": "2025-01-01", "valueTo": "2025-12-31", "dataType": "date"}
+                  ]
+                }
+                """;
+        MvcResult result = mockMvc.perform(post("/api/reports/run")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertSingleDocument(result, "KYC001");
+    }
+
+    private void runCaseLoanAmountRange() throws Exception {
+        String payload = """
+                {
+                  "baseEntity": "LOAN_DATA",
+                  "columns": ["DOCUMENT_PARENT.DOCUMENT_NUMBER", "LOAN_AMOUNT"],
+                  "filters": [
+                    {"key": "LOAN_AMOUNT", "op": "RANGE", "valueFrom": "1500000", "valueTo": "2500000", "dataType": "number"}
                   ]
                 }
                 """;

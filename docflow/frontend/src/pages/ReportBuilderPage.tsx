@@ -9,7 +9,7 @@ import {
 } from '../lib/reports';
 import type { DynamicReportRequest, ReportBaseEntity, ReportRunResponse, ReportTemplate } from '../types/reports';
 
-const OPERATORS = ['EQ', 'LIKE', 'LT', 'GT'] as const;
+const OPERATORS = ['EQ', 'LIKE', 'LT', 'GT', 'RANGE', 'BETWEEN'] as const;
 type Operator = (typeof OPERATORS)[number];
 const LOGICAL_TYPES = ['STRING', 'NUMBER', 'DATE'] as const;
 type LogicalType = (typeof LOGICAL_TYPES)[number];
@@ -19,14 +19,23 @@ type FilterRow = {
   key: string;
   op: Operator;
   value: string;
+  valueFrom: string;
+  valueTo: string;
   logicalType: LogicalType;
 };
+
+function requiresRangeValues(op: Operator): boolean {
+  return op === 'RANGE' || op === 'BETWEEN';
+}
 
 function allowedOperators(type: LogicalType): Operator[] {
   if (type === 'STRING') {
     return ['EQ', 'LIKE'];
   }
-  return ['EQ', 'LT', 'GT'];
+  if (type === 'NUMBER') {
+    return ['EQ', 'LT', 'GT', 'RANGE'];
+  }
+  return ['EQ', 'LT', 'GT', 'BETWEEN'];
 }
 
 function normalizeOperatorForBackend(op: string): Operator {
@@ -34,6 +43,8 @@ function normalizeOperatorForBackend(op: string): Operator {
   if (upper === '=' || upper === 'EQ') return 'EQ';
   if (upper === '<' || upper === 'LT') return 'LT';
   if (upper === '>' || upper === 'GT') return 'GT';
+  if (upper === 'RANGE') return 'RANGE';
+  if (upper === 'BETWEEN') return 'BETWEEN';
   return 'EQ';
 }
 
@@ -245,6 +256,8 @@ export default function ReportBuilderPage() {
               key: normaliseTemplateKey(filter?.key ?? ''),
               op: operator,
               value: filter?.value ?? '',
+              valueFrom: filter?.valueFrom ?? '',
+              valueTo: filter?.valueTo ?? '',
               logicalType: safeType,
             };
           })
@@ -317,23 +330,37 @@ export default function ReportBuilderPage() {
   const handleAddFilter = () => {
     const nextId = filterIdRef.current + 1;
     filterIdRef.current = nextId;
-    setFilters((prev) => [...prev, { id: nextId, key: '', op: 'EQ', value: '', logicalType: 'STRING' }]);
+    setFilters((prev) => [
+      ...prev,
+      { id: nextId, key: '', op: 'EQ', value: '', valueFrom: '', valueTo: '', logicalType: 'STRING' },
+    ]);
   };
 
   const handleFilterChange = (
     id: number,
-    update: Partial<Pick<FilterRow, 'key' | 'op' | 'value' | 'logicalType'>>,
+    update: Partial<Pick<FilterRow, 'key' | 'op' | 'value' | 'valueFrom' | 'valueTo' | 'logicalType'>>,
   ) => {
     setFilters((prev) =>
-      prev.map((filter) =>
-        filter.id !== id
-          ? filter
-          : {
-              ...filter,
-              ...update,
-              op: update.logicalType ? allowedOperators(update.logicalType)[0] : update.op ?? filter.op,
-            },
-      ),
+      prev.map((filter) => {
+        if (filter.id !== id) {
+          return filter;
+        }
+        const nextType = update.logicalType ?? filter.logicalType;
+        const nextOp = update.logicalType ? allowedOperators(nextType)[0] : update.op ?? filter.op;
+        const nextFilter: FilterRow = {
+          ...filter,
+          ...update,
+          logicalType: nextType,
+          op: nextOp,
+        };
+        if (requiresRangeValues(nextOp)) {
+          nextFilter.value = '';
+        } else {
+          nextFilter.valueFrom = '';
+          nextFilter.valueTo = '';
+        }
+        return nextFilter;
+      }),
     );
   };
 
@@ -403,27 +430,18 @@ export default function ReportBuilderPage() {
         const source = normalizedKey.startsWith('meta:')
           ? 'DOCUMENT_METADATA'
           : normalizedKey.startsWith(`${documentEntityName}.`) || normalizedKey.startsWith('DOCUMENT.')
-          ? 'DOCUMENT'
-          : 'THIRD_PARTY_ENTITY';
+            ? 'DOCUMENT'
+            : 'THIRD_PARTY_ENTITY';
         const field = normalizedKey.includes('.') ? normalizedKey.split('.', 2)[1] : normalizedKey.replace('meta:', '');
-        if (!filter.value) {
-          return {
-            key: normalizedKey,
-            op: filter.op,
-            value: '',
-            mode: 'USER_INPUT' as const,
-            source,
-            field,
-            logicalType: filter.logicalType,
-            dataType: filter.logicalType,
-            allowedOperators: allowedOperators(filter.logicalType),
-          };
-        }
+        const isRange = requiresRangeValues(filter.op);
+        const hasValue = isRange ? Boolean(filter.valueFrom || filter.valueTo) : Boolean(filter.value);
         return {
           key: normalizedKey,
           op: filter.op,
-          value: filter.value,
-          mode: 'FIXED_VALUE' as const,
+          value: isRange ? undefined : filter.value,
+          valueFrom: isRange ? filter.valueFrom : undefined,
+          valueTo: isRange ? filter.valueTo : undefined,
+          mode: hasValue ? ('FIXED_VALUE' as const) : ('USER_INPUT' as const),
           source,
           field,
           logicalType: filter.logicalType,
@@ -453,6 +471,19 @@ export default function ReportBuilderPage() {
       .map((filter) => {
         if (!filter.key || !filter.op) {
           return null;
+        }
+        if (requiresRangeValues(filter.op)) {
+          if (!filter.valueFrom || !filter.valueTo) {
+            return null;
+          }
+          return {
+            key: normalizeKeyForBackend(filter.key),
+            op: filter.op,
+            valueFrom: filter.valueFrom,
+            valueTo: filter.valueTo,
+            logicalType: filter.logicalType,
+            dataType: filter.logicalType,
+          };
         }
         if (!filter.value) {
           return null;
@@ -836,7 +867,7 @@ export default function ReportBuilderPage() {
               {filters.map((filter) => (
                 <div
                   key={filter.id}
-                  className="grid gap-2 rounded border border-slate-200 p-3 text-sm transition-colors dark:border-slate-700 md:grid-cols-[1.5fr_1fr_1fr_1.5fr_auto]"
+                  className="grid gap-2 rounded border border-slate-200 p-3 text-sm transition-colors dark:border-slate-700 md:grid-cols-[1.5fr_1fr_1fr_1.8fr_auto]"
                 >
                   <select
                     value={filter.key}
@@ -882,14 +913,35 @@ export default function ReportBuilderPage() {
                       </option>
                     ))}
                   </select>
-                  <input
-                    type={filter.logicalType === 'NUMBER' ? 'number' : filter.logicalType === 'DATE' ? 'date' : 'text'}
-                    value={filter.value}
-                    onChange={(event) => handleFilterChange(filter.id, { value: event.target.value })}
-                    inputMode={filter.logicalType === 'NUMBER' ? 'decimal' : undefined}
-                    placeholder="Value"
-                    className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-                  />
+                  {requiresRangeValues(filter.op) ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type={filter.logicalType === 'NUMBER' ? 'number' : filter.logicalType === 'DATE' ? 'date' : 'text'}
+                        value={filter.valueFrom}
+                        onChange={(event) => handleFilterChange(filter.id, { valueFrom: event.target.value })}
+                        inputMode={filter.logicalType === 'NUMBER' ? 'decimal' : undefined}
+                        placeholder={filter.logicalType === 'NUMBER' ? 'Min' : 'From'}
+                        className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                      />
+                      <input
+                        type={filter.logicalType === 'NUMBER' ? 'number' : filter.logicalType === 'DATE' ? 'date' : 'text'}
+                        value={filter.valueTo}
+                        onChange={(event) => handleFilterChange(filter.id, { valueTo: event.target.value })}
+                        inputMode={filter.logicalType === 'NUMBER' ? 'decimal' : undefined}
+                        placeholder={filter.logicalType === 'NUMBER' ? 'Max' : 'To'}
+                        className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      type={filter.logicalType === 'NUMBER' ? 'number' : filter.logicalType === 'DATE' ? 'date' : 'text'}
+                      value={filter.value}
+                      onChange={(event) => handleFilterChange(filter.id, { value: event.target.value })}
+                      inputMode={filter.logicalType === 'NUMBER' ? 'decimal' : undefined}
+                      placeholder="Value"
+                      className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                    />
+                  )}
                   <button
                     type="button"
                     className="self-start rounded border border-red-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-red-600 transition hover:bg-red-50 dark:border-red-400/40 dark:text-red-300 dark:hover:bg-red-500/10"

@@ -17,13 +17,15 @@ export type DynamicReportFilter = {
   key: string;
   op: string;
   value: string;
+  valueFrom?: string;
+  valueTo?: string;
   mode?: 'FIXED_VALUE' | 'USER_INPUT';
   label?: string;
   dataType?: string;
   source?: 'DOCUMENT' | 'DOCUMENT_METADATA' | 'THIRD_PARTY_ENTITY';
   field?: string;
   logicalType?: 'STRING' | 'NUMBER' | 'DATE';
-  allowedOperators?: ('EQ' | 'LIKE' | 'LT' | 'GT')[];
+  allowedOperators?: ('EQ' | 'LIKE' | 'LT' | 'GT' | 'RANGE' | 'BETWEEN')[];
 };
 
 export type DynamicReportRequest = {
@@ -63,7 +65,7 @@ export type ExecutableReportFilterField = {
   key: string;
   label: string;
   type: ExecutableReportFilterType;
-  allowedOps: ('EQ' | 'LIKE' | 'LT' | 'GT')[];
+  allowedOps: ('EQ' | 'LIKE' | 'LT' | 'GT' | 'RANGE' | 'BETWEEN')[];
   dateFormat?: string | null;
   presetEnabled?: boolean;
   presets?: { code: string; name: string; displayOrder: number }[];
@@ -79,6 +81,8 @@ export type ReportExecutionFilterInput = {
   key: string;
   op?: string;
   value?: string;
+  valueFrom?: string;
+  valueTo?: string;
   mode?: 'MANUAL' | 'PRESET';
   fromValue?: string;
   toValue?: string;

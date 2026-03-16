@@ -8,8 +8,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class DynamicReportBuilderTest {
 
@@ -19,100 +20,129 @@ class DynamicReportBuilderTest {
     @BeforeEach
     void setUp() {
         metadataService = mock(ReportMetadataService.class);
-        ReportProperties properties = new ReportProperties();
-        ReportProperties.DocumentTableProperties doc = new ReportProperties.DocumentTableProperties();
-        doc.setName("DOCUMENT_PARENT");
-        doc.setInternalPk("ID");
-        doc.setBusinessKey("DOCUMENT_NUMBER");
-        properties.setDocumentTable(doc);
-
-        ReportProperties.MetadataTableProperties meta = new ReportProperties.MetadataTableProperties();
-        meta.setName("DOCUMENT_METADATA");
-        meta.setDocumentIdColumn("DOCUMENT_ID");
-        meta.setKeyColumn("FIELD_KEY");
-        meta.setValueColumn("FIELD_VALUE");
-        meta.setValueIsClob(true);
-        properties.setMetadataTable(meta);
-
-        ReportProperties.EntityProperties loan = new ReportProperties.EntityProperties();
-        loan.setName("LOAN_DATA");
-        ReportProperties.JoinProperties join = new ReportProperties.JoinProperties();
-        join.setEnabled(true);
-        join.setBusinessFkColumn("USER_ID");
-        loan.setJoinToDocument(join);
-        properties.setEntities(List.of(loan));
+        builder = new DynamicReportBuilder(metadataService, properties());
 
         when(metadataService.getColumns("DOCUMENT_PARENT"))
-                .thenReturn(new ReportMetadataService.EntityColumns("DOCUMENT_PARENT", List.of("ID", "DOCUMENT_NUMBER", "AMOUNT", "CREATED_DATE")));
+                .thenReturn(new ReportMetadataService.EntityColumns("DOCUMENT_PARENT", List.of("ID", "DOCUMENT_NUMBER", "CREATED_AT", "STATUS")));
         when(metadataService.getColumns("LOAN_DATA"))
-                .thenReturn(new ReportMetadataService.EntityColumns("LOAN_DATA", List.of("USER_ID", "DUE_AMOUNT")));
-        when(metadataService.listMetadataKeys()).thenReturn(List.of("branch", "loanAmount", "applicationDate"));
-
-        builder = new DynamicReportBuilder(metadataService, properties);
+                .thenReturn(new ReportMetadataService.EntityColumns("LOAN_DATA", List.of("USER_ID", "LOAN_AMOUNT", "COMPLETION_DATE")));
+        when(metadataService.listMetadataKeys()).thenReturn(List.of("applicationDate", "loanAmount"));
     }
 
     @Test
-    void shouldBuildDocumentAndMetadataTypedPredicates() {
+    void shouldBuildDocumentDateBetweenUsingTruncAndDateBounds() {
         DynamicReportRequest request = new DynamicReportRequest();
         request.setBaseEntity("DOCUMENT_PARENT");
-        request.setColumns(List.of("DOCUMENT_PARENT.DOCUMENT_NUMBER"));
-        request.setFilters(List.of(
-                filter("DOCUMENT_PARENT.AMOUNT", "GT", "100", "NUMBER"),
-                filter("DOCUMENT_PARENT.CREATED_DATE", "LT", "2026-03-01", "DATE"),
-                filter("meta:branch", "EQ", "Avadi", "STRING"),
-                filter("meta:loanAmount", "GT", "50000", "NUMBER"),
-                filter("meta:applicationDate", "LT", "2026-03-06", "DATE")
-        ));
+        request.setColumns(List.of("DOCUMENT_NUMBER", "CREATED_AT"));
+        request.setFilters(List.of(rangeFilter("CREATED_AT", "BETWEEN", "2026-03-01", "2026-03-31", ReportFilter.FilterLogicalType.DATE)));
 
         DynamicReportBuilder.BuiltReport built = builder.build(request);
 
-        assertTrue(built.sql().contains("TO_NUMBER(dp.AMOUNT) >"));
-        assertTrue(built.sql().contains("TO_DATE(dp.CREATED_DATE, 'YYYY-MM-DD') <"));
-        assertTrue(built.sql().contains("LOWER(DBMS_LOB.SUBSTR(dm.FIELD_VALUE"));
-        assertTrue(built.sql().contains("TO_NUMBER(DBMS_LOB.SUBSTR(dm.FIELD_VALUE"));
-        assertTrue(built.sql().contains("TO_DATE(DBMS_LOB.SUBSTR(dm.FIELD_VALUE"));
+        assertThat(built.sql()).contains("TRUNC(dp.CREATED_AT) BETWEEN TO_DATE(:p0, 'YYYY-MM-DD') AND TO_DATE(:p1, 'YYYY-MM-DD')");
     }
 
     @Test
-    void shouldBuildStringLikePredicatesForAllSources() {
+    void shouldBuildMetadataDateBetweenWithDateConversion() {
         DynamicReportRequest request = new DynamicReportRequest();
-        request.setBaseEntity("LOAN_DATA");
-        request.setColumns(List.of("LOAN_DATA.DUE_AMOUNT"));
-        request.setFilters(List.of(
-                filter("DOCUMENT_PARENT.DOCUMENT_NUMBER", "LIKE", "DOC", "STRING"),
-                filter("meta:branch", "LIKE", "avi", "STRING"),
-                filter("LOAN_DATA.USER_ID", "LIKE", "usr", "STRING")
-        ));
+        request.setBaseEntity("DOCUMENT_PARENT");
+        request.setColumns(List.of("DOCUMENT_NUMBER"));
+        request.setFilters(List.of(rangeFilter("meta:applicationDate", "BETWEEN", "2026-03-01", "2026-03-31", ReportFilter.FilterLogicalType.DATE)));
 
         DynamicReportBuilder.BuiltReport built = builder.build(request);
 
-        assertTrue(built.sql().contains("LOWER(dp.DOCUMENT_NUMBER) LIKE"));
-        assertTrue(built.sql().contains("LOWER(DBMS_LOB.SUBSTR(dm.FIELD_VALUE"));
-        assertTrue(built.sql().contains("LOWER(b.USER_ID) LIKE"));
-        assertTrue(built.parameters().values().contains("%doc%"));
-        assertTrue(built.parameters().values().contains("%avi%"));
-        assertTrue(built.parameters().values().contains("%usr%"));
+        assertThat(built.sql()).contains("TO_DATE(dm.FIELD_VALUE, 'YYYY-MM-DD') BETWEEN TO_DATE(:p1, 'YYYY-MM-DD') AND TO_DATE(:p2, 'YYYY-MM-DD')");
     }
 
     @Test
-    void shouldBuildThirdPartyPredicateUsingDynamicMetadataPath() {
+    void shouldBuildThirdPartyDateBetweenAgainstBaseColumn() {
         DynamicReportRequest request = new DynamicReportRequest();
         request.setBaseEntity("LOAN_DATA");
-        request.setColumns(List.of("LOAN_DATA.DUE_AMOUNT"));
-        request.setFilters(List.of(filter("LOAN_DATA.DUE_AMOUNT", "GT", "1000", "NUMBER")));
+        request.setColumns(List.of("LOAN_AMOUNT", "COMPLETION_DATE"));
+        request.setFilters(List.of(rangeFilter("COMPLETION_DATE", "BETWEEN", "2026-03-01", "2026-03-31", ReportFilter.FilterLogicalType.DATE)));
 
         DynamicReportBuilder.BuiltReport built = builder.build(request);
 
-        assertTrue(built.sql().contains("FROM LOAN_DATA b JOIN DOCUMENT_PARENT dp"));
-        assertTrue(built.sql().contains("TO_NUMBER(b.DUE_AMOUNT) >"));
+        assertThat(built.sql()).contains("TRUNC(b.COMPLETION_DATE) BETWEEN TO_DATE(:p0, 'YYYY-MM-DD') AND TO_DATE(:p1, 'YYYY-MM-DD')");
     }
 
-    private ReportFilter filter(String key, String op, String value, String dataType) {
+    @Test
+    void shouldBuildDocumentNumberRange() {
+        DynamicReportRequest request = new DynamicReportRequest();
+        request.setBaseEntity("LOAN_DATA");
+        request.setColumns(List.of("LOAN_AMOUNT"));
+        request.setFilters(List.of(rangeFilter("LOAN_AMOUNT", "RANGE", "100", "250", ReportFilter.FilterLogicalType.NUMBER)));
+
+        DynamicReportBuilder.BuiltReport built = builder.build(request);
+
+        assertThat(built.sql()).contains("TO_NUMBER(b.LOAN_AMOUNT) BETWEEN TO_NUMBER(:p0) AND TO_NUMBER(:p1)");
+    }
+
+    @Test
+    void shouldBuildMetadataNumberRangeWithNumericConversion() {
+        DynamicReportRequest request = new DynamicReportRequest();
+        request.setBaseEntity("DOCUMENT_PARENT");
+        request.setColumns(List.of("DOCUMENT_NUMBER"));
+        request.setFilters(List.of(rangeFilter("meta:loanAmount", "RANGE", "100", "250", ReportFilter.FilterLogicalType.NUMBER)));
+
+        DynamicReportBuilder.BuiltReport built = builder.build(request);
+
+        assertThat(built.sql()).contains("TO_NUMBER(dm.FIELD_VALUE) BETWEEN TO_NUMBER(:p1) AND TO_NUMBER(:p2)");
+    }
+
+    @Test
+    void shouldKeepExistingLikeBehavior() {
+        DynamicReportRequest request = new DynamicReportRequest();
+        request.setBaseEntity("DOCUMENT_PARENT");
+        request.setColumns(List.of("DOCUMENT_NUMBER"));
+        ReportFilter filter = new ReportFilter();
+        filter.setKey("STATUS");
+        filter.setOp("LIKE");
+        filter.setValue("PEND");
+        filter.setLogicalType(ReportFilter.FilterLogicalType.STRING);
+        filter.setDataType("STRING");
+        request.setFilters(List.of(filter));
+
+        DynamicReportBuilder.BuiltReport built = builder.build(request);
+
+        assertThat(built.sql()).contains("LOWER(dp.STATUS) LIKE :p0");
+    }
+
+    private static ReportFilter rangeFilter(String key, String op, String from, String to, ReportFilter.FilterLogicalType type) {
         ReportFilter filter = new ReportFilter();
         filter.setKey(key);
         filter.setOp(op);
-        filter.setValue(value);
-        filter.setDataType(dataType);
+        filter.setValueFrom(from);
+        filter.setValueTo(to);
+        filter.setLogicalType(type);
+        filter.setDataType(type.name());
         return filter;
+    }
+
+    private static ReportProperties properties() {
+        ReportProperties properties = new ReportProperties();
+
+        ReportProperties.DocumentTableProperties document = new ReportProperties.DocumentTableProperties();
+        document.setName("DOCUMENT_PARENT");
+        document.setInternalPk("ID");
+        document.setBusinessKey("DOCUMENT_NUMBER");
+        properties.setDocumentTable(document);
+
+        ReportProperties.MetadataTableProperties metadata = new ReportProperties.MetadataTableProperties();
+        metadata.setName("DOCUMENT_METADATA");
+        metadata.setDocumentIdColumn("DOCUMENT_ID");
+        metadata.setKeyColumn("FIELD_KEY");
+        metadata.setValueColumn("FIELD_VALUE");
+        metadata.setValueIsClob(false);
+        properties.setMetadataTable(metadata);
+
+        ReportProperties.EntityProperties loanData = new ReportProperties.EntityProperties();
+        loanData.setName("LOAN_DATA");
+        ReportProperties.JoinProperties join = new ReportProperties.JoinProperties();
+        join.setEnabled(true);
+        join.setBusinessFkColumn("USER_ID");
+        loanData.setJoinToDocument(join);
+        properties.setEntities(List.of(loanData));
+
+        return properties;
     }
 }

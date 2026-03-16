@@ -78,4 +78,40 @@ class ReportTemplateServiceTest {
         assertThat(filters.get(0).path("key").asText()).isEqualTo("DOCUMENT_PARENT.STATUS");
         assertThat(filters.get(0).path("mode").asText()).isEqualTo("USER_INPUT");
     }
+
+    @Test
+    void createTemplatePersistsRangeBoundsInPayload() throws Exception {
+        DynamicReportRequest request = new DynamicReportRequest();
+        request.setBaseEntity("DOCUMENT_PARENT");
+        request.setColumns(List.of("DOCUMENT_PARENT.ID"));
+        ReportFilter filter = new ReportFilter();
+        filter.setKey("DOCUMENT_PARENT.CREATED_AT");
+        filter.setOp("BETWEEN");
+        filter.setMode(ReportFilter.Mode.FIXED_VALUE);
+        filter.setLogicalType(ReportFilter.FilterLogicalType.DATE);
+        filter.setValueFrom("2026-03-01");
+        filter.setValueTo("2026-03-31");
+        request.setFilters(List.of(filter));
+
+        ReportTemplateResponse response = new ReportTemplateResponse(1L, "Date Template", null, request, "admin1", Instant.now());
+
+        doAnswer(invocation -> {
+            KeyHolder keyHolder = invocation.getArgument(2);
+            keyHolder.getKeyList().add(Map.of("ID", 1L));
+            return 1;
+        }).when(jdbcTemplate).update(anyString(), any(MapSqlParameterSource.class), any(KeyHolder.class), any(String[].class));
+
+        when(jdbcTemplate.queryForObject(anyString(), anyMap(), any(RowMapper.class))).thenReturn(response);
+
+        service.createTemplate("Date Template", request, "admin1");
+
+        ArgumentCaptor<MapSqlParameterSource> paramsCaptor = ArgumentCaptor.forClass(MapSqlParameterSource.class);
+        verify(jdbcTemplate).update(anyString(), paramsCaptor.capture(), any(KeyHolder.class), any(String[].class));
+
+        String json = (String) paramsCaptor.getValue().getValue("configJson");
+        JsonNode filters = objectMapper.readTree(json).path("request").path("filters");
+        assertThat(filters.get(0).path("op").asText()).isEqualTo("BETWEEN");
+        assertThat(filters.get(0).path("valueFrom").asText()).isEqualTo("2026-03-01");
+        assertThat(filters.get(0).path("valueTo").asText()).isEqualTo("2026-03-31");
+    }
 }

@@ -195,6 +195,29 @@ Report query then applies the filter normally:
 dispatch_date BETWEEN from AND to
 ```
 
+## Reports Range Enhancement
+
+Reports now support bounded interval filters in addition to the existing single-value comparisons.
+
+- `STRING` supports `EQ`, `LIKE`
+- `NUMBER` supports `EQ`, `LT`, `GT`, `RANGE`
+- `DATE` supports `EQ`, `LT`, `GT`, `BETWEEN`
+
+Execution behavior:
+
+- `NUMBER RANGE` uses two values: `valueFrom` and `valueTo`
+- `DATE BETWEEN` uses two values: `valueFrom` and `valueTo`
+- single-value operators continue to use `value`
+- blank single-value filters are skipped
+- incomplete `RANGE` / `BETWEEN` inputs are rejected
+- bounded filters are inclusive and require `valueFrom <= valueTo`
+
+Query behavior:
+
+- relational `DATE` and `TIMESTAMP` columns are treated as date-only for current `DATE` filters
+- metadata number/date filters continue to use typed conversion before comparison
+- `DOCUMENT`, `DOCUMENT_METADATA`, and `THIRD_PARTY_ENTITY` all support the new bounded operators
+
 ---
 
 ### Database Configuration

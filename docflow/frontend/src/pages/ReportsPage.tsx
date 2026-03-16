@@ -16,10 +16,30 @@ import { useUser } from '../lib/UserContext';
 
 type FilterState = Record<
   string,
-  { op: string; value: string; mode?: 'MANUAL' | 'PRESET'; fromValue?: string; toValue?: string; presetCode?: string }
+  {
+    op: string;
+    value: string;
+    valueFrom?: string;
+    valueTo?: string;
+    mode?: 'MANUAL' | 'PRESET';
+    fromValue?: string;
+    toValue?: string;
+    presetCode?: string;
+  }
 >;
 
-const OPERATOR_LABELS: Record<string, string> = { EQ: '=', LIKE: 'Contains', LT: '<', GT: '>' };
+const OPERATOR_LABELS: Record<string, string> = {
+  EQ: '=',
+  LIKE: 'Contains',
+  LT: '<',
+  GT: '>',
+  RANGE: 'Range',
+  BETWEEN: 'Between',
+};
+
+function requiresRangeValues(op: string): boolean {
+  return op === 'RANGE' || op === 'BETWEEN';
+}
 
 function normaliseError(error: unknown): string {
   if (typeof error === 'string') {
@@ -119,6 +139,8 @@ export default function ReportsPage() {
             initialFilters[filter.key] = {
               op: defaultOperator(filter),
               value: '',
+              valueFrom: '',
+              valueTo: '',
               mode: filter.type === 'DATE' && filter.presetEnabled ? 'PRESET' : 'MANUAL',
             };
           });
@@ -177,6 +199,13 @@ export default function ReportsPage() {
     });
   };
 
+  const handleRangeValueChange = (key: string, patch: Partial<{ valueFrom: string; valueTo: string }>) => {
+    setFiltersState((prev) => {
+      const current = prev[key] ?? { op: defaultOperator(templateDetail?.filters.find((f) => f.key === key)), value: '' };
+      return { ...prev, [key]: { ...current, ...patch } };
+    });
+  };
+
   const handleDateModeChange = (key: string, mode: 'MANUAL' | 'PRESET') => {
     setFiltersState((prev) => {
       const current = prev[key] ?? { op: defaultOperator(templateDetail?.filters.find((f) => f.key === key)), value: '' };
@@ -194,7 +223,10 @@ export default function ReportsPage() {
   const handleFilterOpChange = (key: string, op: string) => {
     setFiltersState((prev) => {
       const current = prev[key] ?? { op: defaultOperator(templateDetail?.filters.find((f) => f.key === key)), value: '' };
-      return { ...prev, [key]: { ...current, op } };
+      if (requiresRangeValues(op)) {
+        return { ...prev, [key]: { ...current, op, value: '' } };
+      }
+      return { ...prev, [key]: { ...current, op, valueFrom: '', valueTo: '' } };
     });
   };
 
@@ -222,6 +254,14 @@ export default function ReportsPage() {
         }
 
         const op = state.op || defaultOperator(filter);
+        if (requiresRangeValues(op)) {
+          const valueFrom = state.valueFrom?.trim() ?? '';
+          const valueTo = state.valueTo?.trim() ?? '';
+          if (!valueFrom && !valueTo) {
+            return null;
+          }
+          return { key: filter.key, op, valueFrom, valueTo };
+        }
         const value = state.value?.trim() ?? '';
         if (!value) {
           return null;
@@ -421,21 +461,67 @@ export default function ReportsPage() {
                             ))}
                           </select>
                         ) : (
-                          <div className="grid grid-cols-2 gap-2">
+                          requiresRangeValues(state.op) ? (
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                type="date"
+                                value={state.valueFrom ?? state.fromValue ?? ''}
+                                onChange={(event) =>
+                                  setFiltersState((prev) => {
+                                    const current = prev[filter.key] ?? { op: defaultOperator(filter), value: '' };
+                                    return {
+                                      ...prev,
+                                      [filter.key]: { ...current, valueFrom: event.target.value, fromValue: event.target.value },
+                                    };
+                                  })
+                                }
+                                className="w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                              />
+                              <input
+                                type="date"
+                                value={state.valueTo ?? state.toValue ?? ''}
+                                onChange={(event) =>
+                                  setFiltersState((prev) => {
+                                    const current = prev[filter.key] ?? { op: defaultOperator(filter), value: '' };
+                                    return {
+                                      ...prev,
+                                      [filter.key]: { ...current, valueTo: event.target.value, toValue: event.target.value },
+                                    };
+                                  })
+                                }
+                                className="w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                              />
+                            </div>
+                          ) : (
                             <input
                               type="date"
-                              value={state.fromValue ?? ''}
-                              onChange={(event) => handleDateRangeValueChange(filter.key, { fromValue: event.target.value })}
+                              value={state.value}
+                              onChange={(event) => handleFilterValueChange(filter.key, event.target.value)}
                               className="w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
                             />
-                            <input
-                              type="date"
-                              value={state.toValue ?? ''}
-                              onChange={(event) => handleDateRangeValueChange(filter.key, { toValue: event.target.value })}
-                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-                            />
-                          </div>
+                          )
                         )}
+                      </div>
+                    ) : requiresRangeValues(state.op) ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          id={`value-from-${filter.key}`}
+                          type={filter.type === 'NUMBER' ? 'number' : 'date'}
+                          inputMode={filter.type === 'NUMBER' ? 'decimal' : undefined}
+                          value={state.valueFrom ?? ''}
+                          onChange={(event) => handleRangeValueChange(filter.key, { valueFrom: event.target.value })}
+                          placeholder={filter.type === 'NUMBER' ? 'Min' : 'From'}
+                          className="w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                        />
+                        <input
+                          id={`value-to-${filter.key}`}
+                          type={filter.type === 'NUMBER' ? 'number' : 'date'}
+                          inputMode={filter.type === 'NUMBER' ? 'decimal' : undefined}
+                          value={state.valueTo ?? ''}
+                          onChange={(event) => handleRangeValueChange(filter.key, { valueTo: event.target.value })}
+                          placeholder={filter.type === 'NUMBER' ? 'Max' : 'To'}
+                          className="w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                        />
                       </div>
                     ) : (
                       <input

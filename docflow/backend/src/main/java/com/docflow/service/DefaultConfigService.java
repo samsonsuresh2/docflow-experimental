@@ -132,7 +132,9 @@ public class DefaultConfigService implements ConfigService {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sandbox upload schema is missing"));
 
         Optional<AppConfig> currentActive = appConfigRepository
-            .findTopByConfigKeyAndSchemaStatusOrderBySchemaVersionDesc(UPLOAD_CONFIG_KEY, SchemaStatus.ACTIVE);
+            .findLatestByConfigKeyAndSchemaStatus(UPLOAD_CONFIG_KEY, SchemaStatus.ACTIVE)
+            .stream()
+            .findFirst();
         int nextVersion = currentActive.map(AppConfig::getSchemaVersion).orElse(0) + 1;
 
         AppConfig promoted = new AppConfig();
@@ -157,14 +159,18 @@ public class DefaultConfigService implements ConfigService {
     public UploadSchemaStatusView getUploadSchemaStatus() {
         Optional<AppConfig> sandbox = appConfigRepository.findByConfigKeyAndSchemaStatus(UPLOAD_CONFIG_KEY, SchemaStatus.SANDBOX);
         Optional<AppConfig> active = appConfigRepository
-            .findTopByConfigKeyAndSchemaStatusOrderBySchemaVersionDesc(UPLOAD_CONFIG_KEY, SchemaStatus.ACTIVE);
+            .findLatestByConfigKeyAndSchemaStatus(UPLOAD_CONFIG_KEY, SchemaStatus.ACTIVE)
+            .stream()
+            .findFirst();
         String configJson = resolveUploadSchemaForRequest().map(AppConfig::getConfigValue)
             .or(() -> sandbox.map(AppConfig::getConfigValue))
             .or(() -> active.map(AppConfig::getConfigValue))
             .orElse(null);
         Optional<AppConfig> freshest = appConfigRepository
-            .findTopByConfigKeyAndSchemaStatusInOrderBySchemaVersionDesc(UPLOAD_CONFIG_KEY,
-                EnumSet.of(SchemaStatus.SANDBOX, SchemaStatus.ACTIVE, SchemaStatus.DEPRECATED));
+            .findByConfigKeyAndSchemaStatusInVersionOrder(UPLOAD_CONFIG_KEY,
+                EnumSet.of(SchemaStatus.SANDBOX, SchemaStatus.ACTIVE, SchemaStatus.DEPRECATED))
+            .stream()
+            .findFirst();
         return new UploadSchemaStatusView(
             schemaBindingProperties.getBindingStrategy(),
             active.map(AppConfig::getSchemaVersion).orElse(null),
@@ -179,7 +185,9 @@ public class DefaultConfigService implements ConfigService {
         if (schemaBindingProperties.getBindingStrategy() == SchemaBindingStrategy.SANDBOX_ONLY) {
             return appConfigRepository.findByConfigKeyAndSchemaStatus(UPLOAD_CONFIG_KEY, SchemaStatus.SANDBOX);
         }
-        return appConfigRepository.findTopByConfigKeyAndSchemaStatusOrderBySchemaVersionDesc(UPLOAD_CONFIG_KEY, SchemaStatus.ACTIVE);
+        return appConfigRepository.findLatestByConfigKeyAndSchemaStatus(UPLOAD_CONFIG_KEY, SchemaStatus.ACTIVE)
+            .stream()
+            .findFirst();
     }
 
 

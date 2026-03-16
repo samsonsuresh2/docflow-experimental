@@ -2,7 +2,10 @@ package com.docflow.reports.service;
 
 import com.docflow.reports.config.ReportProperties;
 import com.docflow.reports.dto.ReportExecutionModels;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -20,6 +23,7 @@ import java.util.Optional;
 @Service
 public class DatePresetService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(DatePresetService.class);
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ReportProperties properties;
 
@@ -42,9 +46,15 @@ public class DatePresetService {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("reportCode", reportCode)
                 .addValue("filterKey", filterKey);
-        return jdbcTemplate.query(sql, params, (rs, i) ->
-                new ReportExecutionModels.DatePresetOption(rs.getString("PRESET_CODE"), rs.getString("PRESET_NAME"), rs.getInt("DISPLAY_ORDER"))
-        );
+        try {
+            return jdbcTemplate.query(sql, params, (rs, i) ->
+                    new ReportExecutionModels.DatePresetOption(rs.getString("PRESET_CODE"), rs.getString("PRESET_NAME"), rs.getInt("DISPLAY_ORDER"))
+            );
+        } catch (DataAccessException ex) {
+            LOGGER.warn("Falling back to no preset options for reportCode={} filterKey={} because preset lookup failed",
+                    reportCode, filterKey, ex);
+            return List.of();
+        }
     }
 
     public ResolvedDateRange resolvePreset(String reportCode, String filterKey, String presetCode) {
@@ -77,13 +87,29 @@ public class DatePresetService {
                   AND mp.REPORT_CODE = :reportCode
                   AND mp.FILTER_KEY = :filterKey
                 """;
-        List<DatePresetDefinition> rows = jdbcTemplate.query(sql,
-                new MapSqlParameterSource()
-                        .addValue("presetCode", presetCode)
-                        .addValue("reportCode", reportCode)
-                        .addValue("filterKey", filterKey),
-                (rs, i) -> new DatePresetDefinition(rs.getString("PRESET_CODE"), rs.getString("START_RULE"), rs.getString("END_RULE")));
-        return rows.stream().findFirst();
+        try {
+            List<DatePresetDefinition> rows = jdbcTemplate.query(sql,
+                    new MapSqlParameterSource()
+                            .addValue("presetCode", presetCode)
+                            .addValue("reportCode", reportCode)
+                            .addValue("filterKey", filterKey),
+                    (rs, i) -> new DatePresetDefinition(rs.getString("PRESET_CODE"), rs.getString("START_RULE"), rs.getString("END_RULE")));
+            return rows.stream().findFirst().or(() -> builtInPreset(presetCode));
+        } catch (DataAccessException ex) {
+            LOGGER.warn("Falling back to built-in preset resolution for reportCode={} filterKey={} presetCode={} because preset lookup failed",
+                    reportCode, filterKey, presetCode, ex);
+            return builtInPreset(presetCode);
+        }
+    }
+
+    private Optional<DatePresetDefinition> builtInPreset(String presetCode) {
+        return switch (presetCode) {
+            case "THIS_WEEK" -> Optional.of(new DatePresetDefinition("THIS_WEEK", "CURRENT_WEEK_START", "TODAY"));
+            case "PREVIOUS_WEEK" -> Optional.of(new DatePresetDefinition("PREVIOUS_WEEK", "PREVIOUS_WEEK_START", "PREVIOUS_WEEK_END"));
+            case "THIS_MONTH" -> Optional.of(new DatePresetDefinition("THIS_MONTH", "CURRENT_MONTH_START", "TODAY"));
+            case "PREVIOUS_MONTH" -> Optional.of(new DatePresetDefinition("PREVIOUS_MONTH", "PREVIOUS_MONTH_START", "PREVIOUS_MONTH_END"));
+            default -> Optional.empty();
+        };
     }
 
     LocalDate resolveRule(String rule, LocalDate today) {

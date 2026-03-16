@@ -20,6 +20,8 @@ public class ReportFilter {
     private String op;
 
     private String value;
+    private String valueFrom;
+    private String valueTo;
 
     @NotNull
     private Mode mode = Mode.FIXED_VALUE;
@@ -58,6 +60,22 @@ public class ReportFilter {
 
     public void setValue(String value) {
         this.value = value;
+    }
+
+    public String getValueFrom() {
+        return valueFrom;
+    }
+
+    public void setValueFrom(String valueFrom) {
+        this.valueFrom = valueFrom;
+    }
+
+    public String getValueTo() {
+        return valueTo;
+    }
+
+    public void setValueTo(String valueTo) {
+        this.valueTo = valueTo;
     }
 
     public Mode getMode() {
@@ -132,6 +150,8 @@ public class ReportFilter {
         EQ,
         LIKE,
         LT,
-        GT
+        GT,
+        RANGE,
+        BETWEEN
     }
 }
