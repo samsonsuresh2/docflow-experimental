@@ -5,12 +5,12 @@ import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(name = "audit_log")
-@SequenceGenerator(name = "audit_log_seq", sequenceName = "audit_log_seq", allocationSize = 1)
-public class AuditLog {
+@Table(name = "document_audit_log")
+@SequenceGenerator(name = "document_audit_log_seq", sequenceName = "document_audit_log_seq", allocationSize = 1)
+public class DocumentAuditLog {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "audit_log_seq")
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "document_audit_log_seq")
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

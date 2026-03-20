@@ -46,11 +46,11 @@ The backend returns rows/columns and handles paging.
 Report templates are persisted in the `REPORT_TEMPLATES` table (`name`, `config_json`, metadata columns).
 `config_json` stores the dynamic report request payload (base entity, columns, filters).
 
-#### About APP_CONFIG
+#### About JSON_CONFIG
 
-`APP_CONFIG` is used in this system for other config domains. The Reports runtime in this codebase currently does **not** read/write report templates from an `APP_CONFIG` row keyed by `TYPE=REPORTS` + `CONFIG_VALUE`; it uses `REPORT_TEMPLATES` instead.
+`JSON_CONFIG` is used in this system for other config domains. The Reports runtime in this codebase currently does **not** read/write report templates from a `JSON_CONFIG` row keyed by `TYPE=REPORTS` + `CONFIG_VALUE`; it uses `REPORT_TEMPLATES` instead.
 
-If your deployment uses a different branch/customization that stores Reports config in `APP_CONFIG`, document that separately and keep this README aligned with deployed code.
+If your deployment uses a different branch/customization that stores Reports config in `JSON_CONFIG`, document that separately and keep this README aligned with deployed code.
 
 ### 4) Supported data sources
 

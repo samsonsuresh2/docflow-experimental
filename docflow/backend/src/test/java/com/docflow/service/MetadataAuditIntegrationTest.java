@@ -1,11 +1,11 @@
 package com.docflow.service;
 
 import com.docflow.context.RequestUser;
-import com.docflow.domain.AuditLog;
 import com.docflow.domain.AuditCategory;
+import com.docflow.domain.DocumentAuditLog;
 import com.docflow.domain.DocumentParent;
 import com.docflow.domain.DocumentStatus;
-import com.docflow.domain.repository.AuditLogRepository;
+import com.docflow.domain.repository.DocumentAuditLogRepository;
 import com.docflow.domain.repository.DocumentRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,11 +48,11 @@ class MetadataAuditIntegrationTest {
     private DocumentRepository documentRepository;
 
     @Autowired
-    private AuditLogRepository auditLogRepository;
+    private DocumentAuditLogRepository documentAuditLogRepository;
 
     @Test
     void metadataChangesProduceAuditTrail() {
-        RequestUser user = new RequestUser("maker1", Set.of("MAKER"));
+        RequestUser user = new RequestUser("maker1", Set.of("MAKER"), "MAKER");
 
         DocumentParent document = new DocumentParent();
         document.setDocumentNumber("DOC-1001");
@@ -72,13 +72,13 @@ class MetadataAuditIntegrationTest {
                 "productType", "TERM_LOAN"
         ), user);
 
-        List<AuditLog> auditEntries = auditLogRepository.findByDocumentIdOrderByChangedAtAsc(saved.getId());
+        List<DocumentAuditLog> auditEntries = documentAuditLogRepository.findByDocument_IdOrderByChangedAtAsc(saved.getId());
         assertThat(auditEntries)
                 .hasSize(3)
                 .allMatch(entry -> "maker1".equals(entry.getChangedBy()))
                 .allMatch(entry -> entry.getAuditCategory() == AuditCategory.FIELD_CHANGE);
 
-        AuditLog updateEntry = auditEntries.get(2);
+        DocumentAuditLog updateEntry = auditEntries.get(2);
         assertThat(updateEntry.getFieldKey()).isEqualTo("loanAmount");
         assertThat(updateEntry.getChangeType()).isEqualTo("UPDATED");
         assertThat(updateEntry.getOldValue()).contains("150000");

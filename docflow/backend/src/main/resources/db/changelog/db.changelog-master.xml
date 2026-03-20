@@ -85,8 +85,8 @@
     </changeSet>
 
     <changeSet id="audit-log-table" author="docflow">
-        <comment>Create audit_log table</comment>
-        <createTable tableName="audit_log">
+        <comment>Create document_audit_log table</comment>
+        <createTable tableName="document_audit_log">
             <column name="id" type="NUMBER(19)">
                 <constraints primaryKey="true" nullable="false"/>
             </column>
@@ -95,27 +95,27 @@
             <column name="details" type="CLOB"/>
             <column name="created_at" type="TIMESTAMP(6)" defaultValueComputed="SYSTIMESTAMP"/>
         </createTable>
-        <createSequence sequenceName="audit_log_seq" startValue="1"/>
+        <createSequence sequenceName="document_audit_log_seq" startValue="1"/>
         <sql>
-            CREATE OR REPLACE TRIGGER audit_log_bir
-            BEFORE INSERT ON audit_log
+            CREATE OR REPLACE TRIGGER document_audit_log_bir
+            BEFORE INSERT ON document_audit_log
             FOR EACH ROW
             WHEN (NEW.id IS NULL)
             BEGIN
-                SELECT audit_log_seq.NEXTVAL INTO :NEW.id FROM dual;
+                SELECT document_audit_log_seq.NEXTVAL INTO :NEW.id FROM dual;
             END;
         </sql>
         <rollback>
-            <sql>DROP TRIGGER audit_log_bir</sql>
-            <dropTable tableName="audit_log"/>
-            <dropSequence sequenceName="audit_log_seq"/>
+            <sql>DROP TRIGGER document_audit_log_bir</sql>
+            <dropTable tableName="document_audit_log"/>
+            <dropSequence sequenceName="document_audit_log_seq"/>
         </rollback>
     </changeSet>
 
     <changeSet id="app-config-table" author="docflow">
-        <comment>Create app_config table with sequence and trigger</comment>
-        <createSequence sequenceName="app_config_seq" startValue="1"/>
-        <createTable tableName="app_config">
+        <comment>Create json_config table with sequence and trigger</comment>
+        <createSequence sequenceName="json_config_seq" startValue="1"/>
+        <createTable tableName="json_config">
             <column name="id" type="NUMBER(19)">
                 <constraints primaryKey="true" nullable="false"/>
             </column>
@@ -131,23 +131,23 @@
             <column name="updated_at" type="TIMESTAMP(6)" defaultValueComputed="SYSTIMESTAMP"/>
         </createTable>
         <sql>
-            CREATE OR REPLACE TRIGGER app_config_bir
-            BEFORE INSERT ON app_config
+            CREATE OR REPLACE TRIGGER json_config_bir
+            BEFORE INSERT ON json_config
             FOR EACH ROW
             WHEN (NEW.id IS NULL)
             BEGIN
-                SELECT app_config_seq.NEXTVAL INTO :NEW.id FROM dual;
+                SELECT json_config_seq.NEXTVAL INTO :NEW.id FROM dual;
             END;
         </sql>
         <rollback>
-            <sql>DROP TRIGGER app_config_bir</sql>
-            <dropTable tableName="app_config"/>
-            <dropSequence sequenceName="app_config_seq"/>
+            <sql>DROP TRIGGER json_config_bir</sql>
+            <dropTable tableName="json_config"/>
+            <dropSequence sequenceName="json_config_seq"/>
         </rollback>
     </changeSet>
 
 <changeSet id="audit-log-lifecycle-columns" author="docflow">
-    <comment>Add lifecycle audit columns to audit_log (idempotent for Oracle)</comment>
+    <comment>Add lifecycle audit columns to document_audit_log (idempotent for Oracle)</comment>
 
     <sql splitStatements="false" stripComments="true" endDelimiter="/">
         DECLARE
@@ -155,86 +155,86 @@
         BEGIN
             -- DOCUMENT_ID
             SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'DOCUMENT_ID';
+            WHERE table_name = 'DOCUMENT_AUDIT_LOG' AND column_name = 'DOCUMENT_ID';
             IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (DOCUMENT_ID NUMBER(19))';
+                EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_AUDIT_LOG ADD (DOCUMENT_ID NUMBER(19))';
             END IF;
 
             -- AUDIT_CATEGORY
             SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'AUDIT_CATEGORY';
+            WHERE table_name = 'DOCUMENT_AUDIT_LOG' AND column_name = 'AUDIT_CATEGORY';
             IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (AUDIT_CATEGORY VARCHAR2(50))';
+                EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_AUDIT_LOG ADD (AUDIT_CATEGORY VARCHAR2(50))';
             END IF;
 
             -- EVENT_CODE
             SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'EVENT_CODE';
+            WHERE table_name = 'DOCUMENT_AUDIT_LOG' AND column_name = 'EVENT_CODE';
             IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (EVENT_CODE VARCHAR2(100))';
+                EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_AUDIT_LOG ADD (EVENT_CODE VARCHAR2(100))';
             END IF;
 
             -- FROM_STATUS
             SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'FROM_STATUS';
+            WHERE table_name = 'DOCUMENT_AUDIT_LOG' AND column_name = 'FROM_STATUS';
             IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (FROM_STATUS VARCHAR2(50))';
+                EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_AUDIT_LOG ADD (FROM_STATUS VARCHAR2(50))';
             END IF;
 
             -- TO_STATUS
             SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'TO_STATUS';
+            WHERE table_name = 'DOCUMENT_AUDIT_LOG' AND column_name = 'TO_STATUS';
             IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (TO_STATUS VARCHAR2(50))';
+                EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_AUDIT_LOG ADD (TO_STATUS VARCHAR2(50))';
             END IF;
 
             -- COMMENT_TEXT
             SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'COMMENT_TEXT';
+            WHERE table_name = 'DOCUMENT_AUDIT_LOG' AND column_name = 'COMMENT_TEXT';
             IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (COMMENT_TEXT VARCHAR2(4000))';
+                EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_AUDIT_LOG ADD (COMMENT_TEXT VARCHAR2(4000))';
             END IF;
 
             -- FIELD_KEY
             SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'FIELD_KEY';
+            WHERE table_name = 'DOCUMENT_AUDIT_LOG' AND column_name = 'FIELD_KEY';
             IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (FIELD_KEY VARCHAR2(150))';
+                EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_AUDIT_LOG ADD (FIELD_KEY VARCHAR2(150))';
             END IF;
 
             -- OLD_VALUE
             SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'OLD_VALUE';
+            WHERE table_name = 'DOCUMENT_AUDIT_LOG' AND column_name = 'OLD_VALUE';
             IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (OLD_VALUE CLOB)';
+                EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_AUDIT_LOG ADD (OLD_VALUE CLOB)';
             END IF;
 
             -- NEW_VALUE
             SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'NEW_VALUE';
+            WHERE table_name = 'DOCUMENT_AUDIT_LOG' AND column_name = 'NEW_VALUE';
             IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (NEW_VALUE CLOB)';
+                EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_AUDIT_LOG ADD (NEW_VALUE CLOB)';
             END IF;
 
             -- CHANGE_TYPE
             SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'CHANGE_TYPE';
+            WHERE table_name = 'DOCUMENT_AUDIT_LOG' AND column_name = 'CHANGE_TYPE';
             IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (CHANGE_TYPE VARCHAR2(100))';
+                EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_AUDIT_LOG ADD (CHANGE_TYPE VARCHAR2(100))';
             END IF;
 
             -- CHANGED_BY
             SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'CHANGED_BY';
+            WHERE table_name = 'DOCUMENT_AUDIT_LOG' AND column_name = 'CHANGED_BY';
             IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (CHANGED_BY VARCHAR2(100))';
+                EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_AUDIT_LOG ADD (CHANGED_BY VARCHAR2(100))';
             END IF;
 
             -- CHANGED_AT
             SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'CHANGED_AT';
+            WHERE table_name = 'DOCUMENT_AUDIT_LOG' AND column_name = 'CHANGED_AT';
             IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (CHANGED_AT TIMESTAMP(6))';
+                EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_AUDIT_LOG ADD (CHANGED_AT TIMESTAMP(6))';
             END IF;
 
         END;
@@ -313,9 +313,51 @@ BEGIN
                 NAME VARCHAR2(100) NOT NULL,
                 DESCRIPTION VARCHAR2(4000),
                 CONFIG_JSON CLOB,
-                CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                CREATED_BY VARCHAR2(100) DEFAULT ''SYSTEM'' NOT NULL,
+                CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                UPDATED_BY VARCHAR2(100),
+                UPDATED_AT TIMESTAMP
             )';
     END IF;
+END;
+/
+        ]]></sql>
+    </changeSet>
+
+    <changeSet id="050-report-templates-audit-columns" author="codex">
+        <sql splitStatements="false"><![CDATA[
+DECLARE
+    v_count INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO v_count
+    FROM USER_TAB_COLUMNS
+    WHERE TABLE_NAME = 'REPORT_TEMPLATES'
+      AND COLUMN_NAME = 'CREATED_BY';
+
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'ALTER TABLE REPORT_TEMPLATES ADD (CREATED_BY VARCHAR2(100) DEFAULT ''SYSTEM'' NOT NULL)';
+    END IF;
+
+    SELECT COUNT(*) INTO v_count
+    FROM USER_TAB_COLUMNS
+    WHERE TABLE_NAME = 'REPORT_TEMPLATES'
+      AND COLUMN_NAME = 'UPDATED_AT';
+
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'ALTER TABLE REPORT_TEMPLATES ADD (UPDATED_AT TIMESTAMP)';
+    END IF;
+
+    SELECT COUNT(*) INTO v_count
+    FROM USER_TAB_COLUMNS
+    WHERE TABLE_NAME = 'REPORT_TEMPLATES'
+      AND COLUMN_NAME = 'UPDATED_BY';
+
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'ALTER TABLE REPORT_TEMPLATES ADD (UPDATED_BY VARCHAR2(100))';
+    END IF;
+
+    EXECUTE IMMEDIATE 'ALTER TABLE REPORT_TEMPLATES MODIFY (CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL)';
+    EXECUTE IMMEDIATE 'ALTER TABLE REPORT_TEMPLATES MODIFY (CREATED_BY VARCHAR2(100) DEFAULT ''SYSTEM'' NOT NULL)';
 END;
 /
         ]]></sql>
@@ -824,44 +866,44 @@ DECLARE
     v_count NUMBER;
 BEGIN
     SELECT COUNT(*) INTO v_count FROM user_tab_cols
-    WHERE table_name = 'APP_CONFIG' AND column_name = 'SCHEMA_STATUS';
+    WHERE table_name = 'JSON_CONFIG' AND column_name = 'SCHEMA_STATUS';
     IF v_count = 0 THEN
-        EXECUTE IMMEDIATE 'ALTER TABLE APP_CONFIG ADD (SCHEMA_STATUS VARCHAR2(20))';
+        EXECUTE IMMEDIATE 'ALTER TABLE JSON_CONFIG ADD (SCHEMA_STATUS VARCHAR2(20))';
     END IF;
 
     SELECT COUNT(*) INTO v_count FROM user_tab_cols
-    WHERE table_name = 'APP_CONFIG' AND column_name = 'SCHEMA_VERSION';
+    WHERE table_name = 'JSON_CONFIG' AND column_name = 'SCHEMA_VERSION';
     IF v_count = 0 THEN
-        EXECUTE IMMEDIATE 'ALTER TABLE APP_CONFIG ADD (SCHEMA_VERSION NUMBER(10))';
+        EXECUTE IMMEDIATE 'ALTER TABLE JSON_CONFIG ADD (SCHEMA_VERSION NUMBER(10))';
     END IF;
 
     FOR c IN (
         SELECT constraint_name
         FROM user_constraints
-        WHERE table_name = 'APP_CONFIG'
+        WHERE table_name = 'JSON_CONFIG'
           AND constraint_type = 'U'
-          AND constraint_name <> 'UQ_APP_CONFIG_KEY_VERSION'
+          AND constraint_name <> 'UQ_JSON_CONFIG_KEY_VERSION'
           AND constraint_name IN (
               SELECT ucc.constraint_name
               FROM user_cons_columns ucc
-              WHERE ucc.table_name = 'APP_CONFIG'
+              WHERE ucc.table_name = 'JSON_CONFIG'
               GROUP BY ucc.constraint_name
               HAVING COUNT(*) = 1 AND MAX(ucc.column_name) = 'CONFIG_KEY'
           )
     ) LOOP
-        EXECUTE IMMEDIATE 'ALTER TABLE APP_CONFIG DROP CONSTRAINT ' || c.constraint_name;
+        EXECUTE IMMEDIATE 'ALTER TABLE JSON_CONFIG DROP CONSTRAINT ' || c.constraint_name;
     END LOOP;
 
     SELECT COUNT(*) INTO v_count FROM user_constraints
-    WHERE table_name = 'APP_CONFIG' AND constraint_name = 'UQ_APP_CONFIG_KEY_VERSION';
+    WHERE table_name = 'JSON_CONFIG' AND constraint_name = 'UQ_JSON_CONFIG_KEY_VERSION';
     IF v_count = 0 THEN
-        EXECUTE IMMEDIATE 'ALTER TABLE APP_CONFIG ADD CONSTRAINT UQ_APP_CONFIG_KEY_VERSION UNIQUE (CONFIG_KEY, SCHEMA_VERSION)';
+        EXECUTE IMMEDIATE 'ALTER TABLE JSON_CONFIG ADD CONSTRAINT UQ_JSON_CONFIG_KEY_VERSION UNIQUE (CONFIG_KEY, SCHEMA_VERSION)';
     END IF;
 
     SELECT COUNT(*) INTO v_count FROM user_indexes
-    WHERE index_name = 'IDX_APP_CONFIG_KEY_STATUS';
+    WHERE index_name = 'IDX_JSON_CONFIG_KEY_STATUS';
     IF v_count = 0 THEN
-        EXECUTE IMMEDIATE 'CREATE INDEX IDX_APP_CONFIG_KEY_STATUS ON APP_CONFIG (CONFIG_KEY, SCHEMA_STATUS)';
+        EXECUTE IMMEDIATE 'CREATE INDEX IDX_JSON_CONFIG_KEY_STATUS ON JSON_CONFIG (CONFIG_KEY, SCHEMA_STATUS)';
     END IF;
 
     SELECT COUNT(*) INTO v_count FROM user_tab_cols
@@ -885,16 +927,16 @@ BEGIN
         EXECUTE IMMEDIATE 'CREATE INDEX IDX_DOC_SCHEMA_VERSION ON DOCUMENT_PARENT (SCHEMA_VERSION)';
     END IF;
 
-    EXECUTE IMMEDIATE q'[SELECT COUNT(*) FROM APP_CONFIG WHERE CONFIG_KEY = 'UPLOAD_CONFIG' AND SCHEMA_STATUS = 'SANDBOX']'
+    EXECUTE IMMEDIATE q'[SELECT COUNT(*) FROM JSON_CONFIG WHERE CONFIG_KEY = 'UPLOAD_CONFIG' AND SCHEMA_STATUS = 'SANDBOX']'
         INTO v_count;
     IF v_count = 0 THEN
         EXECUTE IMMEDIATE q'[
-            INSERT INTO APP_CONFIG (ID, CONFIG_KEY, CONFIG_VALUE, SCHEMA_STATUS, SCHEMA_VERSION, UPDATED_BY, UPDATED_AT)
-            SELECT APP_CONFIG_SEQ.NEXTVAL, seed.CONFIG_KEY, seed.CONFIG_VALUE, 'SANDBOX', 0, seed.UPDATED_BY, seed.UPDATED_AT
-            FROM APP_CONFIG seed
+            INSERT INTO JSON_CONFIG (ID, CONFIG_KEY, CONFIG_VALUE, SCHEMA_STATUS, SCHEMA_VERSION, UPDATED_BY, UPDATED_AT)
+            SELECT JSON_CONFIG_SEQ.NEXTVAL, seed.CONFIG_KEY, seed.CONFIG_VALUE, 'SANDBOX', 0, seed.UPDATED_BY, seed.UPDATED_AT
+            FROM JSON_CONFIG seed
             WHERE seed.ID = (
                 SELECT MAX(src.ID)
-                FROM APP_CONFIG src
+                FROM JSON_CONFIG src
                 WHERE src.CONFIG_KEY = 'UPLOAD_CONFIG'
                   AND src.SCHEMA_STATUS IS NULL
             )

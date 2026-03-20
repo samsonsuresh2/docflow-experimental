@@ -1,5 +1,6 @@
 package com.docflow.reports.web;
 
+import com.docflow.context.RequestUserContext;
 import com.docflow.reports.config.ReportProperties;
 import com.docflow.reports.dto.DynamicReportRequest;
 import com.docflow.reports.dto.ReportTemplateRequest;
@@ -15,7 +16,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,17 +35,20 @@ public class ReportController {
     private final DynamicReportExecutor executor;
     private final ReportTemplateService templateService;
     private final ReportProperties properties;
+    private final RequestUserContext requestUserContext;
 
     public ReportController(ReportMetadataService metadataService,
                             DynamicReportBuilder builder,
                             DynamicReportExecutor executor,
                             ReportTemplateService templateService,
-                            ReportProperties properties) {
+                            ReportProperties properties,
+                            RequestUserContext requestUserContext) {
         this.metadataService = metadataService;
         this.builder = builder;
         this.executor = executor;
         this.templateService = templateService;
         this.properties = properties;
+        this.requestUserContext = requestUserContext;
     }
 
     @GetMapping("/admin/scope")
@@ -70,21 +73,26 @@ public class ReportController {
 
     @PostMapping("/templates")
     @ResponseStatus(HttpStatus.CREATED)
-    public ReportTemplateResponse saveTemplate(@Valid @RequestBody ReportTemplateRequest request,
-                                               @RequestHeader(value = "X-USER-ID", required = false) String userId) {
-        return templateService.createTemplate(request.getName(), request.getRequest(), userId);
+    public ReportTemplateResponse saveTemplate(@Valid @RequestBody ReportTemplateRequest request) {
+        return templateService.createTemplate(request.getName(), request.getRequest(), currentUserId());
     }
 
     @PutMapping("/templates/{id}")
     public ReportTemplateResponse updateTemplate(@PathVariable("id") long templateId,
                                                  @Valid @RequestBody ReportTemplateRequest request) {
-        return templateService.update(templateId, request.getName(), request.getRequest());
+        return templateService.update(templateId, request.getName(), request.getRequest(), currentUserId());
     }
 
     @GetMapping("/templates")
     public TemplateListResponse listTemplates() {
         List<ReportTemplateResponse> templates = templateService.listTemplates();
         return new TemplateListResponse(templates);
+    }
+
+    private String currentUserId() {
+        return requestUserContext.getCurrentUser()
+                .map(user -> user.userId())
+                .orElse(null);
     }
 }
 

@@ -4,7 +4,7 @@ import com.docflow.api.dto.DocumentResponse;
 import com.docflow.api.dto.DocumentSummary;
 import com.docflow.api.dto.DocumentUploadMetadata;
 import com.docflow.context.RequestUser;
-import com.docflow.domain.AuditLog;
+import com.docflow.domain.DocumentAuditLog;
 import com.docflow.domain.DocumentStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -57,13 +57,13 @@ public interface DocumentService {
     DocumentResponse updateMetadata(Long id, Map<String, Object> requestedMetadata, RequestUser user);
 
     @Transactional(readOnly = true)
-    List<AuditLog> getAuditTrail(Long id);
+    List<DocumentAuditLog> getAuditTrail(Long id);
 
     @Transactional(readOnly = true)
-    List<AuditLog> getAuditTrailByDocumentNumber(String documentNumber);
+    List<DocumentAuditLog> getAuditTrailByDocumentNumber(String documentNumber);
 
     @Transactional(readOnly = true)
-    List<AuditLog> getLifecycleTimeline(Long id);
+    List<DocumentAuditLog> getLifecycleTimeline(Long id);
 
     @Transactional(readOnly = true)
     DocumentFile getDocumentFile(Long id);
