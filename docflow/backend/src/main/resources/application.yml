@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:oracle:thin:@localhost:1522/FREEPDB1
+    url: jdbc:oracle:thin:@oracle-free:1521/FREEPDB1
     username: DOCFLOW_EXP
-    password: docflow_exp
+    password: DOCFLOW_EXP
     driver-class-name: oracle.jdbc.OracleDriver
   jpa:
     hibernate:

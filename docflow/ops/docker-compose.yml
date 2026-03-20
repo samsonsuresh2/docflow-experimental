@@ -4,9 +4,9 @@ services:
       context: ../backend
     container_name: ops-backend-1
     environment:
-      SPRING_DATASOURCE_URL: jdbc:oracle:thin:@host.docker.internal:1522/XEPDB1
+      SPRING_DATASOURCE_URL: jdbc:oracle:thin:@host.docker.internal:1521/FREEPDB1
       SPRING_DATASOURCE_USERNAME: DOCFLOW_EXP
-      SPRING_DATASOURCE_PASSWORD: docflow_exp
+      SPRING_DATASOURCE_PASSWORD: DOCFLOW_EXP
     ports:
       - "8080:8080"
     networks:
