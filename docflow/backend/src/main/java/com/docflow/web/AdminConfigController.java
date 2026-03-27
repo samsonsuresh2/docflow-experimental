@@ -54,6 +54,21 @@ public class AdminConfigController {
         return ResponseEntity.ok().build();
     }
 
+    @PostMapping("/upload/release")
+    public ResponseEntity<UploadSchemaStatusResponse> releaseUploadConfig(@Valid @RequestBody UploadFieldsRequest request) {
+        RequestUser user = requestUserContext.requireUser();
+        configService.releaseActiveUploadSchema(request.getConfigJson(), user);
+        UploadSchemaStatusView view = configService.getUploadSchemaStatus();
+        return ResponseEntity.ok(new UploadSchemaStatusResponse(
+            view.bindingStrategy(),
+            view.activeVersion(),
+            view.sandboxVersion(),
+            view.configJson(),
+            view.updatedBy(),
+            view.updatedAt()
+        ));
+    }
+
     @GetMapping("/review-filters")
     public ResponseEntity<UploadFieldsResponse> getReviewFilterConfig() {
         String configJson = configService.getReviewFilterConfig();

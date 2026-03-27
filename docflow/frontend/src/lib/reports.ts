@@ -17,6 +17,34 @@ export async function fetchReportScope(baseEntity?: string): Promise<ReportAdmin
   return response.data;
 }
 
+export async function fetchAllReportRows(
+  fetchPage: (page: number, size: number) => Promise<ReportRunResponse>,
+  pageSize = 500,
+): Promise<ReportRunResponse> {
+  const firstPage = await fetchPage(0, pageSize);
+  const totalRows = firstPage.rowCount ?? firstPage.rows.length;
+  if (totalRows <= firstPage.rows.length) {
+    return {
+      columns: firstPage.columns,
+      rows: firstPage.rows,
+      rowCount: totalRows,
+    };
+  }
+
+  const allRows = [...firstPage.rows];
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+  for (let page = 1; page < totalPages; page += 1) {
+    const nextPage = await fetchPage(page, pageSize);
+    allRows.push(...nextPage.rows);
+  }
+
+  return {
+    columns: firstPage.columns,
+    rows: allRows,
+    rowCount: totalRows,
+  };
+}
+
 export async function fetchReportTemplates(): Promise<ReportTemplate[]> {
   const response = await client.get<ReportTemplateList>('/reports/templates');
   return response.data.templates ?? [];

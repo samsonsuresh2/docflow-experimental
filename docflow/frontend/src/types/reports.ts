@@ -11,15 +11,23 @@ export type ReportAdminScope = {
   baseColumns: string[];
   documentColumns: string[];
   metadataKeys: string[];
+  presets: { code: string; name: string; displayOrder: number }[];
 };
 
 export type DynamicReportFilter = {
   key: string;
   op: string;
   value: string;
+  valueFrom?: string;
+  valueTo?: string;
   mode?: 'FIXED_VALUE' | 'USER_INPUT';
   label?: string;
   dataType?: string;
+  source?: 'DOCUMENT' | 'DOCUMENT_METADATA' | 'THIRD_PARTY_ENTITY';
+  field?: string;
+  logicalType?: 'STRING' | 'NUMBER' | 'DATE';
+  allowedOperators?: ('EQ' | 'LIKE' | 'LT' | 'GT' | 'RANGE' | 'BETWEEN')[];
+  presetCodes?: string[];
 };
 
 export type DynamicReportRequest = {
@@ -53,14 +61,16 @@ export type ExecutableReportTemplateSummary = {
   description?: string | null;
 };
 
-export type ExecutableReportFilterType = 'TEXT' | 'NUMBER' | 'DATE';
+export type ExecutableReportFilterType = 'STRING' | 'NUMBER' | 'DATE';
 
 export type ExecutableReportFilterField = {
   key: string;
   label: string;
   type: ExecutableReportFilterType;
-  allowedOps: ('=' | '<' | '>')[];
+  allowedOps: ('EQ' | 'LIKE' | 'LT' | 'GT' | 'RANGE' | 'BETWEEN')[];
   dateFormat?: string | null;
+  presetEnabled?: boolean;
+  presets?: { code: string; name: string; displayOrder: number }[];
 };
 
 export type ExecutableReportTemplateDetail = {
@@ -71,8 +81,14 @@ export type ExecutableReportTemplateDetail = {
 
 export type ReportExecutionFilterInput = {
   key: string;
-  op: string;
-  value: string;
+  op?: string;
+  value?: string;
+  valueFrom?: string;
+  valueTo?: string;
+  mode?: 'MANUAL' | 'PRESET';
+  fromValue?: string;
+  toValue?: string;
+  presetCode?: string;
 };
 
 export type ReportExecutionRunRequest = {

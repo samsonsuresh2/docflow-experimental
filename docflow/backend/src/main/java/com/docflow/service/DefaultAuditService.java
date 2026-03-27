@@ -1,11 +1,11 @@
 package com.docflow.service;
 
 import com.docflow.context.RequestUser;
-import com.docflow.domain.AuditLog;
 import com.docflow.domain.AuditCategory;
+import com.docflow.domain.DocumentAuditLog;
 import com.docflow.domain.DocumentParent;
 import com.docflow.domain.DocumentStatus;
-import com.docflow.domain.repository.AuditLogRepository;
+import com.docflow.domain.repository.DocumentAuditLogRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -20,18 +20,18 @@ import java.util.Map;
 @Transactional
 public class DefaultAuditService implements AuditService {
 
-    private final AuditLogRepository auditLogRepository;
+    private final DocumentAuditLogRepository documentAuditLogRepository;
     private final ObjectMapper objectMapper;
 
-    public DefaultAuditService(AuditLogRepository auditLogRepository, ObjectMapper objectMapper) {
-        this.auditLogRepository = auditLogRepository;
+    public DefaultAuditService(DocumentAuditLogRepository documentAuditLogRepository, ObjectMapper objectMapper) {
+        this.documentAuditLogRepository = documentAuditLogRepository;
         this.objectMapper = objectMapper;
     }
 
     @Override
     public void logFieldUpdate(DocumentParent document, String fieldKey, Object oldValue, Object newValue, String changeType,
                                RequestUser user, OffsetDateTime when) {
-        AuditLog log = new AuditLog();
+        DocumentAuditLog log = new DocumentAuditLog();
         log.setDocument(document);
         log.setAuditCategory(AuditCategory.FIELD_CHANGE);
         log.setFieldKey(fieldKey);
@@ -40,7 +40,7 @@ public class DefaultAuditService implements AuditService {
         log.setChangeType(changeType != null ? changeType : "UPDATED");
         log.setChangedBy(user.userId());
         log.setChangedAt(when != null ? when : OffsetDateTime.now());
-        auditLogRepository.save(log);
+        documentAuditLogRepository.save(log);
     }
 
     @Override
@@ -62,7 +62,7 @@ public class DefaultAuditService implements AuditService {
     @Override
     public void logLifecycleEvent(DocumentParent document, DocumentStatus previousStatus, DocumentStatus newStatus, String eventCode,
                                   String comment, RequestUser user, OffsetDateTime when) {
-        AuditLog log = new AuditLog();
+        DocumentAuditLog log = new DocumentAuditLog();
         log.setDocument(document);
         log.setAuditCategory(AuditCategory.LIFECYCLE);
         log.setEventCode(eventCode);
@@ -71,19 +71,19 @@ public class DefaultAuditService implements AuditService {
         log.setComment(comment != null && !comment.isBlank() ? comment : null);
         log.setChangedBy(user.userId());
         log.setChangedAt(when != null ? when : OffsetDateTime.now());
-        auditLogRepository.save(log);
+        documentAuditLogRepository.save(log);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<AuditLog> getAuditTrail(Long documentId) {
-        return auditLogRepository.findByDocument_IdOrderByChangedAtAsc(documentId);
+    public List<DocumentAuditLog> getAuditTrail(Long documentId) {
+        return documentAuditLogRepository.findByDocument_IdOrderByChangedAtAsc(documentId);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<AuditLog> getLifecycleTimeline(Long documentId) {
-        return auditLogRepository.findByDocument_IdAndAuditCategoryOrderByChangedAtAsc(
+    public List<DocumentAuditLog> getLifecycleTimeline(Long documentId) {
+        return documentAuditLogRepository.findByDocument_IdAndAuditCategoryOrderByChangedAtAsc(
             documentId,
             AuditCategory.LIFECYCLE
         );

@@ -11,7 +11,7 @@ import com.docflow.api.dto.UpdateMetadataRequest;
 import com.docflow.api.dto.UpdateStatusRequest;
 import com.docflow.context.RequestUser;
 import com.docflow.context.RequestUserContext;
-import com.docflow.domain.AuditLog;
+import com.docflow.domain.DocumentAuditLog;
 import com.docflow.domain.DocumentStatus;
 import com.docflow.service.DocumentFile;
 import com.docflow.service.DocumentService;
@@ -180,7 +180,7 @@ public class DocumentController {
     // ────────────────────────────── AUDIT ──────────────────────────────
     @GetMapping("/{id}/audit")
     public ResponseEntity<List<AuditEntryResponse>> getAuditTrail(@PathVariable Long id) {
-        List<AuditLog> entries = documentService.getAuditTrail(id);
+        List<DocumentAuditLog> entries = documentService.getAuditTrail(id);
         List<AuditEntryResponse> response = entries.stream()
             .map(this::mapAuditLog)
             .collect(Collectors.toList());
@@ -189,7 +189,7 @@ public class DocumentController {
 
     @GetMapping("/by-number/{documentNumber}/audit")
     public ResponseEntity<List<AuditEntryResponse>> getAuditTrailByNumber(@PathVariable String documentNumber) {
-        List<AuditLog> entries = documentService.getAuditTrailByDocumentNumber(documentNumber);
+        List<DocumentAuditLog> entries = documentService.getAuditTrailByDocumentNumber(documentNumber);
         List<AuditEntryResponse> response = entries.stream()
             .map(this::mapAuditLog)
             .collect(Collectors.toList());
@@ -199,7 +199,7 @@ public class DocumentController {
     // ────────────────────────────── TIMELINE ──────────────────────────────
     @GetMapping("/{id}/timeline")
     public ResponseEntity<List<DocumentTimelineEntryResponse>> getTimeline(@PathVariable Long id) {
-        List<AuditLog> entries = documentService.getLifecycleTimeline(id);
+        List<DocumentAuditLog> entries = documentService.getLifecycleTimeline(id);
         List<DocumentTimelineEntryResponse> response = entries.stream()
             .map(this::mapTimelineEntry)
             .collect(Collectors.toList());
@@ -286,7 +286,7 @@ public class DocumentController {
     }
 
     // ────────────────────────────── MAPPERS ──────────────────────────────
-    private AuditEntryResponse mapAuditLog(AuditLog log) {
+    private AuditEntryResponse mapAuditLog(DocumentAuditLog log) {
         AuditEntryResponse response = new AuditEntryResponse();
         response.setFieldKey(log.getFieldKey());
         response.setOldValue(readJsonValue(log.getOldValue()));
@@ -297,7 +297,7 @@ public class DocumentController {
         return response;
     }
 
-    private DocumentTimelineEntryResponse mapTimelineEntry(AuditLog log) {
+    private DocumentTimelineEntryResponse mapTimelineEntry(DocumentAuditLog log) {
         DocumentTimelineEntryResponse response = new DocumentTimelineEntryResponse();
         response.setEventCode(log.getEventCode());
         response.setEventLabel(DocumentLifecycleEventCatalog.labelFor(log.getEventCode()));

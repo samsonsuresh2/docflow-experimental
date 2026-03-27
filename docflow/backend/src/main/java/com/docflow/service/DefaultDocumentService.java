@@ -5,9 +5,9 @@ import com.docflow.api.dto.DocumentSummary;
 import com.docflow.api.dto.DocumentUploadMetadata;
 import com.docflow.api.dto.FilterDefinition;
 import com.docflow.context.RequestUser;
-import com.docflow.domain.AppConfig;
-import com.docflow.domain.AuditLog;
+import com.docflow.domain.DocumentAuditLog;
 import com.docflow.domain.DocumentParent;
+import com.docflow.domain.JsonConfig;
 import com.docflow.domain.DocumentStatus;
 import com.docflow.domain.SchemaBindingMode;
 import com.docflow.domain.repository.DocumentRepository;
@@ -224,21 +224,21 @@ public class DefaultDocumentService implements DocumentService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AuditLog> getAuditTrail(Long id) {
+    public List<DocumentAuditLog> getAuditTrail(Long id) {
         requireDocument(id);
         return auditService.getAuditTrail(id);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<AuditLog> getAuditTrailByDocumentNumber(String documentNumber) {
+    public List<DocumentAuditLog> getAuditTrailByDocumentNumber(String documentNumber) {
         DocumentParent document = requireDocumentByNumber(documentNumber);
         return auditService.getAuditTrail(document.getId());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<AuditLog> getLifecycleTimeline(Long id) {
+    public List<DocumentAuditLog> getLifecycleTimeline(Long id) {
         requireDocument(id);
         return auditService.getLifecycleTimeline(id);
     }
@@ -293,7 +293,7 @@ public class DefaultDocumentService implements DocumentService {
     }
 
     private void applySchemaBinding(DocumentParent document) {
-        AppConfig schema = configService.resolveUploadSchemaForNewDocument();
+        JsonConfig schema = configService.resolveUploadSchemaForNewDocument();
         Integer schemaVersion = schema.getSchemaVersion();
         if (schemaVersion == null) {
             throw new ResponseStatusException(HttpStatus.PRECONDITION_FAILED, "Schema version is missing");
@@ -308,7 +308,7 @@ public class DefaultDocumentService implements DocumentService {
     }
 
     private String resolveDocumentSchemaConfig(DocumentParent document) {
-        AppConfig binding = new AppConfig();
+        JsonConfig binding = new JsonConfig();
         binding.setSchemaVersion(document.getSchemaVersion());
         binding.setSchemaStatus((document.getSchemaBindingMode() == SchemaBindingMode.FLOATING_SANDBOX || Integer.valueOf(0).equals(document.getSchemaVersion()))
             ? com.docflow.domain.SchemaStatus.SANDBOX

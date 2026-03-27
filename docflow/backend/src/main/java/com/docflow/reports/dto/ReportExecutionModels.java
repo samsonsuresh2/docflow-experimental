@@ -13,7 +13,7 @@ public class ReportExecutionModels {
     }
 
     public enum FieldType {
-        TEXT,
+        STRING,
         NUMBER,
         DATE
     }
@@ -29,8 +29,13 @@ public class ReportExecutionModels {
             String label,
             FieldType type,
             List<String> allowedOps,
-            String dateFormat
+            String dateFormat,
+            boolean presetEnabled,
+            List<DatePresetOption> presets
     ) {
+    }
+
+    public record DatePresetOption(String code, String name, int displayOrder) {
     }
 
     public static class RunRequest {
@@ -60,11 +65,19 @@ public class ReportExecutionModels {
     public static class RunFilter {
         @NotNull
         private String key;
-
-        @NotNull
         private String op;
 
         private String value;
+        private String valueFrom;
+        private String valueTo;
+
+        private DateFilterMode mode;
+
+        private String fromValue;
+
+        private String toValue;
+
+        private String presetCode;
 
         public String getKey() {
             return key;
@@ -89,8 +102,61 @@ public class ReportExecutionModels {
         public void setValue(String value) {
             this.value = value;
         }
+
+        public String getValueFrom() {
+            return valueFrom;
+        }
+
+        public void setValueFrom(String valueFrom) {
+            this.valueFrom = valueFrom;
+        }
+
+        public String getValueTo() {
+            return valueTo;
+        }
+
+        public void setValueTo(String valueTo) {
+            this.valueTo = valueTo;
+        }
+
+        public DateFilterMode getMode() {
+            return mode;
+        }
+
+        public void setMode(DateFilterMode mode) {
+            this.mode = mode;
+        }
+
+        public String getFromValue() {
+            return fromValue;
+        }
+
+        public void setFromValue(String fromValue) {
+            this.fromValue = fromValue;
+        }
+
+        public String getToValue() {
+            return toValue;
+        }
+
+        public void setToValue(String toValue) {
+            this.toValue = toValue;
+        }
+
+        public String getPresetCode() {
+            return presetCode;
+        }
+
+        public void setPresetCode(String presetCode) {
+            this.presetCode = presetCode;
+        }
     }
 
-    public record RunResponse(List<String> columns, List<java.util.Map<String, Object>> rows, int rowCount) {
+    public enum DateFilterMode {
+        MANUAL,
+        PRESET
+    }
+
+    public record RunResponse(List<String> columns, List<java.util.Map<String, Object>> rows, long rowCount) {
     }
 }

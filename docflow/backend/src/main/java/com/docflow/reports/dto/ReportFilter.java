@@ -3,6 +3,9 @@ package com.docflow.reports.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class ReportFilter {
 
     public enum Mode {
@@ -17,6 +20,8 @@ public class ReportFilter {
     private String op;
 
     private String value;
+    private String valueFrom;
+    private String valueTo;
 
     @NotNull
     private Mode mode = Mode.FIXED_VALUE;
@@ -24,6 +29,16 @@ public class ReportFilter {
     private String label;
 
     private String dataType;
+
+    private FilterSourceType source;
+
+    private String field;
+
+    private FilterLogicalType logicalType;
+
+    private List<FilterOperator> allowedOperators = new ArrayList<>();
+
+    private List<String> presetCodes = new ArrayList<>();
 
     public String getKey() {
         return key;
@@ -49,6 +64,22 @@ public class ReportFilter {
         this.value = value;
     }
 
+    public String getValueFrom() {
+        return valueFrom;
+    }
+
+    public void setValueFrom(String valueFrom) {
+        this.valueFrom = valueFrom;
+    }
+
+    public String getValueTo() {
+        return valueTo;
+    }
+
+    public void setValueTo(String valueTo) {
+        this.valueTo = valueTo;
+    }
+
     public Mode getMode() {
         return mode;
     }
@@ -71,5 +102,66 @@ public class ReportFilter {
 
     public void setDataType(String dataType) {
         this.dataType = dataType;
+    }
+
+    public FilterSourceType getSource() {
+        return source;
+    }
+
+    public void setSource(FilterSourceType source) {
+        this.source = source;
+    }
+
+    public String getField() {
+        return field;
+    }
+
+    public void setField(String field) {
+        this.field = field;
+    }
+
+    public FilterLogicalType getLogicalType() {
+        return logicalType;
+    }
+
+    public void setLogicalType(FilterLogicalType logicalType) {
+        this.logicalType = logicalType;
+    }
+
+    public List<FilterOperator> getAllowedOperators() {
+        return allowedOperators;
+    }
+
+    public void setAllowedOperators(List<FilterOperator> allowedOperators) {
+        this.allowedOperators = allowedOperators != null ? allowedOperators : new ArrayList<>();
+    }
+
+    public List<String> getPresetCodes() {
+        return presetCodes;
+    }
+
+    public void setPresetCodes(List<String> presetCodes) {
+        this.presetCodes = presetCodes != null ? presetCodes : new ArrayList<>();
+    }
+
+    public enum FilterSourceType {
+        DOCUMENT,
+        DOCUMENT_METADATA,
+        THIRD_PARTY_ENTITY
+    }
+
+    public enum FilterLogicalType {
+        STRING,
+        NUMBER,
+        DATE
+    }
+
+    public enum FilterOperator {
+        EQ,
+        LIKE,
+        LT,
+        GT,
+        RANGE,
+        BETWEEN
     }
 }

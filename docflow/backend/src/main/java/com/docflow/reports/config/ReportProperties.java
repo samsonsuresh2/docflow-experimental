@@ -14,6 +14,7 @@ public class ReportProperties {
     private DocumentTableProperties documentTable = new DocumentTableProperties();
     private MetadataTableProperties metadataTable = new MetadataTableProperties();
     private List<EntityProperties> entities = new ArrayList<>();
+    private String weekStartDay = "MONDAY";
 
     public DocumentTableProperties getDocumentTable() {
         return documentTable;
@@ -50,6 +51,14 @@ public class ReportProperties {
             }
         }
         return Collections.unmodifiableList(safe);
+    }
+
+    public String getWeekStartDay() {
+        return weekStartDay;
+    }
+
+    public void setWeekStartDay(String weekStartDay) {
+        this.weekStartDay = weekStartDay;
     }
 
     public static class DocumentTableProperties {

@@ -30,7 +30,7 @@
             <column name="updated_by" type="VARCHAR2(100)"/>
             <column name="updated_at" type="TIMESTAMP(6)"/>
         </createTable>
-        <sql>
+        <sql splitStatements="false" stripComments="true">
             CREATE OR REPLACE TRIGGER document_parent_bir
             BEFORE INSERT ON document_parent
             FOR EACH ROW
@@ -68,7 +68,7 @@
                                  referencedTableName="document_parent"
                                  referencedColumnNames="id"
                                  constraintName="fk_document_metadata_parent"/>
-        <sql>
+        <sql splitStatements="false" stripComments="true">
             CREATE OR REPLACE TRIGGER document_metadata_bir
             BEFORE INSERT ON document_metadata
             FOR EACH ROW
@@ -85,37 +85,48 @@
     </changeSet>
 
     <changeSet id="audit-log-table" author="docflow">
-        <comment>Create audit_log table</comment>
-        <createTable tableName="audit_log">
+        <validCheckSum>9:829a2e1f6a28d8a5440c9365931b6947</validCheckSum>
+        <validCheckSum>9:340b43bfa4769b67c3ca84a0566d6d48</validCheckSum>
+        <comment>Create document_audit_log table</comment>
+        <createTable tableName="document_audit_log">
             <column name="id" type="NUMBER(19)">
                 <constraints primaryKey="true" nullable="false"/>
             </column>
-            <column name="action" type="VARCHAR2(100)"/>
-            <column name="resource" type="VARCHAR2(200)"/>
-            <column name="details" type="CLOB"/>
             <column name="created_at" type="TIMESTAMP(6)" defaultValueComputed="SYSTIMESTAMP"/>
+            <column name="document_id" type="NUMBER(19)"/>
+            <column name="audit_category" type="VARCHAR2(50)"/>
+            <column name="event_code" type="VARCHAR2(100)"/>
+            <column name="from_status" type="VARCHAR2(50)"/>
+            <column name="to_status" type="VARCHAR2(50)"/>
+            <column name="comment_text" type="VARCHAR2(4000)"/>
+            <column name="field_key" type="VARCHAR2(150)"/>
+            <column name="old_value" type="CLOB"/>
+            <column name="new_value" type="CLOB"/>
+            <column name="change_type" type="VARCHAR2(100)"/>
+            <column name="changed_by" type="VARCHAR2(100)"/>
+            <column name="changed_at" type="TIMESTAMP(6)"/>
         </createTable>
-        <createSequence sequenceName="audit_log_seq" startValue="1"/>
-        <sql>
-            CREATE OR REPLACE TRIGGER audit_log_bir
-            BEFORE INSERT ON audit_log
+        <createSequence sequenceName="document_audit_log_seq" startValue="1"/>
+        <sql splitStatements="false" stripComments="true">
+            CREATE OR REPLACE TRIGGER document_audit_log_bir
+            BEFORE INSERT ON document_audit_log
             FOR EACH ROW
             WHEN (NEW.id IS NULL)
             BEGIN
-                SELECT audit_log_seq.NEXTVAL INTO :NEW.id FROM dual;
+                SELECT document_audit_log_seq.NEXTVAL INTO :NEW.id FROM dual;
             END;
         </sql>
         <rollback>
-            <sql>DROP TRIGGER audit_log_bir</sql>
-            <dropTable tableName="audit_log"/>
-            <dropSequence sequenceName="audit_log_seq"/>
+            <sql>DROP TRIGGER document_audit_log_bir</sql>
+            <dropTable tableName="document_audit_log"/>
+            <dropSequence sequenceName="document_audit_log_seq"/>
         </rollback>
     </changeSet>
 
     <changeSet id="app-config-table" author="docflow">
-        <comment>Create app_config table with sequence and trigger</comment>
-        <createSequence sequenceName="app_config_seq" startValue="1"/>
-        <createTable tableName="app_config">
+        <comment>Create json_config table with sequence and trigger</comment>
+        <createSequence sequenceName="json_config_seq" startValue="1"/>
+        <createTable tableName="json_config">
             <column name="id" type="NUMBER(19)">
                 <constraints primaryKey="true" nullable="false"/>
             </column>
@@ -130,118 +141,21 @@
             <column name="updated_by" type="VARCHAR2(100)"/>
             <column name="updated_at" type="TIMESTAMP(6)" defaultValueComputed="SYSTIMESTAMP"/>
         </createTable>
-        <sql>
-            CREATE OR REPLACE TRIGGER app_config_bir
-            BEFORE INSERT ON app_config
+        <sql splitStatements="false" stripComments="true">
+            CREATE OR REPLACE TRIGGER json_config_bir
+            BEFORE INSERT ON json_config
             FOR EACH ROW
             WHEN (NEW.id IS NULL)
             BEGIN
-                SELECT app_config_seq.NEXTVAL INTO :NEW.id FROM dual;
+                SELECT json_config_seq.NEXTVAL INTO :NEW.id FROM dual;
             END;
         </sql>
         <rollback>
-            <sql>DROP TRIGGER app_config_bir</sql>
-            <dropTable tableName="app_config"/>
-            <dropSequence sequenceName="app_config_seq"/>
+            <sql>DROP TRIGGER json_config_bir</sql>
+            <dropTable tableName="json_config"/>
+            <dropSequence sequenceName="json_config_seq"/>
         </rollback>
     </changeSet>
-
-<changeSet id="audit-log-lifecycle-columns" author="docflow">
-    <comment>Add lifecycle audit columns to audit_log (idempotent for Oracle)</comment>
-
-    <sql splitStatements="false" stripComments="true" endDelimiter="/">
-        DECLARE
-            v_count NUMBER;
-        BEGIN
-            -- DOCUMENT_ID
-            SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'DOCUMENT_ID';
-            IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (DOCUMENT_ID NUMBER(19))';
-            END IF;
-
-            -- AUDIT_CATEGORY
-            SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'AUDIT_CATEGORY';
-            IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (AUDIT_CATEGORY VARCHAR2(50))';
-            END IF;
-
-            -- EVENT_CODE
-            SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'EVENT_CODE';
-            IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (EVENT_CODE VARCHAR2(100))';
-            END IF;
-
-            -- FROM_STATUS
-            SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'FROM_STATUS';
-            IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (FROM_STATUS VARCHAR2(50))';
-            END IF;
-
-            -- TO_STATUS
-            SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'TO_STATUS';
-            IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (TO_STATUS VARCHAR2(50))';
-            END IF;
-
-            -- COMMENT_TEXT
-            SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'COMMENT_TEXT';
-            IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (COMMENT_TEXT VARCHAR2(4000))';
-            END IF;
-
-            -- FIELD_KEY
-            SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'FIELD_KEY';
-            IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (FIELD_KEY VARCHAR2(150))';
-            END IF;
-
-            -- OLD_VALUE
-            SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'OLD_VALUE';
-            IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (OLD_VALUE CLOB)';
-            END IF;
-
-            -- NEW_VALUE
-            SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'NEW_VALUE';
-            IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (NEW_VALUE CLOB)';
-            END IF;
-
-            -- CHANGE_TYPE
-            SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'CHANGE_TYPE';
-            IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (CHANGE_TYPE VARCHAR2(100))';
-            END IF;
-
-            -- CHANGED_BY
-            SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'CHANGED_BY';
-            IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (CHANGED_BY VARCHAR2(100))';
-            END IF;
-
-            -- CHANGED_AT
-            SELECT COUNT(*) INTO v_count FROM user_tab_cols
-            WHERE table_name = 'AUDIT_LOG' AND column_name = 'CHANGED_AT';
-            IF v_count = 0 THEN
-                EXECUTE IMMEDIATE 'ALTER TABLE AUDIT_LOG ADD (CHANGED_AT TIMESTAMP(6))';
-            END IF;
-
-        END;
-        /
-    </sql>
-</changeSet>
-
 
     <changeSet id="seed-user-roles" author="docflow">
         <comment>Seed sample user roles (admin1/maker1/reviewer1/checker1)</comment>
@@ -313,7 +227,10 @@ BEGIN
                 NAME VARCHAR2(100) NOT NULL,
                 DESCRIPTION VARCHAR2(4000),
                 CONFIG_JSON CLOB,
-                CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                CREATED_BY VARCHAR2(100) DEFAULT ''SYSTEM'' NOT NULL,
+                CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                UPDATED_BY VARCHAR2(100),
+                UPDATED_AT TIMESTAMP
             )';
     END IF;
 END;
@@ -824,44 +741,44 @@ DECLARE
     v_count NUMBER;
 BEGIN
     SELECT COUNT(*) INTO v_count FROM user_tab_cols
-    WHERE table_name = 'APP_CONFIG' AND column_name = 'SCHEMA_STATUS';
+    WHERE table_name = 'JSON_CONFIG' AND column_name = 'SCHEMA_STATUS';
     IF v_count = 0 THEN
-        EXECUTE IMMEDIATE 'ALTER TABLE APP_CONFIG ADD (SCHEMA_STATUS VARCHAR2(20))';
+        EXECUTE IMMEDIATE 'ALTER TABLE JSON_CONFIG ADD (SCHEMA_STATUS VARCHAR2(20))';
     END IF;
 
     SELECT COUNT(*) INTO v_count FROM user_tab_cols
-    WHERE table_name = 'APP_CONFIG' AND column_name = 'SCHEMA_VERSION';
+    WHERE table_name = 'JSON_CONFIG' AND column_name = 'SCHEMA_VERSION';
     IF v_count = 0 THEN
-        EXECUTE IMMEDIATE 'ALTER TABLE APP_CONFIG ADD (SCHEMA_VERSION NUMBER(10))';
+        EXECUTE IMMEDIATE 'ALTER TABLE JSON_CONFIG ADD (SCHEMA_VERSION NUMBER(10))';
     END IF;
 
     FOR c IN (
         SELECT constraint_name
         FROM user_constraints
-        WHERE table_name = 'APP_CONFIG'
+        WHERE table_name = 'JSON_CONFIG'
           AND constraint_type = 'U'
-          AND constraint_name <> 'UQ_APP_CONFIG_KEY_VERSION'
+          AND constraint_name <> 'UQ_JSON_CONFIG_KEY_VERSION'
           AND constraint_name IN (
               SELECT ucc.constraint_name
               FROM user_cons_columns ucc
-              WHERE ucc.table_name = 'APP_CONFIG'
+              WHERE ucc.table_name = 'JSON_CONFIG'
               GROUP BY ucc.constraint_name
               HAVING COUNT(*) = 1 AND MAX(ucc.column_name) = 'CONFIG_KEY'
           )
     ) LOOP
-        EXECUTE IMMEDIATE 'ALTER TABLE APP_CONFIG DROP CONSTRAINT ' || c.constraint_name;
+        EXECUTE IMMEDIATE 'ALTER TABLE JSON_CONFIG DROP CONSTRAINT ' || c.constraint_name;
     END LOOP;
 
     SELECT COUNT(*) INTO v_count FROM user_constraints
-    WHERE table_name = 'APP_CONFIG' AND constraint_name = 'UQ_APP_CONFIG_KEY_VERSION';
+    WHERE table_name = 'JSON_CONFIG' AND constraint_name = 'UQ_JSON_CONFIG_KEY_VERSION';
     IF v_count = 0 THEN
-        EXECUTE IMMEDIATE 'ALTER TABLE APP_CONFIG ADD CONSTRAINT UQ_APP_CONFIG_KEY_VERSION UNIQUE (CONFIG_KEY, SCHEMA_VERSION)';
+        EXECUTE IMMEDIATE 'ALTER TABLE JSON_CONFIG ADD CONSTRAINT UQ_JSON_CONFIG_KEY_VERSION UNIQUE (CONFIG_KEY, SCHEMA_VERSION)';
     END IF;
 
     SELECT COUNT(*) INTO v_count FROM user_indexes
-    WHERE index_name = 'IDX_APP_CONFIG_KEY_STATUS';
+    WHERE index_name = 'IDX_JSON_CONFIG_KEY_STATUS';
     IF v_count = 0 THEN
-        EXECUTE IMMEDIATE 'CREATE INDEX IDX_APP_CONFIG_KEY_STATUS ON APP_CONFIG (CONFIG_KEY, SCHEMA_STATUS)';
+        EXECUTE IMMEDIATE 'CREATE INDEX IDX_JSON_CONFIG_KEY_STATUS ON JSON_CONFIG (CONFIG_KEY, SCHEMA_STATUS)';
     END IF;
 
     SELECT COUNT(*) INTO v_count FROM user_tab_cols
@@ -875,10 +792,9 @@ BEGIN
     IF v_count = 0 THEN
         EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_PARENT ADD (SCHEMA_VERSION NUMBER(10) DEFAULT 0)';
         EXECUTE IMMEDIATE 'UPDATE DOCUMENT_PARENT SET SCHEMA_VERSION = 0 WHERE SCHEMA_VERSION IS NULL';
-        EXECUTE IMMEDIATE 'ALTER TABLE DOCUMENT_PARENT MODIFY (SCHEMA_VERSION NOT NULL)';
     END IF;
 
-    EXECUTE IMMEDIATE q'[UPDATE DOCUMENT_PARENT SET SCHEMA_BINDING_MODE = ''FLOATING_SANDBOX'' WHERE SCHEMA_BINDING_MODE IS NULL AND SCHEMA_VERSION = 0]';
+    EXECUTE IMMEDIATE q'[UPDATE DOCUMENT_PARENT SET SCHEMA_BINDING_MODE = 'FLOATING_SANDBOX' WHERE SCHEMA_BINDING_MODE IS NULL AND SCHEMA_VERSION = 0]';
 
     SELECT COUNT(*) INTO v_count FROM user_indexes
     WHERE index_name = 'IDX_DOC_SCHEMA_VERSION';
@@ -886,24 +802,116 @@ BEGIN
         EXECUTE IMMEDIATE 'CREATE INDEX IDX_DOC_SCHEMA_VERSION ON DOCUMENT_PARENT (SCHEMA_VERSION)';
     END IF;
 
-    EXECUTE IMMEDIATE q'[SELECT COUNT(*) FROM APP_CONFIG WHERE CONFIG_KEY = ''UPLOAD_CONFIG'' AND SCHEMA_STATUS = ''SANDBOX'']'
+    EXECUTE IMMEDIATE q'[SELECT COUNT(*) FROM JSON_CONFIG WHERE CONFIG_KEY = 'UPLOAD_CONFIG' AND SCHEMA_STATUS = 'SANDBOX']'
         INTO v_count;
     IF v_count = 0 THEN
         EXECUTE IMMEDIATE q'[
-            INSERT INTO APP_CONFIG (ID, CONFIG_KEY, CONFIG_VALUE, SCHEMA_STATUS, SCHEMA_VERSION, UPDATED_BY, UPDATED_AT)
-            SELECT APP_CONFIG_SEQ.NEXTVAL, seed.CONFIG_KEY, seed.CONFIG_VALUE, ''SANDBOX'', 0, seed.UPDATED_BY, seed.UPDATED_AT
-            FROM (
-                SELECT CONFIG_KEY, CONFIG_VALUE, UPDATED_BY, UPDATED_AT
-                FROM APP_CONFIG
-                WHERE CONFIG_KEY = ''UPLOAD_CONFIG''
-                  AND SCHEMA_STATUS IS NULL
-                ORDER BY ID DESC
-            ) seed
-            WHERE ROWNUM = 1
+            INSERT INTO JSON_CONFIG (ID, CONFIG_KEY, CONFIG_VALUE, SCHEMA_STATUS, SCHEMA_VERSION, UPDATED_BY, UPDATED_AT)
+            SELECT JSON_CONFIG_SEQ.NEXTVAL, seed.CONFIG_KEY, seed.CONFIG_VALUE, 'SANDBOX', 0, seed.UPDATED_BY, seed.UPDATED_AT
+            FROM JSON_CONFIG seed
+            WHERE seed.ID = (
+                SELECT MAX(src.ID)
+                FROM JSON_CONFIG src
+                WHERE src.CONFIG_KEY = 'UPLOAD_CONFIG'
+                  AND src.SCHEMA_STATUS IS NULL
+            )
         ]';
     END IF;
 END;
         ]]></sql>
     </changeSet>
 
+    <changeSet id="021a-date-preset-master" author="docflow">
+        <comment>Create date preset master table</comment>
+        <sql splitStatements="false"><![CDATA[
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count FROM ALL_TABLES WHERE TABLE_NAME = 'DATE_PRESET_MASTER';
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'CREATE TABLE DATE_PRESET_MASTER (
+            ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+            PRESET_CODE VARCHAR2(100) NOT NULL,
+            PRESET_NAME VARCHAR2(200) NOT NULL,
+            PRESET_DESCRIPTION VARCHAR2(500),
+            START_RULE VARCHAR2(100) NOT NULL,
+            END_RULE VARCHAR2(100) NOT NULL,
+            ENABLED CHAR(1) DEFAULT ''Y'' NOT NULL,
+            DISPLAY_ORDER NUMBER(10) DEFAULT 0 NOT NULL,
+            CREATED_BY VARCHAR2(100),
+            CREATED_TIME TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UPDATED_BY VARCHAR2(100),
+            UPDATED_TIME TIMESTAMP
+        )';
+    END IF;
+
+    SELECT COUNT(*) INTO v_count
+    FROM USER_CONSTRAINTS
+    WHERE TABLE_NAME = 'DATE_PRESET_MASTER'
+      AND CONSTRAINT_NAME = 'UQ_DATE_PRESET_MASTER_CODE';
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'ALTER TABLE DATE_PRESET_MASTER ADD CONSTRAINT UQ_DATE_PRESET_MASTER_CODE UNIQUE (PRESET_CODE)';
+    END IF;
+END;
+        ]]></sql>
+    </changeSet>
+
+    <changeSet id="021b-report-filter-preset-map" author="docflow">
+        <comment>Create report filter preset mapping table</comment>
+        <sql splitStatements="false"><![CDATA[
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count FROM ALL_TABLES WHERE TABLE_NAME = 'REPORT_FILTER_PRESET_MAP';
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'CREATE TABLE REPORT_FILTER_PRESET_MAP (
+            ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+            REPORT_CODE VARCHAR2(150) NOT NULL,
+            FILTER_KEY VARCHAR2(200) NOT NULL,
+            PRESET_CODE VARCHAR2(100) NOT NULL,
+            ENABLED CHAR(1) DEFAULT ''Y'' NOT NULL,
+            DISPLAY_ORDER NUMBER(10) DEFAULT 0 NOT NULL,
+            CREATED_BY VARCHAR2(100),
+            CREATED_TIME TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UPDATED_BY VARCHAR2(100),
+            UPDATED_TIME TIMESTAMP,
+            CONSTRAINT FK_RPT_FILTER_PRESET_CODE FOREIGN KEY (PRESET_CODE) REFERENCES DATE_PRESET_MASTER(PRESET_CODE)
+        )';
+    END IF;
+
+    SELECT COUNT(*) INTO v_count
+    FROM USER_CONSTRAINTS
+    WHERE TABLE_NAME = 'REPORT_FILTER_PRESET_MAP'
+      AND CONSTRAINT_NAME = 'UQ_RPT_FILTER_PRESET';
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'ALTER TABLE REPORT_FILTER_PRESET_MAP ADD CONSTRAINT UQ_RPT_FILTER_PRESET UNIQUE (REPORT_CODE, FILTER_KEY, PRESET_CODE)';
+    END IF;
+END;
+        ]]></sql>
+    </changeSet>
+
+    <changeSet id="021c-seed-date-presets" author="docflow">
+        <comment>Seed baseline date presets</comment>
+        <sql><![CDATA[
+INSERT INTO DATE_PRESET_MASTER (ID, PRESET_CODE, PRESET_NAME, PRESET_DESCRIPTION, START_RULE, END_RULE, ENABLED, DISPLAY_ORDER, CREATED_BY, CREATED_TIME)
+SELECT 1, 'THIS_WEEK', 'This Week', 'Current week start to today', 'CURRENT_WEEK_START', 'TODAY', 'Y', 10, 'system', CURRENT_TIMESTAMP
+FROM dual
+WHERE NOT EXISTS (SELECT 1 FROM DATE_PRESET_MASTER WHERE PRESET_CODE = 'THIS_WEEK');
+
+INSERT INTO DATE_PRESET_MASTER (ID, PRESET_CODE, PRESET_NAME, PRESET_DESCRIPTION, START_RULE, END_RULE, ENABLED, DISPLAY_ORDER, CREATED_BY, CREATED_TIME)
+SELECT 2, 'PREVIOUS_WEEK', 'Previous Week', 'Previous week full range', 'PREVIOUS_WEEK_START', 'PREVIOUS_WEEK_END', 'Y', 20, 'system', CURRENT_TIMESTAMP
+FROM dual
+WHERE NOT EXISTS (SELECT 1 FROM DATE_PRESET_MASTER WHERE PRESET_CODE = 'PREVIOUS_WEEK');
+
+INSERT INTO DATE_PRESET_MASTER (ID, PRESET_CODE, PRESET_NAME, PRESET_DESCRIPTION, START_RULE, END_RULE, ENABLED, DISPLAY_ORDER, CREATED_BY, CREATED_TIME)
+SELECT 3, 'THIS_MONTH', 'This Month', 'Current month start to today', 'CURRENT_MONTH_START', 'TODAY', 'Y', 30, 'system', CURRENT_TIMESTAMP
+FROM dual
+WHERE NOT EXISTS (SELECT 1 FROM DATE_PRESET_MASTER WHERE PRESET_CODE = 'THIS_MONTH');
+
+INSERT INTO DATE_PRESET_MASTER (ID, PRESET_CODE, PRESET_NAME, PRESET_DESCRIPTION, START_RULE, END_RULE, ENABLED, DISPLAY_ORDER, CREATED_BY, CREATED_TIME)
+SELECT 4, 'PREVIOUS_MONTH', 'Previous Month', 'Previous month full range', 'PREVIOUS_MONTH_START', 'PREVIOUS_MONTH_END', 'Y', 40, 'system', CURRENT_TIMESTAMP
+FROM dual
+WHERE NOT EXISTS (SELECT 1 FROM DATE_PRESET_MASTER WHERE PRESET_CODE = 'PREVIOUS_MONTH');
+        ]]></sql>
+    </changeSet>
 </databaseChangeLog>

@@ -44,6 +44,12 @@ DocFlow now versions upload JSON schema so existing documents remain stable even
 ### Production behavior
 Set `schema.bindingStrategy=ACTIVE_ONLY` (default). In this mode document creation fails until an ACTIVE schema exists.
 
+### Production release flow
+- In `ACTIVE_ONLY`, the current ACTIVE schema remains read-only.
+- Admins release the next approved JSON through the Admin UI using `Release New Version`.
+- The backend validates the supplied JSON, creates a brand-new ACTIVE row with the next version number, and marks the prior ACTIVE row as DEPRECATED.
+- Existing documents stay bound to their stored schema version, while newly created documents bind to the new ACTIVE version.
+
 ### Configuration
 `application.yml`
 ```yaml

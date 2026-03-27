@@ -34,13 +34,17 @@ class ReportTemplateServiceTest {
     @Mock
     private NamedParameterJdbcTemplate jdbcTemplate;
 
+    @Mock
+    private DatePresetService datePresetService;
+
     private ObjectMapper objectMapper;
     private ReportTemplateService service;
 
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        service = new ReportTemplateService(jdbcTemplate, objectMapper);
+        service = new ReportTemplateService(jdbcTemplate, objectMapper, datePresetService);
+        when(datePresetService.enabledPresetCodes()).thenReturn(java.util.Set.of("THIS_WEEK", "THIS_MONTH"));
     }
 
     @Test
@@ -72,10 +76,102 @@ class ReportTemplateServiceTest {
 
         String json = (String) paramsCaptor.getValue().getValue("configJson");
         JsonNode payload = objectMapper.readTree(json);
-        JsonNode filters = payload.path("request").path("filters");
+        JsonNode filters = payload.path("filters");
         assertThat(filters.isArray()).isTrue();
         assertThat(filters).hasSize(1);
         assertThat(filters.get(0).path("key").asText()).isEqualTo("DOCUMENT_PARENT.STATUS");
         assertThat(filters.get(0).path("mode").asText()).isEqualTo("USER_INPUT");
+        assertThat(paramsCaptor.getValue().getValue("createdBy")).isEqualTo("admin1");
+    }
+
+    @Test
+    void createTemplatePersistsRangeBoundsInPayload() throws Exception {
+        DynamicReportRequest request = new DynamicReportRequest();
+        request.setBaseEntity("DOCUMENT_PARENT");
+        request.setColumns(List.of("DOCUMENT_PARENT.ID"));
+        ReportFilter filter = new ReportFilter();
+        filter.setKey("DOCUMENT_PARENT.CREATED_AT");
+        filter.setOp("BETWEEN");
+        filter.setMode(ReportFilter.Mode.FIXED_VALUE);
+        filter.setLogicalType(ReportFilter.FilterLogicalType.DATE);
+        filter.setValueFrom("2026-03-01");
+        filter.setValueTo("2026-03-31");
+        request.setFilters(List.of(filter));
+
+        ReportTemplateResponse response = new ReportTemplateResponse(1L, "Date Template", null, request, "admin1", Instant.now());
+
+        doAnswer(invocation -> {
+            KeyHolder keyHolder = invocation.getArgument(2);
+            keyHolder.getKeyList().add(Map.of("ID", 1L));
+            return 1;
+        }).when(jdbcTemplate).update(anyString(), any(MapSqlParameterSource.class), any(KeyHolder.class), any(String[].class));
+
+        when(jdbcTemplate.queryForObject(anyString(), anyMap(), any(RowMapper.class))).thenReturn(response);
+
+        service.createTemplate("Date Template", request, "admin1");
+
+        ArgumentCaptor<MapSqlParameterSource> paramsCaptor = ArgumentCaptor.forClass(MapSqlParameterSource.class);
+        verify(jdbcTemplate).update(anyString(), paramsCaptor.capture(), any(KeyHolder.class), any(String[].class));
+
+        String json = (String) paramsCaptor.getValue().getValue("configJson");
+        JsonNode filters = objectMapper.readTree(json).path("filters");
+        assertThat(filters.get(0).path("op").asText()).isEqualTo("BETWEEN");
+        assertThat(filters.get(0).path("valueFrom").asText()).isEqualTo("2026-03-01");
+        assertThat(filters.get(0).path("valueTo").asText()).isEqualTo("2026-03-31");
+    }
+
+    @Test
+    void createTemplateFallsBackToSystemWhenUserMissing() {
+        DynamicReportRequest request = new DynamicReportRequest();
+        request.setBaseEntity("DOCUMENT_PARENT");
+        request.setColumns(List.of("DOCUMENT_PARENT.ID"));
+
+        ReportTemplateResponse response = new ReportTemplateResponse(1L, "System Template", null, request, "SYSTEM", Instant.now());
+
+        doAnswer(invocation -> {
+            KeyHolder keyHolder = invocation.getArgument(2);
+            keyHolder.getKeyList().add(Map.of("ID", 1L));
+            return 1;
+        }).when(jdbcTemplate).update(anyString(), any(MapSqlParameterSource.class), any(KeyHolder.class), any(String[].class));
+
+        when(jdbcTemplate.queryForObject(anyString(), anyMap(), any(RowMapper.class))).thenReturn(response);
+
+        service.createTemplate("System Template", request, null);
+
+        ArgumentCaptor<MapSqlParameterSource> paramsCaptor = ArgumentCaptor.forClass(MapSqlParameterSource.class);
+        verify(jdbcTemplate).update(anyString(), paramsCaptor.capture(), any(KeyHolder.class), any(String[].class));
+
+        assertThat(paramsCaptor.getValue().getValue("createdBy")).isEqualTo("SYSTEM");
+    }
+
+    @Test
+    void updateTemplateSetsUpdatedAuditFieldsWithoutTouchingCreatedFields() throws Exception {
+        DynamicReportRequest request = new DynamicReportRequest();
+        request.setBaseEntity("DOCUMENT_PARENT");
+        request.setColumns(List.of("DOCUMENT_PARENT.ID"));
+
+        ReportTemplateResponse updatedResponse = new ReportTemplateResponse(
+                1L,
+                "Renamed Template",
+                null,
+                request,
+                "creator1",
+                Instant.parse("2026-03-01T10:15:30Z")
+        );
+
+        when(jdbcTemplate.update(anyString(), any(MapSqlParameterSource.class))).thenReturn(1);
+        when(jdbcTemplate.queryForObject(anyString(), anyMap(), any(RowMapper.class))).thenReturn(updatedResponse);
+
+        service.update(1L, "Renamed Template", request, "editor1");
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<MapSqlParameterSource> paramsCaptor = ArgumentCaptor.forClass(MapSqlParameterSource.class);
+        verify(jdbcTemplate).update(sqlCaptor.capture(), paramsCaptor.capture());
+
+        assertThat(sqlCaptor.getValue()).contains("updated_at = CURRENT_TIMESTAMP");
+        assertThat(sqlCaptor.getValue()).contains("updated_by = :updatedBy");
+        assertThat(sqlCaptor.getValue()).doesNotContain("created_at");
+        assertThat(sqlCaptor.getValue()).doesNotContain("created_by");
+        assertThat(paramsCaptor.getValue().getValue("updatedBy")).isEqualTo("editor1");
     }
 }

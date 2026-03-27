@@ -5,12 +5,12 @@ import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(name = "app_config")
-@SequenceGenerator(name = "app_config_seq", sequenceName = "app_config_seq", allocationSize = 1)
-public class AppConfig {
+@Table(name = "json_config")
+@SequenceGenerator(name = "json_config_seq", sequenceName = "json_config_seq", allocationSize = 1)
+public class JsonConfig {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "app_config_seq")
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "json_config_seq")
     private Long id;
 
     @Column(name = "config_key", nullable = false)

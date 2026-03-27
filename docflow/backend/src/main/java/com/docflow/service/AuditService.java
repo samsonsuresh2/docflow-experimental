@@ -1,7 +1,7 @@
 package com.docflow.service;
 
 import com.docflow.context.RequestUser;
-import com.docflow.domain.AuditLog;
+import com.docflow.domain.DocumentAuditLog;
 import com.docflow.domain.DocumentParent;
 import com.docflow.domain.DocumentStatus;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,8 +25,8 @@ public interface AuditService {
                            String comment, RequestUser user, OffsetDateTime when);
 
     @Transactional(readOnly = true)
-    List<AuditLog> getAuditTrail(Long documentId);
+    List<DocumentAuditLog> getAuditTrail(Long documentId);
 
     @Transactional(readOnly = true)
-    List<AuditLog> getLifecycleTimeline(Long documentId);
+    List<DocumentAuditLog> getLifecycleTimeline(Long documentId);
 }
