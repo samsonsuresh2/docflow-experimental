@@ -253,6 +253,8 @@ public class DynamicReportBuilder {
                 && !"EQ".equals(opCode)
                 && !"LT".equals(opCode)
                 && !"GT".equals(opCode)
+                && !"GE".equals(opCode)
+                && !"LE".equals(opCode)
                 && !"BETWEEN".equals(opCode)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed for DATE type: " + opCode);
         }

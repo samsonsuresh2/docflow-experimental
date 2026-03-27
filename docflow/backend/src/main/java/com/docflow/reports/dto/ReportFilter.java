@@ -38,6 +38,8 @@ public class ReportFilter {
 
     private List<FilterOperator> allowedOperators = new ArrayList<>();
 
+    private List<String> presetCodes = new ArrayList<>();
+
     public String getKey() {
         return key;
     }
@@ -132,6 +134,14 @@ public class ReportFilter {
 
     public void setAllowedOperators(List<FilterOperator> allowedOperators) {
         this.allowedOperators = allowedOperators != null ? allowedOperators : new ArrayList<>();
+    }
+
+    public List<String> getPresetCodes() {
+        return presetCodes;
+    }
+
+    public void setPresetCodes(List<String> presetCodes) {
+        this.presetCodes = presetCodes != null ? presetCodes : new ArrayList<>();
     }
 
     public enum FilterSourceType {

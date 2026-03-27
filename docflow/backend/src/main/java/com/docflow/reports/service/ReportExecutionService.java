@@ -141,7 +141,8 @@ public class ReportExecutionService {
 
         List<String> columns = safeList(raw.get("columns"));
         List<Map<String, Object>> rows = safeRowList(raw.get("rows"));
-        return new ReportExecutionModels.RunResponse(columns, rows, rows.size());
+        long rowCount = safeLong(raw.get("rowCount"), rows.size());
+        return new ReportExecutionModels.RunResponse(columns, rows, rowCount);
     }
 
     private List<ReportFilter> normalizeDateModeFilter(ReportExecutionModels.RunFilter input,
@@ -340,6 +341,13 @@ public class ReportExecutionService {
             return safe;
         }
         return List.of();
+    }
+
+    private long safeLong(Object value, long fallback) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return fallback;
     }
 
     private static class TemplateContext {

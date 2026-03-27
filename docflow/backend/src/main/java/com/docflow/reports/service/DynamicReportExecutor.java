@@ -27,7 +27,7 @@ public class DynamicReportExecutor {
             throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Invalid pagination");
         }
         int offset = page * size;
-        String paginatedSql = report.sql() + " OFFSET :__offset ROWS FETCH NEXT :__limit ROWS ONLY";
+        String paginatedSql = paginatedSql(report);
         Map<String, Object> params = new LinkedHashMap<>(report.parameters());
         params.put("__offset", offset);
         params.put("__limit", size);
@@ -56,7 +56,15 @@ public class DynamicReportExecutor {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("columns", report.columns().stream().map(DynamicReportBuilder.SelectColumn::displayName).toList());
         response.put("rows", rows);
+        response.put("rowCount", matchedRows);
         return response;
+    }
+
+    private String paginatedSql(DynamicReportBuilder.BuiltReport report) {
+        String orderBy = report.columns().isEmpty()
+                ? "1"
+                : "r." + report.columns().get(0).label();
+        return "SELECT * FROM (" + report.sql() + ") r ORDER BY " + orderBy + " OFFSET :__offset ROWS FETCH NEXT :__limit ROWS ONLY";
     }
 
     private long fetchMatchedRowCount(DynamicReportBuilder.BuiltReport report, Map<String, Object> params) {

@@ -34,13 +34,17 @@ class ReportTemplateServiceTest {
     @Mock
     private NamedParameterJdbcTemplate jdbcTemplate;
 
+    @Mock
+    private DatePresetService datePresetService;
+
     private ObjectMapper objectMapper;
     private ReportTemplateService service;
 
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        service = new ReportTemplateService(jdbcTemplate, objectMapper);
+        service = new ReportTemplateService(jdbcTemplate, objectMapper, datePresetService);
+        when(datePresetService.enabledPresetCodes()).thenReturn(java.util.Set.of("THIS_WEEK", "THIS_MONTH"));
     }
 
     @Test

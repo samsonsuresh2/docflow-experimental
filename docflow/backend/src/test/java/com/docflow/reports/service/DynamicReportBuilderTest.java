@@ -42,6 +42,22 @@ class DynamicReportBuilderTest {
     }
 
     @Test
+    void shouldBuildDocumentDatePresetRangeUsingGreaterAndLessComparisons() {
+        DynamicReportRequest request = new DynamicReportRequest();
+        request.setBaseEntity("DOCUMENT_PARENT");
+        request.setColumns(List.of("DOCUMENT_NUMBER", "CREATED_AT"));
+        request.setFilters(List.of(
+                valueFilter("CREATED_AT", "GE", "2026-03-24", ReportFilter.FilterLogicalType.DATE),
+                valueFilter("CREATED_AT", "LE", "2026-03-24", ReportFilter.FilterLogicalType.DATE)
+        ));
+
+        DynamicReportBuilder.BuiltReport built = builder.build(request);
+
+        assertThat(built.sql()).contains("TRUNC(dp.CREATED_AT) >= TO_DATE(:p0, 'YYYY-MM-DD')");
+        assertThat(built.sql()).contains("TRUNC(dp.CREATED_AT) <= TO_DATE(:p1, 'YYYY-MM-DD')");
+    }
+
+    @Test
     void shouldBuildMetadataDateBetweenWithDateConversion() {
         DynamicReportRequest request = new DynamicReportRequest();
         request.setBaseEntity("DOCUMENT_PARENT");
@@ -113,6 +129,16 @@ class DynamicReportBuilderTest {
         filter.setOp(op);
         filter.setValueFrom(from);
         filter.setValueTo(to);
+        filter.setLogicalType(type);
+        filter.setDataType(type.name());
+        return filter;
+    }
+
+    private static ReportFilter valueFilter(String key, String op, String value, ReportFilter.FilterLogicalType type) {
+        ReportFilter filter = new ReportFilter();
+        filter.setKey(key);
+        filter.setOp(op);
+        filter.setValue(value);
         filter.setLogicalType(type);
         filter.setDataType(type.name());
         return filter;

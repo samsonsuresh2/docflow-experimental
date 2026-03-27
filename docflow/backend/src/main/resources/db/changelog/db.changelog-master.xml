@@ -85,6 +85,8 @@
     </changeSet>
 
     <changeSet id="audit-log-table" author="docflow">
+        <validCheckSum>9:829a2e1f6a28d8a5440c9365931b6947</validCheckSum>
+        <validCheckSum>9:340b43bfa4769b67c3ca84a0566d6d48</validCheckSum>
         <comment>Create document_audit_log table</comment>
         <createTable tableName="document_audit_log">
             <column name="id" type="NUMBER(19)">

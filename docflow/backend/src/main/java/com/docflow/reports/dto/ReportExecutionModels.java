@@ -65,8 +65,6 @@ public class ReportExecutionModels {
     public static class RunFilter {
         @NotNull
         private String key;
-
-        @NotNull
         private String op;
 
         private String value;
@@ -159,6 +157,6 @@ public class ReportExecutionModels {
         PRESET
     }
 
-    public record RunResponse(List<String> columns, List<java.util.Map<String, Object>> rows, int rowCount) {
+    public record RunResponse(List<String> columns, List<java.util.Map<String, Object>> rows, long rowCount) {
     }
 }

@@ -4,21 +4,29 @@ import com.docflow.reports.config.ReportProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class DatePresetServiceTest {
 
     private DatePresetService service;
+    private NamedParameterJdbcTemplate jdbcTemplate;
 
     @BeforeEach
     void setUp() {
         ReportProperties props = new ReportProperties();
         props.setWeekStartDay("MONDAY");
-        service = new DatePresetService(mock(NamedParameterJdbcTemplate.class), props);
+        jdbcTemplate = mock(NamedParameterJdbcTemplate.class);
+        service = new DatePresetService(jdbcTemplate, props);
     }
 
     @Test
@@ -44,5 +52,13 @@ class DatePresetServiceTest {
         assertEquals(LocalDate.of(2024, 2, 1), service.resolveRule("CURRENT_MONTH_START", leapDay));
         assertEquals(LocalDate.of(2024, 2, 29), service.resolveRule("CURRENT_MONTH_END", leapDay));
         assertEquals(LocalDate.of(2024, 1, 31), service.resolveRule("PREVIOUS_MONTH_END", leapDay));
+    }
+
+    @Test
+    void shouldRejectUnmappedPresetCode() {
+        when(jdbcTemplate.query(any(String.class), any(SqlParameterSource.class), any(org.springframework.jdbc.core.RowMapper.class)))
+                .thenReturn(List.of());
+
+        assertThrows(ResponseStatusException.class, () -> service.resolvePreset("r1", "CREATED_AT", "THIS_WEEK"));
     }
 }

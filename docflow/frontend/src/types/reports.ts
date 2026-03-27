@@ -11,6 +11,7 @@ export type ReportAdminScope = {
   baseColumns: string[];
   documentColumns: string[];
   metadataKeys: string[];
+  presets: { code: string; name: string; displayOrder: number }[];
 };
 
 export type DynamicReportFilter = {
@@ -26,6 +27,7 @@ export type DynamicReportFilter = {
   field?: string;
   logicalType?: 'STRING' | 'NUMBER' | 'DATE';
   allowedOperators?: ('EQ' | 'LIKE' | 'LT' | 'GT' | 'RANGE' | 'BETWEEN')[];
+  presetCodes?: string[];
 };
 
 export type DynamicReportRequest = {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import ReportResultsGrid from '../components/ReportResultsGrid';
 import {
+  fetchAllReportRows,
   fetchReportScope,
   fetchReportTemplates,
   runDynamicReport,
@@ -22,6 +23,8 @@ type FilterRow = {
   valueFrom: string;
   valueTo: string;
   logicalType: LogicalType;
+  presetEnabled: boolean;
+  presetCodes: string[];
 };
 
 function requiresRangeValues(op: Operator): boolean {
@@ -108,6 +111,7 @@ export default function ReportBuilderPage() {
   const [entityColumns, setEntityColumns] = useState<Record<string, string[]>>({});
   const [documentColumns, setDocumentColumns] = useState<string[]>([]);
   const [metadataKeys, setMetadataKeys] = useState<string[]>([]);
+  const [presetCatalog, setPresetCatalog] = useState<Array<{ code: string; name: string; displayOrder: number }>>([]);
   const [metadataLoading, setMetadataLoading] = useState<boolean>(false);
   const [metadataError, setMetadataError] = useState<string | null>(null);
 
@@ -145,6 +149,7 @@ export default function ReportBuilderPage() {
           setEntities(scope.entities ?? []);
           setDocumentColumns(scope.documentColumns ?? []);
           setMetadataKeys(scope.metadataKeys ?? []);
+          setPresetCatalog(scope.presets ?? []);
         }
       })
       .catch((error) => {
@@ -153,6 +158,7 @@ export default function ReportBuilderPage() {
           setEntities([]);
           setDocumentColumns([]);
           setMetadataKeys([]);
+          setPresetCatalog([]);
         }
       })
       .finally(() => {
@@ -215,6 +221,7 @@ export default function ReportBuilderPage() {
         setEntityColumns((prev) => ({ ...prev, [selectedEntity]: scope.baseColumns ?? [] }));
         setDocumentColumns(scope.documentColumns ?? []);
         setMetadataKeys(scope.metadataKeys ?? []);
+        setPresetCatalog(scope.presets ?? []);
       })
       .catch((error) => {
         setMetadataError(normaliseError(error));
@@ -259,6 +266,8 @@ export default function ReportBuilderPage() {
               valueFrom: filter?.valueFrom ?? '',
               valueTo: filter?.valueTo ?? '',
               logicalType: safeType,
+              presetEnabled: Array.isArray(filter?.presetCodes) && filter.presetCodes.length > 0,
+              presetCodes: Array.isArray(filter?.presetCodes) ? filter.presetCodes : [],
             };
           })
       : [];
@@ -332,13 +341,13 @@ export default function ReportBuilderPage() {
     filterIdRef.current = nextId;
     setFilters((prev) => [
       ...prev,
-      { id: nextId, key: '', op: 'EQ', value: '', valueFrom: '', valueTo: '', logicalType: 'STRING' },
+      { id: nextId, key: '', op: 'EQ', value: '', valueFrom: '', valueTo: '', logicalType: 'STRING', presetEnabled: false, presetCodes: [] },
     ]);
   };
 
   const handleFilterChange = (
     id: number,
-    update: Partial<Pick<FilterRow, 'key' | 'op' | 'value' | 'valueFrom' | 'valueTo' | 'logicalType'>>,
+    update: Partial<Pick<FilterRow, 'key' | 'op' | 'value' | 'valueFrom' | 'valueTo' | 'logicalType' | 'presetCodes' | 'presetEnabled'>>,
   ) => {
     setFilters((prev) =>
       prev.map((filter) => {
@@ -353,6 +362,10 @@ export default function ReportBuilderPage() {
           logicalType: nextType,
           op: nextOp,
         };
+        if (nextType !== 'DATE') {
+          nextFilter.presetEnabled = false;
+          nextFilter.presetCodes = [];
+        }
         if (requiresRangeValues(nextOp)) {
           nextFilter.value = '';
         } else {
@@ -366,6 +379,38 @@ export default function ReportBuilderPage() {
 
   const handleRemoveFilter = (id: number) => {
     setFilters((prev) => prev.filter((filter) => filter.id !== id));
+  };
+
+  const handlePresetToggle = (id: number, enabled: boolean) => {
+    setFilters((prev) =>
+      prev.map((filter) => {
+        if (filter.id !== id) {
+          return filter;
+        }
+        if (filter.logicalType !== 'DATE') {
+          return { ...filter, presetEnabled: false, presetCodes: [] };
+        }
+        return {
+          ...filter,
+          presetEnabled: enabled,
+          presetCodes: enabled ? filter.presetCodes : [],
+        };
+      }),
+    );
+  };
+
+  const handlePresetSelectionChange = (id: number, values: string[]) => {
+    setFilters((prev) =>
+      prev.map((filter) => {
+        if (filter.id !== id) {
+          return filter;
+        }
+        if (filter.logicalType !== 'DATE') {
+          return { ...filter, presetEnabled: false, presetCodes: [] };
+        }
+        return { ...filter, presetEnabled: true, presetCodes: values };
+      }),
+    );
   };
 
   const handleSelectTemplateChange = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -447,6 +492,7 @@ export default function ReportBuilderPage() {
           logicalType: filter.logicalType,
           dataType: filter.logicalType,
           allowedOperators: allowedOperators(filter.logicalType),
+          presetCodes: filter.logicalType === 'DATE' && filter.presetEnabled ? filter.presetCodes : undefined,
         };
       })
       .filter((filter): filter is NonNullable<typeof filter> => Boolean(filter));
@@ -471,6 +517,18 @@ export default function ReportBuilderPage() {
       .map((filter) => {
         if (!filter.key || !filter.op) {
           return null;
+        }
+        if (filter.logicalType === 'DATE' && filter.presetEnabled) {
+          if (filter.presetCodes.length === 0) {
+            return null;
+          }
+          return {
+            key: normalizeKeyForBackend(filter.key),
+            op: filter.op,
+            logicalType: filter.logicalType,
+            dataType: filter.logicalType,
+            presetCodes: filter.presetCodes,
+          };
         }
         if (requiresRangeValues(filter.op)) {
           if (!filter.valueFrom || !filter.valueTo) {
@@ -653,8 +711,15 @@ export default function ReportBuilderPage() {
     await executeReport(lastRequest, 0, nextSize);
   };
 
+  const handleFetchAllRows = useCallback(async () => {
+    if (!lastRequest) {
+      return { columns: result?.columns ?? [], rows: result?.rows ?? [], rowCount: result?.rowCount };
+    }
+    return fetchAllReportRows((nextPage, nextSize) => runDynamicReport(lastRequest, nextPage, nextSize));
+  }, [lastRequest, result]);
+
   const canRun = Boolean(selectedEntity && selectedColumns.length > 0);
-  const canGoNext = Boolean(result && result.rows.length === pageSize);
+  const canGoNext = Boolean(result && typeof result.rowCount === 'number' && (page + 1) * pageSize < result.rowCount);
 
   return (
     <div className="space-y-6">
@@ -864,15 +929,27 @@ export default function ReportBuilderPage() {
             <p className="text-sm text-slate-500 dark:text-slate-400">No filters applied.</p>
           ) : (
             <div className="space-y-2">
-              {filters.map((filter) => (
-                <div
-                  key={filter.id}
-                  className="grid gap-2 rounded border border-slate-200 p-3 text-sm transition-colors dark:border-slate-700 md:grid-cols-[1.5fr_1fr_1fr_1.8fr_auto]"
-                >
+              {filters.map((filter) => {
+                const presetsActive = filter.logicalType === 'DATE' && filter.presetEnabled;
+                const selectedPresetNames = presetCatalog
+                  .filter((preset) => filter.presetCodes.includes(preset.code))
+                  .map((preset) => preset.name);
+                const presetSummary =
+                  selectedPresetNames.length === 0
+                    ? 'Select presets'
+                    : selectedPresetNames.length <= 2
+                    ? selectedPresetNames.join(', ')
+                    : `${selectedPresetNames.length} presets selected`;
+
+                return (
+                  <div
+                    key={filter.id}
+                    className="flex flex-wrap items-center gap-2 rounded border border-slate-200 p-3 text-sm transition-colors dark:border-slate-700 xl:flex-nowrap"
+                  >
                   <select
                     value={filter.key}
                     onChange={(event) => handleFilterChange(filter.id, { key: event.target.value })}
-                    className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                    className="min-w-[260px] flex-[1.6] rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
                   >
                     <option value="">Select column…</option>
                     {(['Base Table', 'Document', 'Metadata'] as const).map((group) => {
@@ -894,7 +971,7 @@ export default function ReportBuilderPage() {
                   <select
                     value={filter.logicalType}
                     onChange={(event) => handleFilterChange(filter.id, { logicalType: event.target.value as LogicalType })}
-                    className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                    className="w-full min-w-[120px] rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40 sm:w-auto"
                   >
                     {LOGICAL_TYPES.map((type) => (
                       <option key={type} value={type}>
@@ -902,55 +979,117 @@ export default function ReportBuilderPage() {
                       </option>
                     ))}
                   </select>
-                  <select
-                    value={filter.op}
-                    onChange={(event) => handleFilterChange(filter.id, { op: event.target.value as Operator })}
-                    className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-                  >
-                    {allowedOperators(filter.logicalType).map((operator) => (
-                      <option key={operator} value={operator}>
-                        {operator}
-                      </option>
-                    ))}
-                  </select>
-                  {requiresRangeValues(filter.op) ? (
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type={filter.logicalType === 'NUMBER' ? 'number' : filter.logicalType === 'DATE' ? 'date' : 'text'}
-                        value={filter.valueFrom}
-                        onChange={(event) => handleFilterChange(filter.id, { valueFrom: event.target.value })}
-                        inputMode={filter.logicalType === 'NUMBER' ? 'decimal' : undefined}
-                        placeholder={filter.logicalType === 'NUMBER' ? 'Min' : 'From'}
-                        className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-                      />
-                      <input
-                        type={filter.logicalType === 'NUMBER' ? 'number' : filter.logicalType === 'DATE' ? 'date' : 'text'}
-                        value={filter.valueTo}
-                        onChange={(event) => handleFilterChange(filter.id, { valueTo: event.target.value })}
-                        inputMode={filter.logicalType === 'NUMBER' ? 'decimal' : undefined}
-                        placeholder={filter.logicalType === 'NUMBER' ? 'Max' : 'To'}
-                        className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-                      />
-                    </div>
+                  {!presetsActive ? (
+                    <>
+                      <select
+                        value={filter.op}
+                        onChange={(event) => handleFilterChange(filter.id, { op: event.target.value as Operator })}
+                        className="w-full min-w-[120px] rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40 sm:w-auto"
+                      >
+                        {allowedOperators(filter.logicalType).map((operator) => (
+                          <option key={operator} value={operator}>
+                            {operator}
+                          </option>
+                        ))}
+                      </select>
+                      {requiresRangeValues(filter.op) ? (
+                        <div className="grid min-w-[240px] flex-[1.2] grid-cols-2 gap-2">
+                          <input
+                            type={filter.logicalType === 'NUMBER' ? 'number' : filter.logicalType === 'DATE' ? 'date' : 'text'}
+                            value={filter.valueFrom}
+                            onChange={(event) => handleFilterChange(filter.id, { valueFrom: event.target.value })}
+                            inputMode={filter.logicalType === 'NUMBER' ? 'decimal' : undefined}
+                            placeholder={filter.logicalType === 'NUMBER' ? 'Min' : 'From'}
+                            className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                          />
+                          <input
+                            type={filter.logicalType === 'NUMBER' ? 'number' : filter.logicalType === 'DATE' ? 'date' : 'text'}
+                            value={filter.valueTo}
+                            onChange={(event) => handleFilterChange(filter.id, { valueTo: event.target.value })}
+                            inputMode={filter.logicalType === 'NUMBER' ? 'decimal' : undefined}
+                            placeholder={filter.logicalType === 'NUMBER' ? 'Max' : 'To'}
+                            className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                          />
+                        </div>
+                      ) : (
+                        <input
+                          type={filter.logicalType === 'NUMBER' ? 'number' : filter.logicalType === 'DATE' ? 'date' : 'text'}
+                          value={filter.value}
+                          onChange={(event) => handleFilterChange(filter.id, { value: event.target.value })}
+                          inputMode={filter.logicalType === 'NUMBER' ? 'decimal' : undefined}
+                          placeholder="Value"
+                          className="min-w-[220px] flex-[1.2] rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
+                        />
+                      )}
+                    </>
                   ) : (
-                    <input
-                      type={filter.logicalType === 'NUMBER' ? 'number' : filter.logicalType === 'DATE' ? 'date' : 'text'}
-                      value={filter.value}
-                      onChange={(event) => handleFilterChange(filter.id, { value: event.target.value })}
-                      inputMode={filter.logicalType === 'NUMBER' ? 'decimal' : undefined}
-                      placeholder="Value"
-                      className="rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
-                    />
+                    <details className="relative min-w-[240px] flex-[1.2]">
+                      <summary className="list-none rounded border border-slate-300 px-3 py-1 text-sm text-slate-700 transition-colors hover:bg-slate-50 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 [&::-webkit-details-marker]:hidden">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="truncate">{presetSummary}</span>
+                          <span className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            {filter.presetCodes.length || 0}
+                          </span>
+                        </div>
+                      </summary>
+                      <div className="absolute right-0 z-20 mt-2 w-72 rounded border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                        <div className="space-y-2">
+                          {presetCatalog.map((preset) => {
+                            const checked = filter.presetCodes.includes(preset.code);
+                            return (
+                              <label
+                                key={`${filter.id}-${preset.code}`}
+                                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(event) =>
+                                    handlePresetSelectionChange(
+                                      filter.id,
+                                      event.target.checked
+                                        ? [...filter.presetCodes, preset.code]
+                                        : filter.presetCodes.filter((code) => code !== preset.code),
+                                    )
+                                  }
+                                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-900"
+                                />
+                                <span>{preset.name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </details>
                   )}
+                  {filter.logicalType === 'DATE' ? (
+                    <div className="xl:ml-auto">
+                      <label className="inline-flex items-center gap-2 rounded border border-slate-300 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:border-slate-600 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={filter.presetEnabled}
+                          onChange={(event) => handlePresetToggle(filter.id, event.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-900"
+                        />
+                        Presets
+                      </label>
+                    </div>
+                  ) : null}
                   <button
                     type="button"
-                    className="self-start rounded border border-red-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-red-600 transition hover:bg-red-50 dark:border-red-400/40 dark:text-red-300 dark:hover:bg-red-500/10"
+                    className="rounded border border-red-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-red-600 transition hover:bg-red-50 dark:border-red-400/40 dark:text-red-300 dark:hover:bg-red-500/10"
                     onClick={() => handleRemoveFilter(filter.id)}
                   >
                     Remove
                   </button>
-                </div>
-              ))}
+                  {filter.logicalType === 'DATE' && filter.presetEnabled && filter.presetCodes.length === 0 ? (
+                    <div className="w-full text-xs text-amber-600 dark:text-amber-400">
+                      Choose at least one preset before saving.
+                    </div>
+                  ) : null}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -978,9 +1117,11 @@ export default function ReportBuilderPage() {
         hasRun={hasRun}
         page={page}
         pageSize={pageSize}
+        totalRows={result?.rowCount}
         canGoNext={canGoNext}
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
+        fetchAllRows={handleFetchAllRows}
       />
     </div>
   );
