@@ -17,6 +17,7 @@ public class UploadFieldDefinition {
     private Set<String> editableByRoles = Collections.emptySet();
     private Set<String> requiredAtStatuses = Collections.emptySet();
     private boolean lockAfterFilled;
+    private boolean notificationTeamRouting;
 
     public String getName() {
         return name;
@@ -116,6 +117,14 @@ public class UploadFieldDefinition {
 
     public void setLockAfterFilled(boolean lockAfterFilled) {
         this.lockAfterFilled = lockAfterFilled;
+    }
+
+    public boolean isNotificationTeamRouting() {
+        return notificationTeamRouting;
+    }
+
+    public void setNotificationTeamRouting(boolean notificationTeamRouting) {
+        this.notificationTeamRouting = notificationTeamRouting;
     }
 
     public String getDisplayLabel() {

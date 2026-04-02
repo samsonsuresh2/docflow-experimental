@@ -421,3 +421,55 @@ They improve user experience while keeping the reporting engine simple by conver
   ```bash
   mvn test
   ```
+
+## Notification Service Phase 1
+
+Phase 1 adds asynchronous EMAIL notifications through an outbox-driven notification module.
+
+Supported now:
+
+* document lifecycle notifications for submit/open, review complete, approval, rejection, and send-back
+* report mail enqueueing from report execution templates
+* SMTP -> localhost relay -> `mailx` fallback selection by configuration
+* internal-domain recipient enforcement
+* template placeholder replacement with `${reportName}`, `${runDate}`, `${triggeredBy}`, `${filterSummary}`
+
+Configured in `application.yml`:
+
+```yaml
+docflow:
+  notification:
+    enabled: true
+    outbox:
+      processing-enabled: true
+      batch-size: 20
+      fixed-delay-ms: 30000
+    mail:
+      enabled: true
+      adapter-priority: [SMTP, LOCALHOST_SMTP, MAILX]
+      from-address: no-reply@company.internal
+      reply-to: support@company.internal
+      allowed-internal-domains: [company.internal]
+      max-to-count: 20
+      max-cc-count: 20
+```
+
+Report mail modes:
+
+* `INLINE_ONLY`
+* `ATTACHMENT_ONLY`
+* `INLINE_OR_ATTACHMENT`
+
+Field semantics:
+
+* `mandatory`: always enforced by the backend
+* `default`: prefill suggestion, unless the field is read-only
+* `editable`: controls whether the end user can change the value in UI
+
+Known Phase 1 exclusions:
+
+* no retry execution yet
+* no bulk notifications
+* no external recipient domains
+* no user-uploaded attachments
+* no in-app notification channel yet

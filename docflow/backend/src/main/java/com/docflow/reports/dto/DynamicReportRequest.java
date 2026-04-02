@@ -1,5 +1,6 @@
 package com.docflow.reports.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -20,6 +21,10 @@ public class DynamicReportRequest {
 
     @Valid
     private List<ReportJoin> joins = new ArrayList<>();
+
+    @Valid
+    @JsonAlias("mailConfig")
+    private ReportMailConfig mail;
 
     public String getBaseEntity() {
         return baseEntity;
@@ -51,5 +56,13 @@ public class DynamicReportRequest {
 
     public void setJoins(List<ReportJoin> joins) {
         this.joins = joins != null ? joins : new ArrayList<>();
+    }
+
+    public ReportMailConfig getMail() {
+        return mail;
+    }
+
+    public void setMail(ReportMailConfig mail) {
+        this.mail = mail;
     }
 }

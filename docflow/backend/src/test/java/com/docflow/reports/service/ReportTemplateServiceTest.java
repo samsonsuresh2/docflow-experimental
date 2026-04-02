@@ -2,6 +2,8 @@ package com.docflow.reports.service;
 
 import com.docflow.reports.dto.DynamicReportRequest;
 import com.docflow.reports.dto.ReportFilter;
+import com.docflow.reports.dto.ReportMailConfig;
+import com.docflow.reports.dto.ReportMailFieldConfig;
 import com.docflow.reports.dto.ReportTemplateResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -142,6 +144,38 @@ class ReportTemplateServiceTest {
         verify(jdbcTemplate).update(anyString(), paramsCaptor.capture(), any(KeyHolder.class), any(String[].class));
 
         assertThat(paramsCaptor.getValue().getValue("createdBy")).isEqualTo("SYSTEM");
+    }
+
+    @Test
+    void createTemplatePersistsMailConfigInsideTemplateJson() throws Exception {
+        DynamicReportRequest request = new DynamicReportRequest();
+        request.setBaseEntity("DOCUMENT_PARENT");
+        request.setColumns(List.of("DOCUMENT_PARENT.ID"));
+        ReportMailConfig mailConfig = new ReportMailConfig();
+        mailConfig.setEnabled(true);
+        ReportMailFieldConfig subject = new ReportMailFieldConfig();
+        subject.setDefaultValue("Report ${reportName}");
+        mailConfig.setSubject(subject);
+        request.setMail(mailConfig);
+
+        ReportTemplateResponse response = new ReportTemplateResponse(1L, "Mail Template", null, request, "admin1", Instant.now());
+
+        doAnswer(invocation -> {
+            KeyHolder keyHolder = invocation.getArgument(2);
+            keyHolder.getKeyList().add(Map.of("ID", 1L));
+            return 1;
+        }).when(jdbcTemplate).update(anyString(), any(MapSqlParameterSource.class), any(KeyHolder.class), any(String[].class));
+
+        when(jdbcTemplate.queryForObject(anyString(), anyMap(), any(RowMapper.class))).thenReturn(response);
+
+        service.createTemplate("Mail Template", request, "admin1");
+
+        ArgumentCaptor<MapSqlParameterSource> paramsCaptor = ArgumentCaptor.forClass(MapSqlParameterSource.class);
+        verify(jdbcTemplate).update(anyString(), paramsCaptor.capture(), any(KeyHolder.class), any(String[].class));
+        JsonNode payload = objectMapper.readTree((String) paramsCaptor.getValue().getValue("configJson"));
+
+        assertThat(payload.path("mail").path("enabled").asBoolean()).isTrue();
+        assertThat(payload.path("mail").path("subject").path("default").asText()).isEqualTo("Report ${reportName}");
     }
 
     @Test

@@ -63,6 +63,7 @@ public class UploadFieldConfigParser {
         definition.setRequired(node.path("required").asBoolean(false));
         definition.setReadOnly(node.path("readOnly").asBoolean(false));
         definition.setLockAfterFilled(node.path("lockAfterFilled").asBoolean(false));
+        definition.setNotificationTeamRouting(node.path("notificationTeamRouting").asBoolean(false));
         definition.setVisibleToRoles(stringSet(node, "visibleToRoles", stringSet(node, "roles", Set.of())));
         definition.setEditableByRoles(stringSet(node, "editableByRoles", Set.of()));
         definition.setRequiredAtStatuses(stringSet(node, "requiredAtStatuses", Set.of()));

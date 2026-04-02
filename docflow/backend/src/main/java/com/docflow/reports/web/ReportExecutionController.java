@@ -2,7 +2,9 @@ package com.docflow.reports.web;
 
 import com.docflow.reports.dto.ReportExecutionModels;
 import com.docflow.reports.service.ReportExecutionService;
+import com.docflow.reports.service.ReportMailService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,9 +22,12 @@ import java.util.List;
 public class ReportExecutionController {
 
     private final ReportExecutionService executionService;
+    private final ReportMailService reportMailService;
 
-    public ReportExecutionController(ReportExecutionService executionService) {
+    public ReportExecutionController(ReportExecutionService executionService,
+                                     ReportMailService reportMailService) {
         this.executionService = executionService;
+        this.reportMailService = reportMailService;
     }
 
     @GetMapping(value = "/templates", params = "mode=exec")
@@ -43,6 +48,12 @@ public class ReportExecutionController {
             @RequestParam(defaultValue = "50") int size
     ) {
         return executionService.run(request, page, size);
+    }
+
+    @PostMapping(value = "/mail", params = "mode=exec")
+    @org.springframework.web.bind.annotation.ResponseStatus(HttpStatus.ACCEPTED)
+    public ReportExecutionModels.MailResponse mail(@Valid @RequestBody ReportExecutionModels.MailRequest request) {
+        return reportMailService.enqueue(request);
     }
 }
 

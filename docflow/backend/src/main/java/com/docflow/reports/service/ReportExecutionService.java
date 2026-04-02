@@ -59,6 +59,22 @@ public class ReportExecutionService {
         return ctx.toDetail();
     }
 
+    public ReportExecutionModels.RunResponse runAll(ReportExecutionModels.RunRequest request, int pageSize) {
+        int safePageSize = Math.max(1, pageSize);
+        ReportExecutionModels.RunResponse firstPage = run(request, 0, safePageSize);
+        if (firstPage.rowCount() <= firstPage.rows().size()) {
+            return firstPage;
+        }
+
+        List<Map<String, Object>> allRows = new ArrayList<>(firstPage.rows());
+        int totalPages = (int) Math.max(1, Math.ceil((double) firstPage.rowCount() / safePageSize));
+        for (int page = 1; page < totalPages; page++) {
+            ReportExecutionModels.RunResponse nextPage = run(request, page, safePageSize);
+            allRows.addAll(nextPage.rows());
+        }
+        return new ReportExecutionModels.RunResponse(firstPage.columns(), allRows, firstPage.rowCount());
+    }
+
     public ReportExecutionModels.RunResponse run(ReportExecutionModels.RunRequest request, int page, int size) {
         if (request == null || request.getTemplateId() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "templateId is required");
@@ -357,19 +373,22 @@ public class ReportExecutionService {
         private final List<String> columns;
         private final Map<String, TemplateFilterDefinition> userFilters;
         private final List<ReportFilter> fixedFilters;
+        private final ReportTemplateResponse template;
 
         private TemplateContext(long templateId,
                                 String name,
                                 String baseEntity,
                                 List<String> columns,
                                 Map<String, TemplateFilterDefinition> userFilters,
-                                List<ReportFilter> fixedFilters) {
+                                List<ReportFilter> fixedFilters,
+                                ReportTemplateResponse template) {
             this.templateId = templateId;
             this.name = name;
             this.baseEntity = baseEntity;
             this.columns = columns;
             this.userFilters = userFilters;
             this.fixedFilters = fixedFilters;
+            this.template = template;
         }
 
         static TemplateContext from(ReportTemplateResponse template, DatePresetService datePresetService) {
@@ -415,7 +434,7 @@ public class ReportExecutionService {
                     fixedFilters.add(fixed);
                 }
             }
-            return new TemplateContext(template.getId(), template.getName(), baseEntity, columns, userFilters, fixedFilters);
+            return new TemplateContext(template.getId(), template.getName(), baseEntity, columns, userFilters, fixedFilters, template);
         }
 
         Map<String, TemplateFilterDefinition> userFiltersByLookup() {
@@ -454,7 +473,7 @@ public class ReportExecutionService {
                             def.presets()
                     ))
                     .toList();
-            return new ReportExecutionModels.TemplateDetail(templateId, name, filters);
+            return new ReportExecutionModels.TemplateDetail(templateId, name, filters, template.getRequest().getMail());
         }
 
         private static TemplateFilterDefinition toDefinition(ReportFilter filter,

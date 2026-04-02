@@ -11,6 +11,7 @@ import com.docflow.domain.JsonConfig;
 import com.docflow.domain.DocumentStatus;
 import com.docflow.domain.SchemaBindingMode;
 import com.docflow.domain.repository.DocumentRepository;
+import com.docflow.notification.service.DocumentNotificationPublisher;
 import com.docflow.service.form.FieldAccessDecision;
 import com.docflow.service.form.FieldAccessEvaluator;
 import com.docflow.service.form.UploadFieldConfigParser;
@@ -55,6 +56,7 @@ public class DefaultDocumentService implements DocumentService {
     private final com.docflow.context.RequestUserContext requestUserContext;
     private final UploadFieldConfigParser uploadFieldConfigParser;
     private final WorkflowPermissionService workflowPermissionService;
+    private final DocumentNotificationPublisher documentNotificationPublisher;
 
     public DefaultDocumentService(DocumentRepository documentRepository,
                                   StorageAdapter storageAdapter,
@@ -64,6 +66,7 @@ public class DefaultDocumentService implements DocumentService {
                                   ConfigService configService,
                                   com.docflow.context.RequestUserContext requestUserContext,
                                   WorkflowPermissionService workflowPermissionService,
+                                  DocumentNotificationPublisher documentNotificationPublisher,
                                   ObjectMapper objectMapper) {
         this.documentRepository = documentRepository;
         this.storageAdapter = storageAdapter;
@@ -73,6 +76,7 @@ public class DefaultDocumentService implements DocumentService {
         this.configService = configService;
         this.requestUserContext = requestUserContext;
         this.workflowPermissionService = workflowPermissionService;
+        this.documentNotificationPublisher = documentNotificationPublisher;
         this.uploadFieldConfigParser = new UploadFieldConfigParser(objectMapper);
     }
 
@@ -203,6 +207,15 @@ public class DefaultDocumentService implements DocumentService {
         );
 
         Map<String, Object> metadata = metadataService.getMetadata(document);
+        documentNotificationPublisher.publishLifecycleEvent(
+            document,
+            previousStatus,
+            status,
+            resolveLifecycleEventCode(previousStatus, status),
+            user,
+            comment,
+            metadata
+        );
         return mapToResponse(document, metadata);
     }
 

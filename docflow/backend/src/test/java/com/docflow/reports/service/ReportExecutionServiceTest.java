@@ -3,6 +3,7 @@ package com.docflow.reports.service;
 import com.docflow.reports.dto.DynamicReportRequest;
 import com.docflow.reports.dto.ReportExecutionModels;
 import com.docflow.reports.dto.ReportFilter;
+import com.docflow.reports.dto.ReportMailConfig;
 import com.docflow.reports.dto.ReportTemplateResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -269,6 +270,20 @@ class ReportExecutionServiceTest {
         assertEquals(2, applied.size());
         assertEquals("GE", applied.get(0).getOp());
         assertEquals("LE", applied.get(1).getOp());
+    }
+
+    @Test
+    void shouldExposeMailConfigWithExecutableTemplate() {
+        ReportTemplateResponse template = templateWithUserFilter("meta:branch", ReportFilter.FilterLogicalType.STRING);
+        ReportMailConfig mailConfig = new ReportMailConfig();
+        mailConfig.setEnabled(true);
+        template.getRequest().setMail(mailConfig);
+        when(templateService.getById(10L)).thenReturn(template);
+
+        ReportExecutionModels.TemplateDetail detail = service.getExecutableTemplate(10L);
+
+        assertNotNull(detail.mail());
+        assertTrue(detail.mail().isEnabled());
     }
 
     private ReportTemplateResponse templateWithUserFilter(String key, ReportFilter.FilterLogicalType type) {

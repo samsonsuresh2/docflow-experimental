@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import ReportResultsGrid from '../components/ReportResultsGrid';
+import ReportMailConfigEditor from '../components/ReportMailConfigEditor';
 import {
   fetchAllReportRows,
   fetchReportScope,
@@ -8,7 +9,18 @@ import {
   saveReportTemplate,
   updateReportTemplate,
 } from '../lib/reports';
-import type { DynamicReportRequest, ReportBaseEntity, ReportRunResponse, ReportTemplate } from '../types/reports';
+import {
+  createDefaultReportMailConfig,
+  normalizeReportMailConfig,
+  toReportMailApiConfig,
+} from '../lib/reportMail';
+import type {
+  DynamicReportRequest,
+  ReportBaseEntity,
+  ReportMailConfig,
+  ReportRunResponse,
+  ReportTemplate,
+} from '../types/reports';
 
 const OPERATORS = ['EQ', 'LIKE', 'LT', 'GT', 'RANGE', 'BETWEEN'] as const;
 type Operator = (typeof OPERATORS)[number];
@@ -136,6 +148,7 @@ export default function ReportBuilderPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [pendingTemplate, setPendingTemplate] = useState<ReportTemplate | null>(null);
   const [loadedTemplate, setLoadedTemplate] = useState<ReportTemplate | null>(null);
+  const [mailConfig, setMailConfig] = useState<ReportMailConfig>(() => createDefaultReportMailConfig());
 
   const filterIdRef = useRef<number>(0);
 
@@ -205,6 +218,7 @@ export default function ReportBuilderPage() {
       setHasRun(false);
       setLastRequest(null);
       setRunError(null);
+      setMailConfig(createDefaultReportMailConfig());
       return;
     }
     setSelectedColumns([]);
@@ -272,6 +286,7 @@ export default function ReportBuilderPage() {
           })
       : [];
     setFilters(nextFilters);
+    setMailConfig(normalizeReportMailConfig(pendingTemplate.request.mail));
     setPendingTemplate(null);
     setHasRun(false);
     setResult(null);
@@ -501,8 +516,9 @@ export default function ReportBuilderPage() {
       baseEntity: selectedEntity,
       columns,
       filters: filtersPayload,
+      mail: toReportMailApiConfig(mailConfig),
     };
-  }, [selectedEntity, selectedColumns, filters, documentEntityName]);
+  }, [selectedEntity, selectedColumns, filters, documentEntityName, mailConfig]);
 
   const buildRunRequest = useCallback((): DynamicReportRequest | null => {
     if (!selectedEntity) {
@@ -1106,6 +1122,24 @@ export default function ReportBuilderPage() {
           >
             {running ? 'Running…' : 'Run Report'}
           </button>
+        </div>
+      </section>
+
+      <section className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Report Mail</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Configure template-level mail defaults. The backend will enforce mandatory fields and keep recipients internal.
+            </p>
+          </div>
+          <span className="rounded border border-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-300">
+            Stored in template JSON
+          </span>
+        </div>
+
+        <div className="mt-4">
+          <ReportMailConfigEditor value={mailConfig} onChange={setMailConfig} />
         </div>
       </section>
 

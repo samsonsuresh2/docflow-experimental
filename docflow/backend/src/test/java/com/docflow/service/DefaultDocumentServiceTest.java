@@ -5,6 +5,8 @@ import com.docflow.context.RequestUserContext;
 import com.docflow.domain.DocumentParent;
 import com.docflow.domain.DocumentStatus;
 import com.docflow.domain.repository.DocumentRepository;
+import com.docflow.notification.service.DocumentNotificationPublisher;
+import com.docflow.storage.StorageAdapter;
 import com.docflow.api.dto.FilterDefinition;
 import com.docflow.api.dto.FilterSource;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,6 +56,8 @@ class DefaultDocumentServiceTest {
 
     @Mock
     private WorkflowPermissionService workflowPermissionService;
+    @Mock
+    private DocumentNotificationPublisher documentNotificationPublisher;
 
     @InjectMocks
     private DefaultDocumentService service;
@@ -66,7 +70,7 @@ class DefaultDocumentServiceTest {
     @BeforeEach
     void setup() {
         sampleDocument = new DocumentParent();
-        sampleDocument.setId(1L);
+        setDocumentId(sampleDocument, 1L);
         sampleDocument.setDocumentNumber("DOC-1");
         sampleDocument.setCreatedBy("maker1");
         sampleDocument.setStatus(DocumentStatus.DRAFT);
@@ -267,6 +271,8 @@ class DefaultDocumentServiceTest {
             eq(WorkflowActionCodes.SUBMIT), isNull(), any(), any());
         verify(auditService).logLifecycleEvent(eq(sampleDocument), eq(DocumentStatus.DRAFT), eq(DocumentStatus.OPEN),
             eq(DocumentLifecycleEventCatalog.SUBMITTED_FOR_REVIEW), isNull(), any(), any());
+        verify(documentNotificationPublisher).publishLifecycleEvent(eq(sampleDocument), eq(DocumentStatus.DRAFT), eq(DocumentStatus.OPEN),
+            eq(DocumentLifecycleEventCatalog.SUBMITTED_FOR_REVIEW), any(), isNull(), anyMap());
     }
 
     @Test
@@ -288,5 +294,15 @@ class DefaultDocumentServiceTest {
         ))
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("Unsupported review filter");
+    }
+
+    private void setDocumentId(DocumentParent document, long id) {
+        try {
+            java.lang.reflect.Field field = DocumentParent.class.getDeclaredField("id");
+            field.setAccessible(true);
+            field.set(document, id);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 }

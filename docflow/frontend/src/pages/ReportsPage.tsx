@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import ReportResultsGrid from '../components/ReportResultsGrid';
+import ReportMailDialog from '../components/ReportMailDialog';
 import {
   fetchAllReportRows,
   fetchExecutableReportTemplate,
   fetchExecutableReportTemplates,
+  sendReportMail,
   runReportTemplate,
 } from '../lib/reports';
+import { buildReportFilterSummary, normalizeReportMailConfig } from '../lib/reportMail';
 import type {
   ExecutableReportFilterField,
   ExecutableReportTemplateDetail,
   ExecutableReportTemplateSummary,
   ReportExecutionRunRequest,
+  ReportMailSendDraft,
   ReportRunResponse,
 } from '../types/reports';
 import { useUser } from '../lib/UserContext';
@@ -91,6 +95,8 @@ export default function ReportsPage() {
   const [page, setPage] = useState<number>(0);
   const [pageSize, setPageSize] = useState<number>(25);
   const [lastRequest, setLastRequest] = useState<ReportExecutionRunRequest | null>(null);
+  const [mailDialogOpen, setMailDialogOpen] = useState<boolean>(false);
+  const [mailStatusMessage, setMailStatusMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,6 +132,8 @@ export default function ReportsPage() {
       setResult(null);
       setHasRun(false);
       setRunError(null);
+      setMailDialogOpen(false);
+      setMailStatusMessage(null);
       return;
     }
     let cancelled = false;
@@ -151,6 +159,8 @@ export default function ReportsPage() {
           setResult(null);
           setHasRun(false);
           setRunError(null);
+          setMailDialogOpen(false);
+          setMailStatusMessage(null);
           setPage(0);
           setLastRequest(null);
         }
@@ -180,6 +190,10 @@ export default function ReportsPage() {
     const template = templates.find((item) => item.id === selectedTemplateId);
     return template?.name ?? '';
   }, [templates, selectedTemplateId]);
+
+  const normalizedMailConfig = useMemo(() => normalizeReportMailConfig(templateDetail?.mail), [templateDetail?.mail]);
+  const reportMailEnabled = Boolean(normalizedMailConfig.enabled);
+  const filterSummary = useMemo(() => buildReportFilterSummary(lastRequest), [lastRequest]);
 
   const handleTemplateChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value;
@@ -323,7 +337,31 @@ export default function ReportsPage() {
     }
     setPage(0);
     setLastRequest(request);
+    setMailStatusMessage(null);
     await executeRun(request, 0, pageSize);
+  };
+
+  const handleOpenMailDialog = () => {
+    if (!reportMailEnabled) {
+      return;
+    }
+    if (!lastRequest) {
+      setRunError('Generate the report before sending an email.');
+      return;
+    }
+    setMailStatusMessage(null);
+    setMailDialogOpen(true);
+  };
+
+  const handleSendReportMail = async (request: ReportMailSendDraft) => {
+    if (!lastRequest) {
+      throw new Error('Generate the report before sending an email.');
+    }
+    await sendReportMail({
+      ...request,
+      filters: lastRequest.filters,
+    });
+    setMailStatusMessage(`Email submitted for ${selectedTemplateName}.`);
   };
 
   const handlePageChange = async (nextPage: number) => {
@@ -406,14 +444,26 @@ export default function ReportsPage() {
               Provide values for the filters defined by the selected template. Leave a value blank to ignore that filter when generating.
             </p>
           </div>
-          <button
-            type="button"
-            className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-400"
-            onClick={handleGenerate}
-            disabled={!canGenerate || running || Boolean(detailError)}
-          >
-            {running ? 'Generating…' : 'Generate'}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {reportMailEnabled ? (
+              <button
+                type="button"
+                className="inline-flex items-center rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
+                onClick={handleOpenMailDialog}
+                disabled={!canGenerate || running || Boolean(detailError)}
+              >
+                Email Report
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-400"
+              onClick={handleGenerate}
+              disabled={!canGenerate || running || Boolean(detailError)}
+            >
+              {running ? 'Generating…' : 'Generate'}
+            </button>
+          </div>
         </div>
 
         {detailLoading ? (
@@ -556,6 +606,18 @@ export default function ReportsPage() {
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
         fetchAllRows={handleFetchAllRows}
+      />
+
+      {mailStatusMessage ? <p className="text-sm text-emerald-600 dark:text-emerald-400">{mailStatusMessage}</p> : null}
+
+      <ReportMailDialog
+        isOpen={mailDialogOpen}
+        onClose={() => setMailDialogOpen(false)}
+        templateId={templateDetail?.templateId ?? 0}
+        templateName={templateDetail?.name ?? ''}
+        mailConfig={normalizedMailConfig}
+        filterSummary={filterSummary}
+        onSend={handleSendReportMail}
       />
     </div>
   );

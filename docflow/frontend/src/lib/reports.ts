@@ -7,6 +7,7 @@ import type {
   ReportRunResponse,
   ReportTemplate,
   ReportTemplateList,
+  ReportMailSendRequest,
 } from '../types/reports';
 import client from './api';
 
@@ -58,7 +59,9 @@ export async function fetchExecutableReportTemplates(): Promise<ExecutableReport
 }
 
 export async function fetchExecutableReportTemplate(templateId: number): Promise<ExecutableReportTemplateDetail> {
-  const response = await client.get<ExecutableReportTemplateDetail>(`/reports/templates/${templateId}`);
+  const response = await client.get<ExecutableReportTemplateDetail>(`/reports/templates/${templateId}`, {
+    params: { mode: 'exec' },
+  });
   return response.data;
 }
 
@@ -120,4 +123,10 @@ export async function runReportTemplate(
     },
   );
   return response.data;
+}
+
+export async function sendReportMail(request: ReportMailSendRequest): Promise<void> {
+  await client.post('/reports/mail', request, {
+    params: { mode: 'exec' },
+  });
 }

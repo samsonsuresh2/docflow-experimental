@@ -70,6 +70,48 @@ docflow:
           enabled: true
           documentFkColumn: CLIENT_ID
           businessFkColumn: USER_ID
+  notification:
+    enabled: true
+    user-email-domain: company.internal
+    document:
+      reviewer-metadata-keys:
+        - reviewer
+        - reviewerId
+        - reviewer_user_id
+      approver-metadata-keys:
+        - approver
+        - approverId
+        - approver_user_id
+    outbox:
+      processing-enabled: true
+      batch-size: 20
+      fixed-delay-ms: 30000
+    mail:
+      enabled: false
+      adapter-priority:
+        - SMTP
+        - LOCALHOST_SMTP
+        - MAILX
+      from-address: noreply@company.internal
+      reply-to: support@company.internal
+      allowed-internal-domains:
+        - company.internal
+      max-to-count: 25
+      max-cc-count: 10
+      connection-timeout-ms: 5000
+      read-timeout-ms: 5000
+      write-timeout-ms: 5000
+      smtp:
+        host: localhost
+        port: 2525
+        auth: false
+        start-tls: false
+      localhost-relay:
+        host: localhost
+        port: 25
+        auth: false
+        start-tls: false
+      mailx-command-path: mailx
 excel:
   target-table: loan_data
   primary-key: loan_no
