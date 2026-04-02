@@ -50,7 +50,7 @@ public class UploadFieldConfigParser {
         if (node == null || !node.isObject()) {
             return null;
         }
-        String name = text(node, "name");
+        String name = text(node, "name", text(node, "key"));
         if (name == null || name.isBlank()) {
             return null;
         }

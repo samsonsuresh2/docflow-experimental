@@ -25,6 +25,7 @@ class ReportExecutionServiceTest {
     private DynamicReportBuilder builder;
     private DynamicReportExecutor executor;
     private DatePresetService datePresetService;
+    private ReportFilterTypeValidationService filterTypeValidationService;
     private ReportExecutionService service;
 
     @BeforeEach
@@ -33,7 +34,8 @@ class ReportExecutionServiceTest {
         builder = mock(DynamicReportBuilder.class);
         executor = mock(DynamicReportExecutor.class);
         datePresetService = mock(DatePresetService.class);
-        service = new ReportExecutionService(templateService, builder, executor, datePresetService);
+        filterTypeValidationService = mock(ReportFilterTypeValidationService.class);
+        service = new ReportExecutionService(templateService, builder, executor, datePresetService, filterTypeValidationService);
         when(datePresetService.listPresetsForFilter(any(), any())).thenReturn(List.of());
 
         DynamicReportBuilder.BuiltReport built = new DynamicReportBuilder.BuiltReport("SELECT 1", Map.of(), List.of(), List.of(), "", "", "ctx");
@@ -284,6 +286,25 @@ class ReportExecutionServiceTest {
 
         assertNotNull(detail.mail());
         assertTrue(detail.mail().isEnabled());
+    }
+
+    @Test
+    void shouldReturnControlledMessageForBrokenStoredTemplateConfig() {
+        ReportTemplateResponse template = templateWithUserFilter("STATUS", ReportFilter.FilterLogicalType.NUMBER);
+        when(templateService.getById(10L)).thenReturn(template);
+        doThrow(new ResponseStatusException(
+                org.springframework.http.HttpStatus.CONFLICT,
+                ReportFilterTypeValidationService.INVALID_FILTER_CONFIGURATION_MESSAGE
+        )).when(filterTypeValidationService).validateRuntimeDefinition(template.getRequest(), "template:10");
+
+        ReportExecutionModels.RunRequest request = new ReportExecutionModels.RunRequest();
+        request.setTemplateId(10L);
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> service.run(request, 0, 25));
+
+        assertEquals(409, exception.getStatusCode().value());
+        assertEquals(ReportFilterTypeValidationService.INVALID_FILTER_CONFIGURATION_MESSAGE, exception.getReason());
+        verifyNoInteractions(builder);
+        verifyNoInteractions(executor);
     }
 
     private ReportTemplateResponse templateWithUserFilter(String key, ReportFilter.FilterLogicalType type) {

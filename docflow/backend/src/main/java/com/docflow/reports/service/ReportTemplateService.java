@@ -41,12 +41,17 @@ public class ReportTemplateService {
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final DatePresetService datePresetService;
+    private final ReportFilterTypeValidationService filterTypeValidationService;
     private final RowMapper<ReportTemplateResponse> rowMapper = this::mapRow;
 
-    public ReportTemplateService(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper, DatePresetService datePresetService) {
+    public ReportTemplateService(NamedParameterJdbcTemplate jdbcTemplate,
+                                 ObjectMapper objectMapper,
+                                 DatePresetService datePresetService,
+                                 ReportFilterTypeValidationService filterTypeValidationService) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.datePresetService = datePresetService;
+        this.filterTypeValidationService = filterTypeValidationService;
     }
 
     public ReportTemplateResponse save(String name, DynamicReportRequest request, String createdBy) {
@@ -63,6 +68,7 @@ public class ReportTemplateService {
         DynamicReportRequest payload = Objects.requireNonNull(request, "request");
         String author = resolveAuditUser(createdBy);
         validateAndNormalizePresetMappings(payload);
+        filterTypeValidationService.validateTemplateDefinition(payload);
 
         int filterCount = payload.getFilters() != null ? payload.getFilters().size() : 0;
         LOGGER.info("Saving report template '{}' with {} filters", trimmedName, filterCount);
@@ -115,6 +121,7 @@ public class ReportTemplateService {
         DynamicReportRequest payload = Objects.requireNonNull(request, "request");
         String author = resolveAuditUser(updatedBy);
         validateAndNormalizePresetMappings(payload);
+        filterTypeValidationService.validateTemplateDefinition(payload);
         String existingName = loadTemplateName(templateId);
 
         int filterCount = payload.getFilters() != null ? payload.getFilters().size() : 0;

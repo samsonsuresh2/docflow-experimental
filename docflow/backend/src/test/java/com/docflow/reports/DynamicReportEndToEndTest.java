@@ -2,6 +2,7 @@ package com.docflow.reports;
 
 import com.docflow.reports.dto.DynamicReportRequest;
 import com.docflow.reports.service.DynamicReportBuilder;
+import com.docflow.reports.service.ReportFilterTypeValidationService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -581,6 +582,75 @@ class DynamicReportEndToEndTest {
                         .content(payload))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("DATE filters")));
+    }
+
+    @Test
+    void blocksTemplateSaveWhenConfiguredFilterTypeDoesNotMatchDocumentColumn() throws Exception {
+        String payload = """
+                {
+                  "name": "Broken Type Template",
+                  "request": {
+                    "baseEntity": "DOCUMENT_PARENT",
+                    "columns": ["DOCUMENT_NUMBER"],
+                    "filters": [
+                      {
+                        "key": "STATUS",
+                        "op": "=",
+                        "mode": "USER_INPUT",
+                        "logicalType": "NUMBER",
+                        "dataType": "NUMBER"
+                      }
+                    ]
+                  }
+                }
+                """;
+
+        mockMvc.perform(post("/api/reports/templates")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-USER-ID", "admin1")
+                        .content(payload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Choose logical type STRING")));
+    }
+
+    @Test
+    void legacyBrokenTemplateExecutionReturnsControlledMessage() throws Exception {
+        String brokenTemplate = """
+                {
+                  "baseEntity": "DOCUMENT_PARENT",
+                  "columns": ["DOCUMENT_NUMBER"],
+                  "filters": [
+                    {
+                      "key": "STATUS",
+                      "op": "=",
+                      "mode": "USER_INPUT",
+                      "logicalType": "NUMBER",
+                      "dataType": "NUMBER"
+                    }
+                  ]
+                }
+                """;
+        jdbcTemplate.update(
+                "INSERT INTO report_templates (id, name, config_json, created_by, created_at) VALUES (?,?,?,?,CURRENT_TIMESTAMP)",
+                999L,
+                "Legacy Broken Template",
+                brokenTemplate,
+                "seed"
+        );
+
+        String runPayload = """
+                {
+                  "templateId": 999,
+                  "filters": []
+                }
+                """;
+
+        mockMvc.perform(post("/api/reports/run")
+                        .param("mode", "exec")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(runPayload))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(ReportFilterTypeValidationService.INVALID_FILTER_CONFIGURATION_MESSAGE));
     }
 
     private void assertSingleDocument(MvcResult result, String expectedDocumentNumber) throws Exception {

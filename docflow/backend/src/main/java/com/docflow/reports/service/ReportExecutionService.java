@@ -37,15 +37,18 @@ public class ReportExecutionService {
     private final DynamicReportBuilder builder;
     private final DynamicReportExecutor executor;
     private final DatePresetService datePresetService;
+    private final ReportFilterTypeValidationService filterTypeValidationService;
 
     public ReportExecutionService(ReportTemplateService templateService,
                                   DynamicReportBuilder builder,
                                   DynamicReportExecutor executor,
-                                  DatePresetService datePresetService) {
+                                  DatePresetService datePresetService,
+                                  ReportFilterTypeValidationService filterTypeValidationService) {
         this.templateService = templateService;
         this.builder = builder;
         this.executor = executor;
         this.datePresetService = datePresetService;
+        this.filterTypeValidationService = filterTypeValidationService;
     }
 
     public List<ReportExecutionModels.TemplateSummary> listExecutableTemplates() {
@@ -80,6 +83,7 @@ public class ReportExecutionService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "templateId is required");
         }
         TemplateContext ctx = TemplateContext.from(templateService.getById(request.getTemplateId()), datePresetService);
+        filterTypeValidationService.validateRuntimeDefinition(ctx.template().getRequest(), "template:" + ctx.templateId());
         List<ReportFilter> filters = new ArrayList<>(ctx.fixedFilters());
 
         Map<String, TemplateFilterDefinition> allowedFilters = ctx.userFiltersByLookup();
@@ -459,6 +463,10 @@ public class ReportExecutionService {
 
         String name() {
             return name;
+        }
+
+        ReportTemplateResponse template() {
+            return template;
         }
 
         ReportExecutionModels.TemplateDetail toDetail() {

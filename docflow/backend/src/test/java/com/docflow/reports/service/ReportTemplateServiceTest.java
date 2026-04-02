@@ -17,6 +17,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.List;
@@ -27,6 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,13 +41,16 @@ class ReportTemplateServiceTest {
     @Mock
     private DatePresetService datePresetService;
 
+    @Mock
+    private ReportFilterTypeValidationService filterTypeValidationService;
+
     private ObjectMapper objectMapper;
     private ReportTemplateService service;
 
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        service = new ReportTemplateService(jdbcTemplate, objectMapper, datePresetService);
+        service = new ReportTemplateService(jdbcTemplate, objectMapper, datePresetService, filterTypeValidationService);
         when(datePresetService.enabledPresetCodes()).thenReturn(java.util.Set.of("THIS_WEEK", "THIS_MONTH"));
     }
 
@@ -207,5 +212,21 @@ class ReportTemplateServiceTest {
         assertThat(sqlCaptor.getValue()).doesNotContain("created_at");
         assertThat(sqlCaptor.getValue()).doesNotContain("created_by");
         assertThat(paramsCaptor.getValue().getValue("updatedBy")).isEqualTo("editor1");
+    }
+
+    @Test
+    void createTemplateStopsWhenFilterTypeValidationFails() {
+        DynamicReportRequest request = new DynamicReportRequest();
+        request.setBaseEntity("DOCUMENT_PARENT");
+        request.setColumns(List.of("DOCUMENT_PARENT.ID"));
+        doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "bad filter type"))
+                .when(filterTypeValidationService).validateTemplateDefinition(request);
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                ResponseStatusException.class,
+                () -> service.createTemplate("Broken Template", request, "admin1")
+        );
+
+        org.mockito.Mockito.verifyNoInteractions(jdbcTemplate);
     }
 }

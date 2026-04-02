@@ -9,7 +9,9 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -23,7 +25,7 @@ public class ReportMetadataService {
 
     private final JdbcTemplate jdbcTemplate;
     private final ReportProperties properties;
-    private final Map<String, CachedColumns> columnCache = new ConcurrentHashMap<>();
+    private final Map<String, CachedEntityMetadata> entityCache = new ConcurrentHashMap<>();
     private volatile CachedMetadataKeys cachedMetadataKeys;
 
     public ReportMetadataService(JdbcTemplate jdbcTemplate, ReportProperties properties) {
@@ -51,15 +53,17 @@ public class ReportMetadataService {
     }
 
     public EntityColumns getColumns(String entity) {
-        String normalized = normalize(entity);
-        long now = System.currentTimeMillis();
-        CachedColumns cached = columnCache.get(normalized);
-        if (cached != null && cached.expiresAt() > now) {
-            return cached.columns();
+        return getEntityMetadata(entity).columns();
+    }
+
+    public String getColumnDataType(String entity, String column) {
+        EntityMetadata metadata = getEntityMetadata(entity);
+        String normalizedColumn = normalizeColumn(column);
+        String dataType = metadata.dataTypes().get(normalizedColumn);
+        if (!StringUtils.hasText(dataType)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown column " + column + " on " + metadata.entity());
         }
-        EntityColumns columns = fetchColumns(normalized);
-        columnCache.put(normalized, new CachedColumns(columns, now + CACHE_TTL.toMillis()));
-        return columns;
+        return dataType;
     }
 
     public List<String> listMetadataKeys() {
@@ -73,20 +77,43 @@ public class ReportMetadataService {
         return keys;
     }
 
-    private EntityColumns fetchColumns(String entity) {
-        String sql = "SELECT COLUMN_NAME FROM USER_TAB_COLUMNS WHERE TABLE_NAME = ?";
+    private EntityMetadata getEntityMetadata(String entity) {
+        String normalized = normalize(entity);
+        long now = System.currentTimeMillis();
+        CachedEntityMetadata cached = entityCache.get(normalized);
+        if (cached != null && cached.expiresAt() > now) {
+            return cached.metadata();
+        }
+        EntityMetadata metadata = fetchEntityMetadata(normalized);
+        entityCache.put(normalized, new CachedEntityMetadata(metadata, now + CACHE_TTL.toMillis()));
+        return metadata;
+    }
+
+    private EntityMetadata fetchEntityMetadata(String entity) {
+        String sql = "SELECT COLUMN_NAME, DATA_TYPE FROM USER_TAB_COLUMNS WHERE TABLE_NAME = ?";
         try {
-            List<String> columns = jdbcTemplate.query(sql, ps -> ps.setString(1, entity), (rs, rowNum) -> rs.getString(1));
-            if (columns == null || columns.isEmpty()) {
+            List<ColumnDescriptor> rows = jdbcTemplate.query(
+                    sql,
+                    ps -> ps.setString(1, entity),
+                    (rs, rowNum) -> new ColumnDescriptor(rs.getString("COLUMN_NAME"), rs.getString("DATA_TYPE"))
+            );
+            if (rows == null || rows.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown entity: " + entity);
             }
-            List<String> normalized = columns.stream()
-                    .filter(Objects::nonNull)
-                    .map(String::trim)
-                    .filter(StringUtils::hasText)
-                    .map(c -> c.toUpperCase(Locale.ROOT))
-                    .toList();
-            return new EntityColumns(entity, normalized);
+            List<String> columns = new ArrayList<>();
+            Map<String, String> dataTypes = new LinkedHashMap<>();
+            for (ColumnDescriptor row : rows) {
+                if (row == null || !StringUtils.hasText(row.columnName())) {
+                    continue;
+                }
+                String columnName = row.columnName().trim().toUpperCase(Locale.ROOT);
+                columns.add(columnName);
+                dataTypes.put(columnName, normalizeDataType(row.dataType()));
+            }
+            if (columns.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown entity: " + entity);
+            }
+            return new EntityMetadata(entity, new EntityColumns(entity, List.copyOf(columns)), Map.copyOf(dataTypes));
         } catch (DataAccessException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unable to inspect entity: " + entity, ex);
         }
@@ -113,15 +140,39 @@ public class ReportMetadataService {
         return trimmed;
     }
 
+    private String normalizeColumn(String value) {
+        if (!StringUtils.hasText(value)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Column is required");
+        }
+        String trimmed = value.trim().toUpperCase(Locale.ROOT);
+        if (!trimmed.matches("[A-Z0-9_]+")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid column name: " + value);
+        }
+        return trimmed;
+    }
+
+    private String normalizeDataType(String value) {
+        if (!StringUtils.hasText(value)) {
+            return "";
+        }
+        return value.trim().toUpperCase(Locale.ROOT);
+    }
+
     public record BaseEntity(String name, String label, String type, boolean joinsToDocument, String businessFkColumn) {
     }
 
     public record EntityColumns(String entity, List<String> columns) {
     }
 
-    private record CachedColumns(EntityColumns columns, long expiresAt) {
+    private record CachedEntityMetadata(EntityMetadata metadata, long expiresAt) {
     }
 
     private record CachedMetadataKeys(List<String> keys, long expiresAt) {
+    }
+
+    private record EntityMetadata(String entity, EntityColumns columns, Map<String, String> dataTypes) {
+    }
+
+    private record ColumnDescriptor(String columnName, String dataType) {
     }
 }
