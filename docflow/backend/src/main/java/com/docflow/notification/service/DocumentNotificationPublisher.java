@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.Optional;
 
@@ -42,7 +43,8 @@ public class DocumentNotificationPublisher {
                                       String lifecycleEventCode,
                                       RequestUser actor,
                                       String comment,
-                                      Map<String, Object> metadata) {
+                                      Map<String, Object> metadata,
+                                      OffsetDateTime actionOccurredAt) {
         if (!properties.isEnabled()) {
             return;
         }
@@ -61,7 +63,7 @@ public class DocumentNotificationPublisher {
             event.setReferenceType(NotificationReferenceType.DOCUMENT);
             event.setReferenceId(String.valueOf(document.getId()));
             event.setChannelType(NotificationChannelType.EMAIL);
-            event.setContext(contextBuilder.build(document, previousStatus, currentStatus, actor, comment, metadata));
+            event.setContext(contextBuilder.build(document, previousStatus, currentStatus, actor, comment, metadata, actionOccurredAt));
             notificationOrchestrator.publish(event);
         } catch (RuntimeException ex) {
             LOGGER.warn("Unable to enqueue document notification for documentId={} lifecycleEvent={}",

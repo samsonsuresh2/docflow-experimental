@@ -19,6 +19,8 @@ import java.util.Set;
 @Service
 public class EmailRecipientValidationService {
 
+    private static final String ADDRESS_DELIMITER_REGEX = "[,;\\r\\n]+";
+
     private final NotificationProperties properties;
 
     public EmailRecipientValidationService(NotificationProperties properties) {
@@ -82,9 +84,14 @@ public class EmailRecipientValidationService {
             if (!StringUtils.hasText(raw)) {
                 continue;
             }
-            String candidate = raw.trim().toLowerCase(Locale.ROOT);
-            validateEmailAddress(candidate, requiredField);
-            normalized.add(candidate);
+            for (String token : raw.split(ADDRESS_DELIMITER_REGEX)) {
+                if (!StringUtils.hasText(token)) {
+                    continue;
+                }
+                String candidate = token.trim().toLowerCase(Locale.ROOT);
+                validateEmailAddress(candidate, requiredField);
+                normalized.add(candidate);
+            }
         }
         return normalized;
     }

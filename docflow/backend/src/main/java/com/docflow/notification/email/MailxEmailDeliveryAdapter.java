@@ -4,6 +4,8 @@ import com.docflow.notification.config.NotificationProperties;
 import com.docflow.notification.model.NotificationAttachment;
 import com.docflow.notification.model.NotificationDispatchResult;
 import com.docflow.notification.model.NotificationMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -15,6 +17,8 @@ import java.util.List;
 
 @Component
 public class MailxEmailDeliveryAdapter implements EmailDeliveryAdapter {
+
+    private static final Logger log = LoggerFactory.getLogger(MailxEmailDeliveryAdapter.class);
 
     private final NotificationProperties properties;
 
@@ -46,11 +50,22 @@ public class MailxEmailDeliveryAdapter implements EmailDeliveryAdapter {
         }
         attach(command, message.getAttachment());
         command.addAll(message.getTo());
+        String body = message.getBody() != null ? message.getBody() : "";
 
         try {
+            log.info(
+                    "Executing mailx command: {} | body via stdin | subject={} | to={} | cc={} | attachment={} | bodyLength={} | bodyPreview={}",
+                    renderCommand(command),
+                    StringUtils.hasText(message.getSubject()) ? message.getSubject() : "(no subject)",
+                    message.getTo(),
+                    message.getCc(),
+                    message.getAttachment() != null ? message.getAttachment().getPath() : "(none)",
+                    body.length(),
+                    previewBody(body)
+            );
             Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
             try (var output = process.getOutputStream()) {
-                output.write((message.getBody() != null ? message.getBody() : "").getBytes(StandardCharsets.UTF_8));
+                output.write(body.getBytes(StandardCharsets.UTF_8));
             }
             boolean completed = process.waitFor(Duration.ofSeconds(30).toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
             String processOutput;
@@ -59,14 +74,23 @@ public class MailxEmailDeliveryAdapter implements EmailDeliveryAdapter {
             }
             if (!completed) {
                 process.destroyForcibly();
+                log.warn("mailx timed out after 30s. command={} to={} cc={}", renderCommand(command), message.getTo(), message.getCc());
                 return NotificationDispatchResult.failure(getAdapterName(), "mailx timed out.");
             }
             if (process.exitValue() != 0) {
+                log.warn(
+                        "mailx failed. exitCode={} command={} output={}",
+                        process.exitValue(),
+                        renderCommand(command),
+                        StringUtils.hasText(processOutput) ? processOutput : "(no output)"
+                );
                 return NotificationDispatchResult.failure(getAdapterName(),
                         StringUtils.hasText(processOutput) ? processOutput : "mailx failed with exit code " + process.exitValue());
             }
+            log.info("mailx completed successfully. command={} to={} cc={}", renderCommand(command), message.getTo(), message.getCc());
             return NotificationDispatchResult.success(getAdapterName());
         } catch (Exception ex) {
+            log.error("mailx execution threw an exception. command={} message={}", renderCommand(command), ex.getMessage(), ex);
             return NotificationDispatchResult.failure(getAdapterName(), ex.getMessage());
         }
     }
@@ -77,5 +101,33 @@ public class MailxEmailDeliveryAdapter implements EmailDeliveryAdapter {
         }
         command.add("-a");
         command.add(attachment.getPath());
+    }
+
+    private String renderCommand(List<String> command) {
+        return command.stream()
+                .map(this::quoteArgument)
+                .reduce((left, right) -> left + " " + right)
+                .orElse("");
+    }
+
+    private String quoteArgument(String arg) {
+        if (arg == null) {
+            return "\"\"";
+        }
+        String escaped = arg.replace("\\", "\\\\").replace("\"", "\\\"");
+        if (escaped.isEmpty() || escaped.chars().anyMatch(Character::isWhitespace)) {
+            return "\"" + escaped + "\"";
+        }
+        return escaped;
+    }
+
+    private String previewBody(String body) {
+        if (!StringUtils.hasText(body)) {
+            return "(empty)";
+        }
+        String normalized = body
+                .replace("\r", "\\r")
+                .replace("\n", "\\n");
+        return normalized.length() > 200 ? normalized.substring(0, 200) + "..." : normalized;
     }
 }

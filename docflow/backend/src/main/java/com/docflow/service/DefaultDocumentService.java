@@ -214,7 +214,8 @@ public class DefaultDocumentService implements DocumentService {
             resolveLifecycleEventCode(previousStatus, status),
             user,
             comment,
-            metadata
+            metadata,
+            now
         );
         return mapToResponse(document, metadata);
     }

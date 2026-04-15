@@ -1,9 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  joinEmailList,
-  normalizeReportMailConfig,
-  splitEmailList,
-} from '../lib/reportMail';
+import { joinEmailList, normalizeReportMailConfig, splitEmailList } from '../lib/reportMail';
 import type {
   ReportMailApiConfig,
   ReportMailConfig,
@@ -30,6 +26,28 @@ const FIELD_LABELS: Record<keyof ReportMailRuntimeValues, string> = {
   disclaimer: 'Disclaimer',
 };
 
+function FieldBadge({ children, locked = false }: { children: string; locked?: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
+        locked
+          ? 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'
+          : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-500/10 dark:text-blue-200'
+      }`}
+    >
+      {locked ? 'Locked: ' : ''}
+      {children}
+    </span>
+  );
+}
+
+function splitMultiline(value: string): string[] {
+  return value
+    .split('\n')
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 export default function ReportMailDialog({
   isOpen,
   onClose,
@@ -40,6 +58,25 @@ export default function ReportMailDialog({
   onSend,
 }: Props) {
   const normalizedConfig = useMemo(() => normalizeReportMailConfig(mailConfig), [mailConfig]);
+  const mandatoryRecipients = useMemo(
+    () => ({
+      to: splitEmailList(normalizedConfig.fields.to.mandatory),
+      cc: splitEmailList(normalizedConfig.fields.cc.mandatory),
+    }),
+    [normalizedConfig.fields.cc.mandatory, normalizedConfig.fields.to.mandatory],
+  );
+  const mandatoryTextBlocks = useMemo(
+    () => ({
+      subject: normalizedConfig.fields.subject.mandatory.trim(),
+      body: normalizedConfig.fields.body.mandatory,
+      disclaimer: normalizedConfig.fields.disclaimer.mandatory,
+    }),
+    [
+      normalizedConfig.fields.body.mandatory,
+      normalizedConfig.fields.disclaimer.mandatory,
+      normalizedConfig.fields.subject.mandatory,
+    ],
+  );
   const [values, setValues] = useState<ReportMailRuntimeValues>(() => ({
     to: normalizedConfig.fields.to.default,
     cc: normalizedConfig.fields.cc.default,
@@ -117,24 +154,25 @@ export default function ReportMailDialog({
   };
 
   const deliveryOptionsVisible = normalizedConfig.mode === 'INLINE_OR_ATTACHMENT';
+  const editableRecipients = {
+    to: splitEmailList(values.to),
+    cc: splitEmailList(values.cc),
+  };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4"
-      onClick={onClose}
-      role="presentation"
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4" onClick={onClose} role="presentation">
       <div
-        className="relative max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-xl dark:bg-slate-900"
+        className="relative max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Report mail"
       >
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-          <div>
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Email report</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{templateName}</p>
+        <div className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">Compose Email</p>
+            <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{templateName}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Send this report as an output action from the current results.</p>
           </div>
           <button
             type="button"
@@ -146,104 +184,228 @@ export default function ReportMailDialog({
           </button>
         </div>
 
-        <div className="max-h-[75vh] overflow-auto bg-slate-50 p-4 dark:bg-slate-950">
-          <div className="space-y-4">
-            <div className="rounded border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-              <div className="font-semibold text-slate-800 dark:text-slate-100">Filter summary</div>
-              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{filterSummary || 'No filters applied'}</div>
-            </div>
+        <div className="max-h-[78vh] overflow-auto bg-slate-100 p-5 dark:bg-slate-950">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.75fr)_340px]">
+            <div className="space-y-4">
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-slate-700 dark:bg-slate-900">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Message</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Mandatory values are enforced by the backend and shown here as locked content.
+                  </p>
+                </div>
 
-            {deliveryOptionsVisible ? (
-              <div className="rounded border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">Delivery mode</div>
-                <div className="mt-3 flex flex-wrap gap-3 text-sm">
-                  <label className="inline-flex items-center gap-2 text-slate-700 dark:text-slate-200">
-                    <input
-                      type="radio"
-                      checked={deliveryMode === 'INLINE'}
-                      onChange={() => setDeliveryMode('INLINE')}
-                      className="h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-900"
-                    />
-                    Inline
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-slate-700 dark:text-slate-200">
-                    <input
-                      type="radio"
-                      checked={deliveryMode === 'ATTACHMENT'}
-                      onChange={() => setDeliveryMode('ATTACHMENT')}
-                      className="h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-900"
-                    />
-                    Attachment ({normalizedConfig.attachmentFormat})
-                  </label>
+                <div className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {(['to', 'cc'] as const).map((fieldName) => {
+                    const fieldConfig = normalizedConfig.fields[fieldName];
+                    const mandatoryValues = mandatoryRecipients[fieldName];
+                    const editableValues = editableRecipients[fieldName];
+                    const editableValue = values[fieldName];
+                    const placeholder =
+                      fieldName === 'to'
+                        ? 'Add recipients separated by commas'
+                        : 'Add carbon copy recipients separated by commas';
+                    return (
+                      <div key={fieldName} className="grid gap-3 px-5 py-4 md:grid-cols-[88px_minmax(0,1fr)] md:items-start">
+                        <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          {FIELD_LABELS[fieldName]}
+                        </div>
+                        <div className="space-y-3">
+                          {mandatoryValues.length > 0 ? (
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 dark:border-slate-700 dark:bg-slate-950/60">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Mandatory recipients
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {mandatoryValues.map((address) => (
+                                  <FieldBadge key={`${fieldName}-mandatory-${address}`} locked>
+                                    {address}
+                                  </FieldBadge>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          <div>
+                            <label className="block">
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                {fieldConfig.editable ? 'Editable recipients' : 'Configured recipients'}
+                              </span>
+                              <input
+                                type="text"
+                                className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40 dark:disabled:bg-slate-800"
+                                value={editableValue}
+                                onChange={(event) => handleTextChange(fieldName, event.target.value)}
+                                readOnly={!fieldConfig.editable}
+                                disabled={!fieldConfig.editable}
+                                placeholder={placeholder}
+                              />
+                            </label>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {editableValues.map((address) => (
+                                <FieldBadge key={`${fieldName}-editable-${address}`}>{address}</FieldBadge>
+                              ))}
+                            </div>
+                            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                              {fieldConfig.editable
+                                ? 'Editable recipients are sent together with the locked recipients above.'
+                                : 'This recipient field is fixed by report configuration.'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {(['subject', 'body', 'disclaimer'] as const).map((fieldName) => {
+                    const fieldConfig = normalizedConfig.fields[fieldName];
+                    const mandatoryValue = mandatoryTextBlocks[fieldName];
+                    const isTextArea = fieldName === 'body' || fieldName === 'disclaimer';
+                    const previewLines = splitMultiline(mandatoryValue);
+                    const baseClass =
+                      'mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40 dark:disabled:bg-slate-800';
+                    return (
+                      <div key={fieldName} className="grid gap-3 px-5 py-4 md:grid-cols-[88px_minmax(0,1fr)] md:items-start">
+                        <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          {FIELD_LABELS[fieldName]}
+                        </div>
+                        <div className="space-y-3">
+                          {mandatoryValue.trim() ? (
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 dark:border-slate-700 dark:bg-slate-950/60">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Mandatory content
+                              </p>
+                              <div className="mt-2 space-y-2">
+                                {previewLines.map((line, index) => (
+                                  <p key={`${fieldName}-mandatory-line-${index}`} className="text-sm text-slate-700 dark:text-slate-200">
+                                    {line}
+                                  </p>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          <label className="block">
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              {fieldConfig.editable ? 'Editable content' : 'Configured content'}
+                            </span>
+                            {isTextArea ? (
+                              <textarea
+                                className={baseClass}
+                                rows={fieldName === 'body' ? 7 : 4}
+                                value={values[fieldName]}
+                                onChange={(event) => handleTextChange(fieldName, event.target.value)}
+                                readOnly={!fieldConfig.editable}
+                                disabled={!fieldConfig.editable}
+                              />
+                            ) : (
+                              <input
+                                type="text"
+                                className={baseClass}
+                                value={values[fieldName]}
+                                onChange={(event) => handleTextChange(fieldName, event.target.value)}
+                                readOnly={!fieldConfig.editable}
+                                disabled={!fieldConfig.editable}
+                              />
+                            )}
+                          </label>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            ) : (
-              <div className="rounded border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                Delivery mode: {normalizedConfig.mode === 'ATTACHMENT_ONLY' ? `Attachment (${normalizedConfig.attachmentFormat})` : 'Inline'}
+            </div>
+
+            <aside className="space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Report Output</p>
+                <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">{templateName}</p>
+                <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter summary</p>
+                    <p className="mt-1 leading-6">{filterSummary || 'No filters applied'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Delivery</p>
+                    <p className="mt-1">
+                      {normalizedConfig.mode === 'ATTACHMENT_ONLY'
+                        ? `Attachment (${normalizedConfig.attachmentFormat})`
+                        : deliveryOptionsVisible
+                        ? deliveryMode === 'ATTACHMENT'
+                          ? `Attachment (${normalizedConfig.attachmentFormat})`
+                          : 'Inline'
+                        : 'Inline'}
+                    </p>
+                  </div>
+                </div>
               </div>
-            )}
 
-            <div className="space-y-3">
-              {(['to', 'cc', 'subject', 'body', 'disclaimer'] as const).map((fieldName) => {
-                const fieldConfig = normalizedConfig.fields[fieldName];
-                const isTextArea = fieldName === 'body' || fieldName === 'disclaimer';
-                const baseClass =
-                  'mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40 dark:disabled:bg-slate-800';
-                return (
-                  <label key={fieldName} className="block rounded border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                      {FIELD_LABELS[fieldName]}
-                      {fieldConfig.mandatory.trim() ? <span className="ml-1 text-red-500">*</span> : null}
-                    </span>
-                    {isTextArea ? (
-                      <textarea
-                        className={baseClass}
-                        rows={fieldName === 'body' ? 4 : 3}
-                        value={values[fieldName]}
-                        onChange={(event) => handleTextChange(fieldName, event.target.value)}
-                        readOnly={!fieldConfig.editable}
-                        disabled={!fieldConfig.editable}
-                      />
-                    ) : (
+              {deliveryOptionsVisible ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Choose delivery mode</p>
+                  <div className="mt-3 grid gap-3">
+                    <label
+                      className={`rounded-xl border px-3 py-3 text-sm transition ${
+                        deliveryMode === 'INLINE'
+                          ? 'border-blue-500 bg-blue-50 text-blue-800 dark:border-blue-400 dark:bg-blue-500/10 dark:text-blue-100'
+                          : 'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+                      }`}
+                    >
+                      <input type="radio" checked={deliveryMode === 'INLINE'} onChange={() => setDeliveryMode('INLINE')} className="sr-only" />
+                      <span className="font-semibold">Inline</span>
+                      <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">Paste the generated result into the email body.</span>
+                    </label>
+                    <label
+                      className={`rounded-xl border px-3 py-3 text-sm transition ${
+                        deliveryMode === 'ATTACHMENT'
+                          ? 'border-blue-500 bg-blue-50 text-blue-800 dark:border-blue-400 dark:bg-blue-500/10 dark:text-blue-100'
+                          : 'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+                      }`}
+                    >
                       <input
-                        type="text"
-                        className={baseClass}
-                        value={values[fieldName]}
-                        onChange={(event) => handleTextChange(fieldName, event.target.value)}
-                        readOnly={!fieldConfig.editable}
-                        disabled={!fieldConfig.editable}
+                        type="radio"
+                        checked={deliveryMode === 'ATTACHMENT'}
+                        onChange={() => setDeliveryMode('ATTACHMENT')}
+                        className="sr-only"
                       />
-                    )}
-                    {fieldConfig.mandatory.trim() ? (
-                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                        Mandatory content will be enforced by the backend: {fieldConfig.mandatory}
-                      </p>
-                    ) : null}
-                  </label>
-                );
-              })}
-            </div>
+                      <span className="font-semibold">Attachment</span>
+                      <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                        Send the generated result as a {normalizedConfig.attachmentFormat} attachment.
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Delivery mode</p>
+                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                    {normalizedConfig.mode === 'ATTACHMENT_ONLY'
+                      ? `Attachment only (${normalizedConfig.attachmentFormat})`
+                      : 'Inline only'}
+                  </p>
+                </div>
+              )}
 
-            {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+              {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
 
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                className="inline-flex items-center rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
-                onClick={onClose}
-                disabled={submitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-400"
-                onClick={handleSubmit}
-                disabled={submitting}
-              >
-                {submitting ? 'Sending...' : 'Send Email'}
-              </button>
-            </div>
+              <div className="flex flex-wrap items-center justify-end gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
+                  onClick={onClose}
+                  disabled={submitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-400"
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                >
+                  {submitting ? 'Sending...' : 'Send Email'}
+                </button>
+              </div>
+            </aside>
           </div>
         </div>
       </div>

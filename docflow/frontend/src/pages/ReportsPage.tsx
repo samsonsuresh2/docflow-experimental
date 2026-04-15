@@ -393,6 +393,7 @@ export default function ReportsPage() {
 
   const canGenerate = Boolean(templateDetail && !detailLoading);
   const canGoNext = Boolean(result && typeof result.rowCount === 'number' && (page + 1) * pageSize < result.rowCount);
+  const canEmailReport = Boolean(reportMailEnabled && result && hasRun && !running && !runError);
 
   return (
     <div className="space-y-6">
@@ -445,16 +446,6 @@ export default function ReportsPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {reportMailEnabled ? (
-              <button
-                type="button"
-                className="inline-flex items-center rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
-                onClick={handleOpenMailDialog}
-                disabled={!canGenerate || running || Boolean(detailError)}
-              >
-                Email Report
-              </button>
-            ) : null}
             <button
               type="button"
               className="inline-flex items-center rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:bg-blue-500 dark:hover:bg-blue-400"
@@ -606,6 +597,18 @@ export default function ReportsPage() {
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
         fetchAllRows={handleFetchAllRows}
+        outputActions={
+          canEmailReport ? (
+            <button
+              type="button"
+              className="inline-flex items-center rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-amber-700 shadow-sm transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-400/40 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20"
+              onClick={handleOpenMailDialog}
+              disabled={!canEmailReport}
+            >
+              Email Report
+            </button>
+          ) : null
+        }
       />
 
       {mailStatusMessage ? <p className="text-sm text-emerald-600 dark:text-emerald-400">{mailStatusMessage}</p> : null}

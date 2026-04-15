@@ -272,7 +272,7 @@ class DefaultDocumentServiceTest {
         verify(auditService).logLifecycleEvent(eq(sampleDocument), eq(DocumentStatus.DRAFT), eq(DocumentStatus.OPEN),
             eq(DocumentLifecycleEventCatalog.SUBMITTED_FOR_REVIEW), isNull(), any(), any());
         verify(documentNotificationPublisher).publishLifecycleEvent(eq(sampleDocument), eq(DocumentStatus.DRAFT), eq(DocumentStatus.OPEN),
-            eq(DocumentLifecycleEventCatalog.SUBMITTED_FOR_REVIEW), any(), isNull(), anyMap());
+            eq(DocumentLifecycleEventCatalog.SUBMITTED_FOR_REVIEW), any(), isNull(), anyMap(), any());
     }
 
     @Test

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import ReportResultsGrid from '../components/ReportResultsGrid';
-import ReportMailConfigEditor from '../components/ReportMailConfigEditor';
+import ReportMailConfigModal from '../components/ReportMailConfigModal';
 import {
   fetchAllReportRows,
   fetchReportScope,
@@ -14,10 +14,13 @@ import {
   normalizeReportMailConfig,
   toReportMailApiConfig,
 } from '../lib/reportMail';
+import { REPORT_MAIL_FIELDS } from '../types/reports';
 import type {
   DynamicReportRequest,
   ReportBaseEntity,
   ReportMailConfig,
+  ReportMailFieldName,
+  ReportMailMode,
   ReportRunResponse,
   ReportTemplate,
 } from '../types/reports';
@@ -114,6 +117,16 @@ function normaliseTemplateKey(value: string): string {
   return value;
 }
 
+function formatReportMailMode(mode: ReportMailMode): string {
+  if (mode === 'ATTACHMENT_ONLY') {
+    return 'Attachment only';
+  }
+  if (mode === 'INLINE_OR_ATTACHMENT') {
+    return 'Inline or attachment';
+  }
+  return 'Inline only';
+}
+
 export default function ReportBuilderPage() {
   const [entities, setEntities] = useState<ReportBaseEntity[]>([]);
   const [entityLoading, setEntityLoading] = useState<boolean>(true);
@@ -149,6 +162,7 @@ export default function ReportBuilderPage() {
   const [pendingTemplate, setPendingTemplate] = useState<ReportTemplate | null>(null);
   const [loadedTemplate, setLoadedTemplate] = useState<ReportTemplate | null>(null);
   const [mailConfig, setMailConfig] = useState<ReportMailConfig>(() => createDefaultReportMailConfig());
+  const [isMailConfigModalOpen, setIsMailConfigModalOpen] = useState<boolean>(false);
 
   const filterIdRef = useRef<number>(0);
 
@@ -299,6 +313,14 @@ export default function ReportBuilderPage() {
     const documentEntity = entities.find((entity) => !entity.joinsToDocument);
     return documentEntity?.name ?? 'DOCUMENT_PARENT';
   }, [entities]);
+
+  const configuredMailFieldCount = useMemo(() => {
+    const fieldNames = Object.keys(mailConfig.fields) as ReportMailFieldName[];
+    return fieldNames.filter((fieldName) => {
+      const field = mailConfig.fields[fieldName];
+      return Boolean(field.default.trim() || field.mandatory.trim() || field.editable === false);
+    }).length;
+  }, [mailConfig]);
 
   const columnOptions: ColumnOption[] = useMemo(() => {
     if (!selectedEntity) {
@@ -859,6 +881,59 @@ export default function ReportBuilderPage() {
             )}
           </div>
         </div>
+
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/40">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Email output add-on</h3>
+                <span
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+                    mailConfig.enabled
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300'
+                  }`}
+                >
+                  {mailConfig.enabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </div>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Keep report setup focused on columns and filters. Email stays optional and opens in a dedicated configuration modal.
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {configuredMailFieldCount} of {REPORT_MAIL_FIELDS.length} email fields customized. Current mode: {formatReportMailMode(mailConfig.mode)}.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="inline-flex cursor-pointer items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">Enable email</span>
+                <span className="relative">
+                  <input
+                    type="checkbox"
+                    checked={mailConfig.enabled}
+                    onChange={(event) =>
+                      setMailConfig((prev) => ({
+                        ...prev,
+                        enabled: event.target.checked,
+                      }))
+                    }
+                    className="peer sr-only"
+                  />
+                  <span className="block h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-blue-600 dark:bg-slate-700 dark:peer-checked:bg-blue-500" />
+                  <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+                </span>
+              </label>
+              <button
+                type="button"
+                className="inline-flex items-center rounded bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-slate-900 dark:bg-slate-600 dark:hover:bg-slate-500"
+                onClick={() => setIsMailConfigModalOpen(true)}
+              >
+                Configure Email
+              </button>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
@@ -1125,24 +1200,6 @@ export default function ReportBuilderPage() {
         </div>
       </section>
 
-      <section className="rounded border border-slate-200 bg-white p-6 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Report Mail</h2>
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              Configure template-level mail defaults. The backend will enforce mandatory fields and keep recipients internal.
-            </p>
-          </div>
-          <span className="rounded border border-slate-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:text-slate-300">
-            Stored in template JSON
-          </span>
-        </div>
-
-        <div className="mt-4">
-          <ReportMailConfigEditor value={mailConfig} onChange={setMailConfig} />
-        </div>
-      </section>
-
       <ReportResultsGrid
         columns={result?.columns ?? []}
         rows={result?.rows ?? []}
@@ -1156,6 +1213,14 @@ export default function ReportBuilderPage() {
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
         fetchAllRows={handleFetchAllRows}
+      />
+
+      <ReportMailConfigModal
+        isOpen={isMailConfigModalOpen}
+        onClose={() => setIsMailConfigModalOpen(false)}
+        onSave={setMailConfig}
+        value={mailConfig}
+        templateName={templateName}
       />
     </div>
   );

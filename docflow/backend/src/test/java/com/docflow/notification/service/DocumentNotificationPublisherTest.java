@@ -10,6 +10,7 @@ import com.docflow.notification.model.NotificationPolicy;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -34,7 +35,7 @@ class DocumentNotificationPublisherTest {
         policy.setEnabled(true);
         policy.setSendForBulk(false);
         when(policyService.resolve(NotificationEventCode.APPROVED)).thenReturn(Optional.of(policy));
-        when(contextBuilder.build(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+        when(contextBuilder.build(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(Map.of("documentId", "42"));
         when(orchestrator.publish(org.mockito.ArgumentMatchers.any(NotificationEvent.class))).thenReturn(Optional.of(1L));
 
@@ -48,7 +49,8 @@ class DocumentNotificationPublisherTest {
                 "APPROVED",
                 new RequestUser("approver1", Set.of("APPROVER"), "APPROVER"),
                 "approved",
-                Map.of()
+                Map.of(),
+                OffsetDateTime.parse("2026-04-13T10:00:00Z")
         );
 
         ArgumentCaptor<NotificationEvent> captor = ArgumentCaptor.forClass(NotificationEvent.class);
@@ -78,7 +80,8 @@ class DocumentNotificationPublisherTest {
                 "REJECTED",
                 new RequestUser("reviewer1", Set.of("REVIEWER"), "REVIEWER"),
                 "rejected",
-                Map.of()
+                Map.of(),
+                OffsetDateTime.parse("2026-04-13T10:00:00Z")
         );
         publisher.publishLifecycleEvent(
                 document,
@@ -87,7 +90,8 @@ class DocumentNotificationPublisherTest {
                 "REVIEW_COMPLETED",
                 new RequestUser("approver1", Set.of("APPROVER"), "APPROVER"),
                 null,
-                Map.of()
+                Map.of(),
+                OffsetDateTime.parse("2026-04-13T10:05:00Z")
         );
 
         verify(orchestrator, never()).publish(org.mockito.ArgumentMatchers.any(NotificationEvent.class));

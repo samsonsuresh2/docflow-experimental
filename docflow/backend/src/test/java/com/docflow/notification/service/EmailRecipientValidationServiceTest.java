@@ -39,6 +39,27 @@ class EmailRecipientValidationServiceTest {
     }
 
     @Test
+    void splitsDelimitedRecipientListsBeforeValidation() {
+        EmailRecipientValidationService service = new EmailRecipientValidationService(properties());
+
+        NotificationMessage message = new NotificationMessage();
+        message.setTo(List.of("teama@company.internal, teamb@company.internal"));
+        message.setCc(List.of("reviewer1@company.internal;reviewer2@company.internal\nreviewer3@company.internal"));
+
+        NotificationMessage normalized = service.validateAndNormalize(message);
+
+        assertThat(normalized.getTo()).containsExactly(
+                "teama@company.internal",
+                "teamb@company.internal"
+        );
+        assertThat(normalized.getCc()).containsExactly(
+                "reviewer1@company.internal",
+                "reviewer2@company.internal",
+                "reviewer3@company.internal"
+        );
+    }
+
+    @Test
     void rejectsRecipientsOutsideAllowedDomains() {
         EmailRecipientValidationService service = new EmailRecipientValidationService(properties());
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 
 type Props = {
   columns: string[];
@@ -13,6 +13,7 @@ type Props = {
   onPageChange: (page: number) => void;
   onPageSizeChange?: (size: number) => void;
   fetchAllRows?: () => Promise<{ columns: string[]; rows: Array<Record<string, unknown>>; rowCount?: number }>;
+  outputActions?: ReactNode;
 };
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -74,6 +75,7 @@ export default function ReportResultsGrid({
   onPageChange,
   onPageSizeChange,
   fetchAllRows,
+  outputActions,
 }: Props) {
   const hasData = rows.length > 0 && columns.length > 0;
   const [exporting, setExporting] = useState(false);
@@ -220,6 +222,7 @@ export default function ReportResultsGrid({
               ))}
             </select>
           </label>
+          {outputActions}
           <button
             type="button"
             className="inline-flex items-center rounded border border-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
