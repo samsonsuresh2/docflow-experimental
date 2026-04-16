@@ -15,6 +15,15 @@ import {
   normalizeReportMailConfig,
   toReportMailApiConfig,
 } from '../lib/reportMail';
+import { parseNumberMultiValueInput, parseStringMultiValueInput } from '../lib/reportFilterValues';
+import {
+  allowedOperators,
+  isMultiValueOperator,
+  isRangeOperator,
+  normalizeOperatorForBackend,
+  type ReportLogicalType as LogicalType,
+  type ReportOperator as Operator,
+} from '../lib/reportOperators';
 import { REPORT_MAIL_FIELDS } from '../types/reports';
 import type {
   DynamicReportRequest,
@@ -26,10 +35,7 @@ import type {
   ReportTemplate,
 } from '../types/reports';
 
-const OPERATORS = ['EQ', 'LIKE', 'LT', 'GT', 'RANGE', 'BETWEEN'] as const;
-type Operator = (typeof OPERATORS)[number];
 const LOGICAL_TYPES = ['STRING', 'NUMBER', 'DATE'] as const;
-type LogicalType = (typeof LOGICAL_TYPES)[number];
 
 type FilterRow = {
   id: number;
@@ -43,30 +49,6 @@ type FilterRow = {
   presetCodes: string[];
 };
 
-function requiresRangeValues(op: Operator): boolean {
-  return op === 'RANGE' || op === 'BETWEEN';
-}
-
-function allowedOperators(type: LogicalType): Operator[] {
-  if (type === 'STRING') {
-    return ['EQ', 'LIKE'];
-  }
-  if (type === 'NUMBER') {
-    return ['EQ', 'LT', 'GT', 'RANGE'];
-  }
-  return ['EQ', 'LT', 'GT', 'BETWEEN'];
-}
-
-function normalizeOperatorForBackend(op: string): Operator {
-  const upper = op.toUpperCase();
-  if (upper === '=' || upper === 'EQ') return 'EQ';
-  if (upper === '<' || upper === 'LT') return 'LT';
-  if (upper === '>' || upper === 'GT') return 'GT';
-  if (upper === 'RANGE') return 'RANGE';
-  if (upper === 'BETWEEN') return 'BETWEEN';
-  return 'EQ';
-}
-
 type ColumnOption = {
   value: string;
   label: string;
@@ -78,6 +60,10 @@ function normaliseError(error: unknown): string {
     return error;
   }
   if (error && typeof error === 'object') {
+    const directMessage = (error as { message?: unknown }).message;
+    if (typeof directMessage === 'string' && directMessage.trim()) {
+      return directMessage;
+    }
     const maybeResponse = (error as {
       response?: { data?: { message?: unknown; code?: unknown }; statusText?: string };
     }).response;
@@ -291,7 +277,7 @@ export default function ReportBuilderPage() {
               id,
               key: normaliseTemplateKey(filter?.key ?? ''),
               op: operator,
-              value: filter?.value ?? '',
+              value: Array.isArray(filter?.values) && filter.values.length > 0 ? filter.values.join(',') : (filter?.value ?? ''),
               valueFrom: filter?.valueFrom ?? '',
               valueTo: filter?.valueTo ?? '',
               logicalType: safeType,
@@ -404,11 +390,18 @@ export default function ReportBuilderPage() {
           nextFilter.presetEnabled = false;
           nextFilter.presetCodes = [];
         }
-        if (requiresRangeValues(nextOp)) {
+        const switchedBetweenSingleAndMulti = isMultiValueOperator(nextOp) !== isMultiValueOperator(filter.op);
+        if (isRangeOperator(nextOp)) {
           nextFilter.value = '';
+        } else if (isMultiValueOperator(nextOp)) {
+          nextFilter.valueFrom = '';
+          nextFilter.valueTo = '';
         } else {
           nextFilter.valueFrom = '';
           nextFilter.valueTo = '';
+        }
+        if (switchedBetweenSingleAndMulti) {
+          nextFilter.value = '';
         }
         return nextFilter;
       }),
@@ -516,14 +509,22 @@ export default function ReportBuilderPage() {
             ? 'DOCUMENT'
             : 'THIRD_PARTY_ENTITY';
         const field = normalizedKey.includes('.') ? normalizedKey.split('.', 2)[1] : normalizedKey.replace('meta:', '');
-        const isRange = requiresRangeValues(filter.op);
+        const isRange = isRangeOperator(filter.op);
+        const isMulti = isMultiValueOperator(filter.op);
+        const values =
+          isMulti && filter.value.trim()
+            ? filter.logicalType === 'NUMBER'
+              ? parseNumberMultiValueInput(filter.value)
+              : parseStringMultiValueInput(filter.value)
+            : undefined;
         const hasValue = isRange ? Boolean(filter.valueFrom || filter.valueTo) : Boolean(filter.value);
         return {
           key: normalizedKey,
           op: filter.op,
-          value: isRange ? undefined : filter.value,
+          value: isRange || isMulti ? undefined : filter.value,
           valueFrom: isRange ? filter.valueFrom : undefined,
           valueTo: isRange ? filter.valueTo : undefined,
+          values,
           mode: hasValue ? ('FIXED_VALUE' as const) : ('USER_INPUT' as const),
           source,
           field,
@@ -569,7 +570,7 @@ export default function ReportBuilderPage() {
             presetCodes: filter.presetCodes,
           };
         }
-        if (requiresRangeValues(filter.op)) {
+        if (isRangeOperator(filter.op)) {
           if (!filter.valueFrom || !filter.valueTo) {
             return null;
           }
@@ -578,6 +579,22 @@ export default function ReportBuilderPage() {
             op: filter.op,
             valueFrom: filter.valueFrom,
             valueTo: filter.valueTo,
+            logicalType: filter.logicalType,
+            dataType: filter.logicalType,
+          };
+        }
+        if (isMultiValueOperator(filter.op)) {
+          if (!filter.value.trim()) {
+            return null;
+          }
+          const values =
+            filter.logicalType === 'NUMBER'
+              ? parseNumberMultiValueInput(filter.value)
+              : parseStringMultiValueInput(filter.value);
+          return {
+            key: normalizeKeyForBackend(filter.key),
+            op: filter.op,
+            values,
             logicalType: filter.logicalType,
             dataType: filter.logicalType,
           };
@@ -610,7 +627,13 @@ export default function ReportBuilderPage() {
       setTemplateSaveError('Provide a template name before saving.');
       return;
     }
-    const request = buildTemplateRequest();
+    let request: DynamicReportRequest | null;
+    try {
+      request = buildTemplateRequest();
+    } catch (error) {
+      setTemplateSaveError(normaliseError(error));
+      return;
+    }
     if (!request) {
       setTemplateSaveError('Define a report to save as a template.');
       return;
@@ -643,7 +666,13 @@ export default function ReportBuilderPage() {
       setTemplateSaveError('Provide a template name before saving.');
       return;
     }
-    const request = buildTemplateRequest();
+    let request: DynamicReportRequest | null;
+    try {
+      request = buildTemplateRequest();
+    } catch (error) {
+      setTemplateSaveError(normaliseError(error));
+      return;
+    }
     if (!request) {
       setTemplateSaveError('Define a report to save as a template.');
       return;
@@ -719,7 +748,14 @@ export default function ReportBuilderPage() {
   );
 
   const handleRunReport = async () => {
-    const request = buildRunRequest();
+    let request: DynamicReportRequest | null;
+    try {
+      request = buildRunRequest();
+    } catch (error) {
+      setRunError(normaliseError(error));
+      setHasRun(false);
+      return;
+    }
     if (!request) {
       setRunError('Select a base entity and at least one column to run a report.');
       setHasRun(false);
@@ -1090,7 +1126,7 @@ export default function ReportBuilderPage() {
                           </option>
                         ))}
                       </select>
-                      {requiresRangeValues(filter.op) ? (
+                      {isRangeOperator(filter.op) ? (
                         <div className="grid min-w-[240px] flex-[1.2] grid-cols-2 gap-2">
                           <input
                             type={filter.logicalType === 'NUMBER' ? 'number' : filter.logicalType === 'DATE' ? 'date' : 'text'}
@@ -1111,11 +1147,11 @@ export default function ReportBuilderPage() {
                         </div>
                       ) : (
                         <input
-                          type={filter.logicalType === 'NUMBER' ? 'number' : filter.logicalType === 'DATE' ? 'date' : 'text'}
+                          type={isMultiValueOperator(filter.op) ? 'text' : filter.logicalType === 'NUMBER' ? 'number' : filter.logicalType === 'DATE' ? 'date' : 'text'}
                           value={filter.value}
                           onChange={(event) => handleFilterChange(filter.id, { value: event.target.value })}
-                          inputMode={filter.logicalType === 'NUMBER' ? 'decimal' : undefined}
-                          placeholder="Value"
+                          inputMode={isMultiValueOperator(filter.op) ? undefined : filter.logicalType === 'NUMBER' ? 'decimal' : undefined}
+                          placeholder={isMultiValueOperator(filter.op) ? 'Value1,Value2' : 'Value'}
                           className="min-w-[220px] flex-[1.2] rounded border border-slate-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
                         />
                       )}
@@ -1185,6 +1221,13 @@ export default function ReportBuilderPage() {
                       Choose at least one preset before saving.
                     </div>
                   ) : null}
+                  {isMultiValueOperator(filter.op) ? (
+                    <div className="w-full text-xs text-slate-500 dark:text-slate-400">
+                      {filter.logicalType === 'NUMBER'
+                        ? 'Enter comma-separated numbers, for example 1000,2000,5000.'
+                        : 'Enter comma-separated values. Use \\, to include a literal comma.'}
+                    </div>
+                  ) : null}
                   </div>
                 );
               })}
@@ -1194,7 +1237,7 @@ export default function ReportBuilderPage() {
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
           <div className="text-xs text-slate-500 dark:text-slate-400">
-            Type-driven operators: STRING → EQ, NUMBER/DATE → EQ, LT, GT.
+            Type-driven operators: STRING → EQ, LIKE, IN, NOT_IN. NUMBER → EQ, LT, GT, RANGE, IN, NOT_IN. DATE → EQ, LT, GT, BETWEEN.
           </div>
           <button
             type="button"

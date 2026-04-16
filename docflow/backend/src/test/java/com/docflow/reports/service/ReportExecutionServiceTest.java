@@ -47,11 +47,11 @@ class ReportExecutionServiceTest {
     void shouldExposeOperatorApplicabilityByType() {
         when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:branch", ReportFilter.FilterLogicalType.STRING));
         ReportExecutionModels.TemplateDetail detail = service.getExecutableTemplate(10L);
-        assertEquals(List.of("EQ", "LIKE"), detail.filters().get(0).allowedOps());
+        assertEquals(List.of("EQ", "LIKE", "IN", "NOT_IN"), detail.filters().get(0).allowedOps());
 
         when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:loanAmount", ReportFilter.FilterLogicalType.NUMBER));
         detail = service.getExecutableTemplate(10L);
-        assertEquals(List.of("EQ", "LT", "GT", "RANGE"), detail.filters().get(0).allowedOps());
+        assertEquals(List.of("EQ", "LT", "GT", "RANGE", "IN", "NOT_IN"), detail.filters().get(0).allowedOps());
 
         when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:applicationDate", ReportFilter.FilterLogicalType.DATE));
         detail = service.getExecutableTemplate(10L);
@@ -273,6 +273,82 @@ class ReportExecutionServiceTest {
         blankLikeRequest.setFilters(List.of(blankLike));
 
         service.run(blankLikeRequest, 0, 25);
+    }
+
+    @Test
+    void shouldAcceptStringInAndNotInFilters() {
+        when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:branch", ReportFilter.FilterLogicalType.STRING));
+
+        ReportExecutionModels.RunRequest inRequest = new ReportExecutionModels.RunRequest();
+        inRequest.setTemplateId(10L);
+        ReportExecutionModels.RunFilter inFilter = new ReportExecutionModels.RunFilter();
+        inFilter.setKey("meta:branch");
+        inFilter.setOp("IN");
+        inFilter.setValue("AVADI\\, WEST, TAMBARAM");
+        inRequest.setFilters(List.of(inFilter));
+
+        service.run(inRequest, 0, 25);
+
+        ArgumentCaptor<DynamicReportRequest> captor = ArgumentCaptor.forClass(DynamicReportRequest.class);
+        verify(builder, atLeastOnce()).build(captor.capture(), eq("template:10"));
+        assertEquals(List.of("AVADI, WEST", "TAMBARAM"), captor.getValue().getFilters().get(0).getValues());
+
+        ReportExecutionModels.RunRequest notInRequest = new ReportExecutionModels.RunRequest();
+        notInRequest.setTemplateId(10L);
+        ReportExecutionModels.RunFilter notInFilter = new ReportExecutionModels.RunFilter();
+        notInFilter.setKey("meta:branch");
+        notInFilter.setOp("NOT_IN");
+        notInFilter.setValues(List.of("AVADI", "TAMBARAM"));
+        notInRequest.setFilters(List.of(notInFilter));
+
+        service.run(notInRequest, 0, 25);
+    }
+
+    @Test
+    void shouldAcceptNumericInAndRejectInvalidNumericLists() {
+        when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:loanAmount", ReportFilter.FilterLogicalType.NUMBER));
+
+        ReportExecutionModels.RunRequest validRequest = new ReportExecutionModels.RunRequest();
+        validRequest.setTemplateId(10L);
+        ReportExecutionModels.RunFilter validFilter = new ReportExecutionModels.RunFilter();
+        validFilter.setKey("meta:loanAmount");
+        validFilter.setOp("IN");
+        validFilter.setValue("1000, 2000, 5000");
+        validRequest.setFilters(List.of(validFilter));
+
+        service.run(validRequest, 0, 25);
+
+        ArgumentCaptor<DynamicReportRequest> captor = ArgumentCaptor.forClass(DynamicReportRequest.class);
+        verify(builder, atLeastOnce()).build(captor.capture(), eq("template:10"));
+        assertEquals(List.of("1000", "2000", "5000"), captor.getValue().getFilters().get(0).getValues());
+
+        ReportExecutionModels.RunRequest invalidRequest = new ReportExecutionModels.RunRequest();
+        invalidRequest.setTemplateId(10L);
+        ReportExecutionModels.RunFilter invalidFilter = new ReportExecutionModels.RunFilter();
+        invalidFilter.setKey("meta:loanAmount");
+        invalidFilter.setOp("NOT_IN");
+        invalidFilter.setValue("1000, nope");
+        invalidRequest.setFilters(List.of(invalidFilter));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> service.run(invalidRequest, 0, 25));
+        assertEquals(400, exception.getStatusCode().value());
+    }
+
+    @Test
+    void shouldRejectDateInOperator() {
+        when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:applicationDate", ReportFilter.FilterLogicalType.DATE));
+
+        ReportExecutionModels.RunRequest invalidRequest = new ReportExecutionModels.RunRequest();
+        invalidRequest.setTemplateId(10L);
+        ReportExecutionModels.RunFilter invalidFilter = new ReportExecutionModels.RunFilter();
+        invalidFilter.setKey("meta:applicationDate");
+        invalidFilter.setOp("IN");
+        invalidFilter.setValue("2026-03-01,2026-03-02");
+        invalidRequest.setFilters(List.of(invalidFilter));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> service.run(invalidRequest, 0, 25));
+        assertEquals(400, exception.getStatusCode().value());
+        assertTrue(exception.getReason().contains("Operator not allowed"));
     }
 
     @Test

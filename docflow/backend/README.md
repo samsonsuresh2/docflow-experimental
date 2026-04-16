@@ -85,6 +85,11 @@ Current operator matrix:
 `LIKE` semantics are intentionally controlled as **contains**.
 Backend wraps user input as `%value%` and binds as SQL parameter.
 
+Current typed filter matrix after the multi-value enhancement:
+- `STRING` -> `EQ`, `LIKE`, `IN`, `NOT_IN`
+- `NUMBER` -> `EQ`, `LT`, `GT`, `RANGE`, `IN`, `NOT_IN`
+- `DATE` -> `EQ`, `LT`, `GT`, `BETWEEN`
+
 ### 8) How admin configures filters in templates
 
 For each filter, template JSON stores contract-like data including:
@@ -97,6 +102,15 @@ For each filter, template JSON stores contract-like data including:
 
 Admin scope API provides selectable entities/columns/metadata keys to drive UI choices.
 
+For multi-value operators, template definitions can now allow:
+- `STRING`: `IN`, `NOT_IN`
+- `NUMBER`: `IN`, `NOT_IN`
+
+Execution payload shape remains explicit:
+- single-value operators use `value`
+- range operators use `valueFrom` / `valueTo`
+- multi-value operators use `values`
+
 ### 9) End-user report execution behavior
 
 At execution time, user-facing filter behavior is type-driven:
@@ -105,6 +119,11 @@ At execution time, user-facing filter behavior is type-driven:
 - `DATE`: date input (`yyyy-MM-dd`), operators `=`, `<`, `>`
 
 Blank values are skipped (no predicate generated).
+
+For `IN` / `NOT_IN`, the current UI still uses a single text box:
+- `STRING` values are entered as comma-separated text and support escaped commas via `\,`
+- `NUMBER` values are entered as comma-separated numeric values
+- backend normalizes these inputs into the `values` list before validation and query building
 
 ### 10) Backend validation behavior
 
@@ -116,6 +135,10 @@ Execution service enforces:
 - non-blank value validated by type:
   - `NUMBER` must parse strict numeric format
   - `DATE` must parse strict `yyyy-MM-dd`
+- `IN` / `NOT_IN` require a non-empty parsed value list
+- `STRING IN` / `STRING NOT_IN` trim entries and reject malformed escaped input
+- `NUMBER IN` / `NUMBER NOT_IN` require every value to parse as numeric
+- `DATE` rejects `IN` / `NOT_IN`
 
 ### 11) Query generation behavior (high level)
 
@@ -131,6 +154,12 @@ Execution service enforces:
   - joins and columns validated from runtime metadata
   - typed predicates applied same as relational source
 
+Additional multi-value behavior:
+- relational `STRING` and `NUMBER` filters now support parameterized `IN (...)` / `NOT IN (...)`
+- metadata `STRING` filters support `IN` / `NOT_IN`
+- metadata `NUMBER` filters support `IN` / `NOT_IN` through the existing numeric conversion path
+- `DOCUMENT`, `DOCUMENT_METADATA`, and `THIRD_PARTY_ENTITY` all support the new multi-value operators
+
 ### 12) Current limitations / out of scope
 
 Not supported yet:
@@ -138,6 +167,8 @@ Not supported yet:
 - `BETWEEN`
 - regex-style operators
 - starts-with / ends-with operator variants
+- `DATE IN` / `DATE NOT_IN`
+- nested boolean groups / OR redesign
 
 ### 13) Simple filter behavior examples
 
@@ -199,8 +230,8 @@ dispatch_date BETWEEN from AND to
 
 Reports now support bounded interval filters in addition to the existing single-value comparisons.
 
-- `STRING` supports `EQ`, `LIKE`
-- `NUMBER` supports `EQ`, `LT`, `GT`, `RANGE`
+- `STRING` supports `EQ`, `LIKE`, `IN`, `NOT_IN`
+- `NUMBER` supports `EQ`, `LT`, `GT`, `RANGE`, `IN`, `NOT_IN`
 - `DATE` supports `EQ`, `LT`, `GT`, `BETWEEN`
 
 Execution behavior:
@@ -208,8 +239,12 @@ Execution behavior:
 - `NUMBER RANGE` uses two values: `valueFrom` and `valueTo`
 - `DATE BETWEEN` uses two values: `valueFrom` and `valueTo`
 - single-value operators continue to use `value`
+- multi-value operators (`IN`, `NOT_IN`) use `values`
+- the current UI captures multi-value input as a single comma-separated text box
+- `STRING` multi-value input supports escaped commas via `\,`
 - blank single-value filters are skipped
 - incomplete `RANGE` / `BETWEEN` inputs are rejected
+- empty or invalid `IN` / `NOT_IN` inputs are rejected
 - bounded filters are inclusive and require `valueFrom <= valueTo`
 
 Query behavior:
@@ -217,6 +252,7 @@ Query behavior:
 - relational `DATE` and `TIMESTAMP` columns are treated as date-only for current `DATE` filters
 - metadata number/date filters continue to use typed conversion before comparison
 - `DOCUMENT`, `DOCUMENT_METADATA`, and `THIRD_PARTY_ENTITY` all support the new bounded operators
+- `DOCUMENT`, `DOCUMENT_METADATA`, and `THIRD_PARTY_ENTITY` also support `STRING IN`, `STRING NOT_IN`, `NUMBER IN`, and `NUMBER NOT_IN`
 
 ---
 

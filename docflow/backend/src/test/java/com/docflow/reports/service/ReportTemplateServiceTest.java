@@ -128,6 +128,50 @@ class ReportTemplateServiceTest {
     }
 
     @Test
+    void createTemplatePersistsMultiValueFiltersInPayload() throws Exception {
+        DynamicReportRequest request = new DynamicReportRequest();
+        request.setBaseEntity("DOCUMENT_PARENT");
+        request.setColumns(List.of("DOCUMENT_PARENT.ID"));
+
+        ReportFilter stringFilter = new ReportFilter();
+        stringFilter.setKey("DOCUMENT_PARENT.STATUS");
+        stringFilter.setOp("IN");
+        stringFilter.setMode(ReportFilter.Mode.USER_INPUT);
+        stringFilter.setLogicalType(ReportFilter.FilterLogicalType.STRING);
+        stringFilter.setAllowedOperators(List.of(ReportFilter.FilterOperator.IN, ReportFilter.FilterOperator.NOT_IN));
+
+        ReportFilter numberFilter = new ReportFilter();
+        numberFilter.setKey("meta:loanAmount");
+        numberFilter.setOp("NOT_IN");
+        numberFilter.setMode(ReportFilter.Mode.FIXED_VALUE);
+        numberFilter.setLogicalType(ReportFilter.FilterLogicalType.NUMBER);
+        numberFilter.setValues(List.of("1000", "2000", "5000"));
+        numberFilter.setAllowedOperators(List.of(ReportFilter.FilterOperator.IN, ReportFilter.FilterOperator.NOT_IN));
+
+        request.setFilters(List.of(stringFilter, numberFilter));
+
+        ReportTemplateResponse response = new ReportTemplateResponse(1L, "Multi Value Template", null, request, "admin1", Instant.now());
+
+        doAnswer(invocation -> {
+            KeyHolder keyHolder = invocation.getArgument(2);
+            keyHolder.getKeyList().add(Map.of("ID", 1L));
+            return 1;
+        }).when(jdbcTemplate).update(anyString(), any(MapSqlParameterSource.class), any(KeyHolder.class), any(String[].class));
+
+        when(jdbcTemplate.queryForObject(anyString(), anyMap(), any(RowMapper.class))).thenReturn(response);
+
+        service.createTemplate("Multi Value Template", request, "admin1");
+
+        ArgumentCaptor<MapSqlParameterSource> paramsCaptor = ArgumentCaptor.forClass(MapSqlParameterSource.class);
+        verify(jdbcTemplate).update(anyString(), paramsCaptor.capture(), any(KeyHolder.class), any(String[].class));
+
+        JsonNode filters = objectMapper.readTree((String) paramsCaptor.getValue().getValue("configJson")).path("filters");
+        assertThat(filters.get(0).path("allowedOperators")).hasSize(2);
+        assertThat(filters.get(1).path("values")).hasSize(3);
+        assertThat(filters.get(1).path("values").get(0).asText()).isEqualTo("1000");
+    }
+
+    @Test
     void createTemplateFallsBackToSystemWhenUserMissing() {
         DynamicReportRequest request = new DynamicReportRequest();
         request.setBaseEntity("DOCUMENT_PARENT");

@@ -139,6 +139,7 @@ public class ReportController {
         filter.setKey(source.getKey());
         filter.setOp(op);
         filter.setValue(value);
+        filter.setValues(source.getValues());
         filter.setMode(source.getMode());
         filter.setLabel(source.getLabel());
         filter.setDataType(source.getDataType());

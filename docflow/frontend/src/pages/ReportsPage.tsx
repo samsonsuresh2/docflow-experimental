@@ -9,6 +9,8 @@ import {
   sendReportMail,
   runReportTemplate,
 } from '../lib/reports';
+import { parseNumberMultiValueInput, parseStringMultiValueInput } from '../lib/reportFilterValues';
+import { isMultiValueOperator, isRangeOperator } from '../lib/reportOperators';
 import { buildReportFilterSummary, normalizeReportMailConfig } from '../lib/reportMail';
 import type {
   ExecutableReportFilterField,
@@ -37,21 +39,23 @@ type FilterState = Record<
 const OPERATOR_LABELS: Record<string, string> = {
   EQ: '=',
   LIKE: 'Contains',
+  IN: 'In',
+  NOT_IN: 'Not In',
   LT: '<',
   GT: '>',
   RANGE: 'Range',
   BETWEEN: 'Between',
 };
 
-function requiresRangeValues(op: string): boolean {
-  return op === 'RANGE' || op === 'BETWEEN';
-}
-
 function normaliseError(error: unknown): string {
   if (typeof error === 'string') {
     return error;
   }
   if (error && typeof error === 'object') {
+    const directMessage = (error as { message?: unknown }).message;
+    if (typeof directMessage === 'string' && directMessage.trim()) {
+      return directMessage;
+    }
     const maybeResponse = (error as { response?: { data?: unknown; statusText?: string } }).response;
     if (maybeResponse?.data && typeof maybeResponse.data === 'object') {
       const maybeMessage = (maybeResponse.data as { message?: unknown }).message;
@@ -249,10 +253,20 @@ export default function ReportsPage() {
   const handleFilterOpChange = (key: string, op: string) => {
     setFiltersState((prev) => {
       const current = prev[key] ?? { op: defaultOperator(templateDetail?.filters.find((f) => f.key === key)), value: '' };
-      if (requiresRangeValues(op)) {
+      const switchedBetweenSingleAndMulti = isMultiValueOperator(op) !== isMultiValueOperator(current.op);
+      if (isRangeOperator(op)) {
         return { ...prev, [key]: { ...current, op, value: '' } };
       }
-      return { ...prev, [key]: { ...current, op, valueFrom: '', valueTo: '' } };
+      return {
+        ...prev,
+        [key]: {
+          ...current,
+          op,
+          value: switchedBetweenSingleAndMulti ? '' : current.value,
+          valueFrom: '',
+          valueTo: '',
+        },
+      };
     });
   };
 
@@ -272,7 +286,7 @@ export default function ReportsPage() {
             return { key: filter.key, mode, presetCode: state.presetCode };
           }
           const op = state.op || defaultOperator(filter);
-          if (requiresRangeValues(op)) {
+          if (isRangeOperator(op)) {
             const valueFrom = (state.valueFrom ?? state.fromValue ?? '').trim();
             const valueTo = (state.valueTo ?? state.toValue ?? '').trim();
             if (!valueFrom && !valueTo) {
@@ -288,13 +302,24 @@ export default function ReportsPage() {
         }
 
         const op = state.op || defaultOperator(filter);
-        if (requiresRangeValues(op)) {
+        if (isRangeOperator(op)) {
           const valueFrom = state.valueFrom?.trim() ?? '';
           const valueTo = state.valueTo?.trim() ?? '';
           if (!valueFrom && !valueTo) {
             return null;
           }
           return { key: filter.key, op, valueFrom, valueTo };
+        }
+        if (isMultiValueOperator(op)) {
+          const rawValue = state.value?.trim() ?? '';
+          if (!rawValue) {
+            return null;
+          }
+          const values =
+            filter.type === 'NUMBER'
+              ? parseNumberMultiValueInput(rawValue)
+              : parseStringMultiValueInput(rawValue);
+          return { key: filter.key, op, values };
         }
         const value = state.value?.trim() ?? '';
         if (!value) {
@@ -330,7 +355,14 @@ export default function ReportsPage() {
   );
 
   const handleGenerate = async () => {
-    const request = buildRunRequest();
+    let request: ReportExecutionRunRequest | null;
+    try {
+      request = buildRunRequest();
+    } catch (error) {
+      setRunError(normaliseError(error));
+      setHasRun(false);
+      return;
+    }
     if (!request) {
       setRunError('Choose a report template to run.');
       setHasRun(false);
@@ -477,7 +509,8 @@ export default function ReportsPage() {
               const supportsPreset = filter.type === 'DATE' && filter.presetEnabled;
               const isPresetMode = supportsPreset && (state.mode ?? 'PRESET') === 'PRESET';
               const showOperator = !supportsPreset || !isPresetMode;
-              const usesRangeValues = showOperator && requiresRangeValues(state.op);
+              const usesRangeValues = showOperator && isRangeOperator(state.op);
+              const usesMultiValues = showOperator && isMultiValueOperator(state.op);
               return (
                 <div
                   key={filter.key}
@@ -563,13 +596,28 @@ export default function ReportsPage() {
                             <div className="min-w-[220px] flex-1">
                               <input
                                 id={`value-${filter.key}`}
-                                type={filter.type === 'NUMBER' ? 'number' : filter.type === 'DATE' ? 'date' : 'text'}
-                                inputMode={filter.type === 'NUMBER' ? 'decimal' : undefined}
+                                type={usesMultiValues ? 'text' : filter.type === 'NUMBER' ? 'number' : filter.type === 'DATE' ? 'date' : 'text'}
+                                inputMode={usesMultiValues ? undefined : filter.type === 'NUMBER' ? 'decimal' : undefined}
                                 value={state.value}
                                 onChange={(event) => handleFilterValueChange(filter.key, event.target.value)}
-                                placeholder={filter.type === 'DATE' ? filter.dateFormat ?? 'YYYY-MM-DD' : ''}
+                                placeholder={
+                                  usesMultiValues
+                                    ? filter.type === 'NUMBER'
+                                      ? '1000,2000,5000'
+                                      : 'A,B,C'
+                                    : filter.type === 'DATE'
+                                      ? filter.dateFormat ?? 'YYYY-MM-DD'
+                                      : ''
+                                }
                                 className="w-full rounded border border-slate-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring focus:ring-blue-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/40"
                               />
+                              {usesMultiValues ? (
+                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                  {filter.type === 'NUMBER'
+                                    ? 'Enter comma-separated numbers.'
+                                    : 'Enter comma-separated values. Use \\, to include a literal comma.'}
+                                </p>
+                              ) : null}
                             </div>
                     )}
                     {supportsPreset ? (

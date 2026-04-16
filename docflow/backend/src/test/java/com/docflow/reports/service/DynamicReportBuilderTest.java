@@ -123,6 +123,61 @@ class DynamicReportBuilderTest {
         assertThat(built.sql()).contains("LOWER(dp.STATUS) LIKE :p0");
     }
 
+    @Test
+    void shouldBuildDocumentStringInAndNotIn() {
+        DynamicReportRequest request = new DynamicReportRequest();
+        request.setBaseEntity("DOCUMENT_PARENT");
+        request.setColumns(List.of("DOCUMENT_NUMBER"));
+        request.setFilters(List.of(valuesFilter("STATUS", "IN", List.of("PENDING", "UNDER_REVIEW"), ReportFilter.FilterLogicalType.STRING)));
+
+        DynamicReportBuilder.BuiltReport built = builder.build(request);
+
+        assertThat(built.sql()).contains("dp.STATUS IN (:p0)");
+        assertThat(built.parameters().get("p0")).isEqualTo(List.of("PENDING", "UNDER_REVIEW"));
+
+        request.setFilters(List.of(valuesFilter("STATUS", "NOT_IN", List.of("DONE"), ReportFilter.FilterLogicalType.STRING)));
+        built = builder.build(request);
+
+        assertThat(built.sql()).contains("dp.STATUS NOT IN (:p0)");
+    }
+
+    @Test
+    void shouldBuildDocumentAndThirdPartyNumberInPredicates() {
+        DynamicReportRequest request = new DynamicReportRequest();
+        request.setBaseEntity("LOAN_DATA");
+        request.setColumns(List.of("LOAN_AMOUNT"));
+        request.setFilters(List.of(valuesFilter("LOAN_AMOUNT", "IN", List.of("100", "250"), ReportFilter.FilterLogicalType.NUMBER)));
+
+        DynamicReportBuilder.BuiltReport built = builder.build(request);
+
+        assertThat(built.sql()).contains("TO_NUMBER(b.LOAN_AMOUNT) IN (:p0)");
+        assertThat(built.parameters().get("p0")).isEqualTo(List.of(new java.math.BigDecimal("100"), new java.math.BigDecimal("250")));
+
+        request.setFilters(List.of(valuesFilter("LOAN_AMOUNT", "NOT_IN", List.of("100", "250"), ReportFilter.FilterLogicalType.NUMBER)));
+        built = builder.build(request);
+        assertThat(built.sql()).contains("TO_NUMBER(b.LOAN_AMOUNT) NOT IN (:p0)");
+    }
+
+    @Test
+    void shouldBuildMetadataStringAndNumberInPredicates() {
+        DynamicReportRequest stringRequest = new DynamicReportRequest();
+        stringRequest.setBaseEntity("DOCUMENT_PARENT");
+        stringRequest.setColumns(List.of("DOCUMENT_NUMBER"));
+        stringRequest.setFilters(List.of(valuesFilter("meta:applicationDate", "IN", List.of("2026-03-01", "2026-03-31"), ReportFilter.FilterLogicalType.STRING)));
+
+        DynamicReportBuilder.BuiltReport stringBuilt = builder.build(stringRequest);
+        assertThat(stringBuilt.sql()).contains("LOWER(dm.FIELD_VALUE) IN (:p1)");
+        assertThat(stringBuilt.sql()).contains("LOWER(dm.FIELD_VALUE) IN (:p2)");
+
+        DynamicReportRequest numberRequest = new DynamicReportRequest();
+        numberRequest.setBaseEntity("DOCUMENT_PARENT");
+        numberRequest.setColumns(List.of("DOCUMENT_NUMBER"));
+        numberRequest.setFilters(List.of(valuesFilter("meta:loanAmount", "IN", List.of("100", "250"), ReportFilter.FilterLogicalType.NUMBER)));
+
+        DynamicReportBuilder.BuiltReport numberBuilt = builder.build(numberRequest);
+        assertThat(numberBuilt.sql()).contains("TO_NUMBER(dm.FIELD_VALUE) IN (:p1)");
+    }
+
     private static ReportFilter rangeFilter(String key, String op, String from, String to, ReportFilter.FilterLogicalType type) {
         ReportFilter filter = new ReportFilter();
         filter.setKey(key);
@@ -139,6 +194,16 @@ class DynamicReportBuilderTest {
         filter.setKey(key);
         filter.setOp(op);
         filter.setValue(value);
+        filter.setLogicalType(type);
+        filter.setDataType(type.name());
+        return filter;
+    }
+
+    private static ReportFilter valuesFilter(String key, String op, List<String> values, ReportFilter.FilterLogicalType type) {
+        ReportFilter filter = new ReportFilter();
+        filter.setKey(key);
+        filter.setOp(op);
+        filter.setValues(values);
         filter.setLogicalType(type);
         filter.setDataType(type.name());
         return filter;

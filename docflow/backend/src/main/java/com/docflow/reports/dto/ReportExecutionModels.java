@@ -76,6 +76,7 @@ public class ReportExecutionModels {
         private String value;
         private String valueFrom;
         private String valueTo;
+        private List<String> values = new ArrayList<>();
 
         private DateFilterMode mode;
 
@@ -123,6 +124,14 @@ public class ReportExecutionModels {
 
         public void setValueTo(String valueTo) {
             this.valueTo = valueTo;
+        }
+
+        public List<String> getValues() {
+            return values;
+        }
+
+        public void setValues(List<String> values) {
+            this.values = values != null ? values : new ArrayList<>();
         }
 
         public DateFilterMode getMode() {

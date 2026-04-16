@@ -8,10 +8,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.ResolverStyle;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -25,7 +25,6 @@ import java.util.stream.Collectors;
 @Service
 public class DynamicReportBuilder {
 
-    private static final Set<String> ALLOWED_OPERATORS = Set.of("EQ", "LIKE", "LT", "GT", "GE", "LE", "RANGE", "BETWEEN");
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd")
             .withResolverStyle(ResolverStyle.STRICT);
 
@@ -106,7 +105,7 @@ public class DynamicReportBuilder {
         List<String> clauses = new ArrayList<>();
         for (RequestedFilter filter : ctx.filters()) {
             String op = normalizeOperator(filter.operator());
-            if (!ALLOWED_OPERATORS.contains(op)) {
+            if (!ReportFilterOperators.ALL_SUPPORTED.contains(op)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed: " + filter.operator());
             }
             validateOperatorForType(op, filter.dataType());
@@ -153,16 +152,26 @@ public class DynamicReportBuilder {
         String valueExpr = metadataValueExpression("dm", ctx.clobLimit(), ctx.valueIsClob(), numeric, date);
         if (numeric || date) {
             exists.append(" AND ").append(valueExpr).append(" ")
-                    .append(toSqlOperator(op, filter.value(), filter.valueFrom(), filter.valueTo(), filter.dataType(), params));
+                    .append(toSqlOperator(op, filter.value(), filter.valueFrom(), filter.valueTo(), filter.values(), filter.dataType(), params));
         } else {
-            exists.append(" AND ").append(buildMetadataStringPredicate(valueExpr, op, filter.value(), params));
+            exists.append(" AND ").append(buildMetadataStringPredicate(valueExpr, op, filter.value(), filter.values(), params));
         }
         exists.append(")");
         return exists.toString();
     }
 
-    private String buildMetadataStringPredicate(String valueExpr, String op, String value, ParameterCollector params) {
+    private String buildMetadataStringPredicate(String valueExpr, String op, String value, List<String> values, ParameterCollector params) {
         String loweredExpr = "LOWER(" + valueExpr + ")";
+        if ("IN".equals(op) || "NOT_IN".equals(op)) {
+            List<String> rawValues = values.stream().map(item -> item.toLowerCase(Locale.ROOT)).toList();
+            List<String> quotedValues = rawValues.stream().map(item -> "\"" + item + "\"").toList();
+            String rawParam = params.add(rawValues);
+            String quotedParam = params.add(quotedValues);
+            if ("IN".equals(op)) {
+                return "(" + loweredExpr + " IN (:" + rawParam + ") OR " + loweredExpr + " IN (:" + quotedParam + "))";
+            }
+            return "(" + loweredExpr + " NOT IN (:" + rawParam + ") AND " + loweredExpr + " NOT IN (:" + quotedParam + "))";
+        }
         String normalizedValue = value == null ? "" : value.toLowerCase(Locale.ROOT);
         if ("LIKE".equals(op)) {
             String containsPattern = "%" + normalizedValue + "%";
@@ -188,13 +197,19 @@ public class DynamicReportBuilder {
         } else if ("LIKE".equals(op)) {
             left = "LOWER(" + columnExpression + ")";
         }
-        return left + " " + toSqlOperator(op, filter.value(), filter.valueFrom(), filter.valueTo(), dataType, params);
+        return left + " " + toSqlOperator(op, filter.value(), filter.valueFrom(), filter.valueTo(), filter.values(), dataType, params);
     }
 
-    private String toSqlOperator(String op, String value, String valueFrom, String valueTo, String dataType, ParameterCollector params) {
+    private String toSqlOperator(String op, String value, String valueFrom, String valueTo, List<String> values, String dataType, ParameterCollector params) {
         if ("LIKE".equals(op)) {
             String normalized = value == null ? "" : value.toLowerCase(Locale.ROOT);
             return "LIKE :" + params.add("%" + normalized + "%");
+        }
+        if ("IN".equals(op) || "NOT_IN".equals(op)) {
+            Object paramValue = "NUMBER".equalsIgnoreCase(dataType)
+                    ? ReportMultiValueParser.toBigDecimals(values)
+                    : values;
+            return ("NOT_IN".equals(op) ? "NOT IN" : "IN") + " (:" + params.add(paramValue) + ")";
         }
         if ("RANGE".equals(op) || "BETWEEN".equals(op)) {
             String fromParam = params.add(valueFrom);
@@ -216,15 +231,7 @@ public class DynamicReportBuilder {
     }
 
     private String normalizeOperator(String value) {
-        if (value == null) {
-            return "";
-        }
-        return switch (value.trim().toUpperCase(Locale.ROOT)) {
-            case "=" -> "EQ";
-            case "<" -> "LT";
-            case ">" -> "GT";
-            default -> value.trim().toUpperCase(Locale.ROOT);
-        };
+        return value == null ? "" : ReportFilterOperators.normalize(value);
     }
 
     private String toSqlComparisonOperator(String opCode) {
@@ -234,19 +241,17 @@ public class DynamicReportBuilder {
             case "GT" -> ">";
             case "GE" -> ">=";
             case "LE" -> "<=";
+            case "IN" -> "IN";
+            case "NOT_IN" -> "NOT IN";
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed: " + opCode);
         };
     }
 
     private void validateOperatorForType(String opCode, String dataType) {
-        if ("STRING".equalsIgnoreCase(dataType) && !"EQ".equals(opCode) && !"LIKE".equals(opCode)) {
+        if ("STRING".equalsIgnoreCase(dataType) && !ReportFilterOperators.STRING_OPS.contains(opCode)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed for STRING type: " + opCode);
         }
-        if ("NUMBER".equalsIgnoreCase(dataType)
-                && !"EQ".equals(opCode)
-                && !"LT".equals(opCode)
-                && !"GT".equals(opCode)
-                && !"RANGE".equals(opCode)) {
+        if ("NUMBER".equalsIgnoreCase(dataType) && !ReportFilterOperators.NUMBER_OPS.contains(opCode)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed for NUMBER type: " + opCode);
         }
         if ("DATE".equalsIgnoreCase(dataType)
@@ -264,12 +269,19 @@ public class DynamicReportBuilder {
     }
 
     private void validateFilterValueShape(RequestedFilter filter, String opCode) {
-        if ("RANGE".equals(opCode) || "BETWEEN".equals(opCode)) {
+        if (ReportFilterOperators.requiresRangeValues(opCode)) {
             if (!StringUtils.hasText(filter.valueFrom()) || !StringUtils.hasText(filter.valueTo())) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Both range values are required for operator " + opCode);
             }
             validateRangeOrdering(filter, opCode);
+            return;
+        }
+        if (ReportFilterOperators.requiresMultiValues(opCode)) {
+            if (filter.values() == null || filter.values().isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "At least one value is required for operator " + opCode);
+            }
             return;
         }
         if (!StringUtils.hasText(filter.value())) {
@@ -516,7 +528,8 @@ public class DynamicReportBuilder {
         private static boolean hasAnyFilterValue(ReportFilter filter) {
             return StringUtils.hasText(filter.getValue())
                     || StringUtils.hasText(filter.getValueFrom())
-                    || StringUtils.hasText(filter.getValueTo());
+                    || StringUtils.hasText(filter.getValueTo())
+                    || (filter.getValues() != null && !filter.getValues().isEmpty());
         }
 
         private static RequestedFilter parseFilter(ReportFilter filter,
@@ -536,8 +549,9 @@ public class DynamicReportBuilder {
                 if (metadataKeys.stream().noneMatch(k -> k.equalsIgnoreCase(metaKey))) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown metadata key: " + metaKey);
                 }
+                List<String> normalizedValues = normalizeMultiValues(filter);
                 return new RequestedFilter(ColumnType.METADATA, metaKey, op, value,
-                        optionalTrim(filter.getValueFrom()), optionalTrim(filter.getValueTo()), resolveFilterType(filter));
+                        optionalTrim(filter.getValueFrom()), optionalTrim(filter.getValueTo()), normalizedValues, resolveFilterType(filter));
             }
 
             String entity = base;
@@ -549,15 +563,33 @@ public class DynamicReportBuilder {
             }
             if (entity.equalsIgnoreCase(base)) {
                 ensureColumn(baseColumns, column, base);
+                List<String> normalizedValues = normalizeMultiValues(filter);
                 return new RequestedFilter(ColumnType.BASE, column.toUpperCase(Locale.ROOT), op, value,
-                        optionalTrim(filter.getValueFrom()), optionalTrim(filter.getValueTo()), resolveFilterType(filter));
+                        optionalTrim(filter.getValueFrom()), optionalTrim(filter.getValueTo()), normalizedValues, resolveFilterType(filter));
             }
             if (entity.equalsIgnoreCase(documentTable) || entity.equalsIgnoreCase("DOCUMENT") || entity.equalsIgnoreCase("DOCUMENT_PARENT")) {
                 ensureColumn(documentColumns, column, "document");
+                List<String> normalizedValues = normalizeMultiValues(filter);
                 return new RequestedFilter(ColumnType.DOCUMENT, column.toUpperCase(Locale.ROOT), op, value,
-                        optionalTrim(filter.getValueFrom()), optionalTrim(filter.getValueTo()), resolveFilterType(filter));
+                        optionalTrim(filter.getValueFrom()), optionalTrim(filter.getValueTo()), normalizedValues, resolveFilterType(filter));
             }
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid filter entity: " + entity);
+        }
+
+        private static List<String> normalizeMultiValues(ReportFilter filter) {
+            String op = ReportFilterOperators.normalize(filter.getOp());
+            if (!ReportFilterOperators.requiresMultiValues(op)) {
+                return List.of();
+            }
+            String dataType = resolveFilterType(filter);
+            try {
+                if ("NUMBER".equalsIgnoreCase(dataType)) {
+                    return ReportMultiValueParser.parseNumberValues(filter.getValues(), filter.getValue());
+                }
+                return ReportMultiValueParser.parseStringValues(filter.getValues(), filter.getValue());
+            } catch (IllegalArgumentException ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+            }
         }
 
         private static String optionalTrim(String value) {
@@ -680,7 +712,7 @@ public class DynamicReportBuilder {
     }
 
     private record RequestedFilter(ColumnType type, String column, String operator, String value,
-                                   String valueFrom, String valueTo, String dataType) {
+                                   String valueFrom, String valueTo, List<String> values, String dataType) {
     }
 
     private enum ColumnType {

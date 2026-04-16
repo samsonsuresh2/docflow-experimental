@@ -22,6 +22,7 @@ public class ReportFilter {
     private String value;
     private String valueFrom;
     private String valueTo;
+    private List<String> values = new ArrayList<>();
 
     @NotNull
     private Mode mode = Mode.FIXED_VALUE;
@@ -78,6 +79,14 @@ public class ReportFilter {
 
     public void setValueTo(String valueTo) {
         this.valueTo = valueTo;
+    }
+
+    public List<String> getValues() {
+        return values;
+    }
+
+    public void setValues(List<String> values) {
+        this.values = values != null ? values : new ArrayList<>();
     }
 
     public Mode getMode() {
@@ -159,6 +168,8 @@ public class ReportFilter {
     public enum FilterOperator {
         EQ,
         LIKE,
+        IN,
+        NOT_IN,
         LT,
         GT,
         RANGE,

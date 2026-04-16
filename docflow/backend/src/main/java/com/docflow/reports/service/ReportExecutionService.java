@@ -26,9 +26,6 @@ import java.util.Set;
 @Service
 public class ReportExecutionService {
 
-    private static final List<String> STRING_OPS = List.of("EQ", "LIKE");
-    private static final List<String> NUMBER_OPS = List.of("EQ", "LT", "GT", "RANGE");
-    private static final List<String> DATE_OPS = List.of("EQ", "LT", "GT", "BETWEEN");
     private static final String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd")
             .withResolverStyle(ResolverStyle.STRICT);
@@ -112,11 +109,11 @@ public class ReportExecutionService {
                 continue;
             }
 
-            String op = normalizeOpCode(input.getOp());
+            String op = ReportFilterOperators.normalize(input.getOp());
             if (!definition.allowedOps().contains(op)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator not allowed for " + definition.label() + ": " + op);
             }
-            if (requiresRangeValues(op)) {
+            if (ReportFilterOperators.requiresRangeValues(op)) {
                 String valueFrom = normalizeOptional(input.getValueFrom());
                 String valueTo = normalizeOptional(input.getValueTo());
                 if (!StringUtils.hasText(valueFrom) && !StringUtils.hasText(valueTo)) {
@@ -135,6 +132,22 @@ public class ReportExecutionService {
                 filter.setOp(op);
                 filter.setValueFrom(cleanFrom);
                 filter.setValueTo(cleanTo);
+                filter.setDataType(definition.dataType());
+                runtimeFilters.add(filter);
+                filters.add(filter);
+                continue;
+            }
+
+            if (ReportFilterOperators.requiresMultiValues(op)) {
+                List<String> cleanedValues = sanitizeMultiValues(definition, input.getValues(), input.getValue());
+                if (cleanedValues.isEmpty()) {
+                    continue;
+                }
+
+                ReportFilter filter = new ReportFilter();
+                filter.setKey(definition.originalKey());
+                filter.setOp(op);
+                filter.setValues(cleanedValues);
                 filter.setDataType(definition.dataType());
                 runtimeFilters.add(filter);
                 filters.add(filter);
@@ -185,7 +198,7 @@ public class ReportExecutionService {
             return rangeFilters(definition, range.fromDate(), range.toDate());
         }
         if (mode == ReportExecutionModels.DateFilterMode.MANUAL) {
-            String op = normalizeOpCode(input.getOp());
+            String op = ReportFilterOperators.normalize(input.getOp());
             if (!StringUtils.hasText(op)) {
                 op = definition.allowedOps().contains("BETWEEN") ? "BETWEEN" : "EQ";
             }
@@ -261,6 +274,20 @@ public class ReportExecutionService {
         };
     }
 
+    private List<String> sanitizeMultiValues(TemplateFilterDefinition definition, List<String> values, String fallbackCsv) {
+        try {
+            return switch (definition.type()) {
+                case STRING -> ReportMultiValueParser.parseStringValues(values, fallbackCsv);
+                case NUMBER -> ReportMultiValueParser.parseNumberValues(values, fallbackCsv);
+                case DATE -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "IN and NOT_IN are not supported for date filter " + definition.label());
+            };
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Invalid values for " + definition.label() + ": " + ex.getMessage(), ex);
+        }
+    }
+
     private void validateRange(TemplateFilterDefinition definition, String fromValue, String toValue, String op) {
         if (definition.type() == ReportExecutionModels.FieldType.NUMBER) {
             BigDecimal from = new BigDecimal(fromValue);
@@ -314,25 +341,8 @@ public class ReportExecutionService {
         return value.trim();
     }
 
-    private static boolean requiresRangeValues(String op) {
-        return "RANGE".equals(op) || "BETWEEN".equals(op);
-    }
-
     private static String normalizeOptional(String value) {
         return value == null ? "" : value.trim();
-    }
-
-    private static String normalizeOpCode(String op) {
-        if (!StringUtils.hasText(op)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Filter operator required");
-        }
-        String normalized = op.trim().toUpperCase(Locale.ROOT);
-        return switch (normalized) {
-            case "=" -> "EQ";
-            case "<" -> "LT";
-            case ">" -> "GT";
-            default -> normalized;
-        };
     }
 
     private static String normalizeKey(String key) {
@@ -431,8 +441,11 @@ public class ReportExecutionService {
                                 "Duplicate filter key in template: " + definition.originalKey());
                     }
                     userFilters.put(definition.lookupKey(), definition);
-                } else if (StringUtils.hasText(filter.getValue())) {
-                    String storedOp = normalizeOpCode(filter.getOp());
+                } else if (StringUtils.hasText(filter.getValue())
+                        || StringUtils.hasText(filter.getValueFrom())
+                        || StringUtils.hasText(filter.getValueTo())
+                        || (filter.getValues() != null && !filter.getValues().isEmpty())) {
+                    String storedOp = ReportFilterOperators.normalize(filter.getOp());
                     if (!definition.allowedOps().contains(storedOp)) {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                                 "Fixed filter operator not allowed for " + definition.label());
@@ -441,6 +454,9 @@ public class ReportExecutionService {
                     fixed.setKey(definition.originalKey());
                     fixed.setOp(storedOp);
                     fixed.setValue(filter.getValue());
+                    fixed.setValueFrom(filter.getValueFrom());
+                    fixed.setValueTo(filter.getValueTo());
+                    fixed.setValues(filter.getValues());
                     fixed.setDataType(definition.dataType());
                     fixedFilters.add(fixed);
                 }
@@ -531,16 +547,16 @@ public class ReportExecutionService {
                         .map(String::toUpperCase)
                         .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
                 switch (type) {
-                    case NUMBER -> normalized.addAll(NUMBER_OPS);
-                    case DATE -> normalized.addAll(DATE_OPS);
-                    case STRING -> normalized.retainAll(STRING_OPS);
+                    case NUMBER -> normalized.retainAll(ReportFilterOperators.NUMBER_OPS);
+                    case DATE -> normalized.retainAll(ReportFilterOperators.DATE_OPS);
+                    case STRING -> normalized.retainAll(ReportFilterOperators.STRING_OPS);
                 }
                 return List.copyOf(normalized);
             }
             return switch (type) {
-                case NUMBER -> NUMBER_OPS;
-                case DATE -> DATE_OPS;
-                case STRING -> STRING_OPS;
+                case NUMBER -> ReportFilterOperators.NUMBER_OPS;
+                case DATE -> ReportFilterOperators.DATE_OPS;
+                case STRING -> ReportFilterOperators.STRING_OPS;
             };
         }
 

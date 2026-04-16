@@ -670,6 +670,136 @@ class DynamicReportEndToEndTest {
                 .andExpect(jsonPath("$.message").value(ReportFilterTypeValidationService.INVALID_FILTER_CONFIGURATION_MESSAGE));
     }
 
+    @Test
+    void savesAndReadsTemplateWithInAndNotInOperators() throws Exception {
+        String payload = """
+                {
+                  "name": "Multi Operator Template",
+                  "request": {
+                    "baseEntity": "DOCUMENT_PARENT",
+                    "columns": ["DOCUMENT_NUMBER", "STATUS"],
+                    "filters": [
+                      {
+                        "key": "STATUS",
+                        "op": "IN",
+                        "mode": "USER_INPUT",
+                        "logicalType": "STRING",
+                        "dataType": "STRING",
+                        "allowedOperators": ["EQ", "LIKE", "IN", "NOT_IN"]
+                      },
+                      {
+                        "key": "meta:age",
+                        "op": "NOT_IN",
+                        "mode": "USER_INPUT",
+                        "logicalType": "NUMBER",
+                        "dataType": "NUMBER",
+                        "allowedOperators": ["EQ", "LT", "GT", "RANGE", "IN", "NOT_IN"]
+                      }
+                    ]
+                  }
+                }
+                """;
+
+        mockMvc.perform(post("/api/reports/templates")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-USER-ID", "admin1")
+                        .content(payload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.request.filters[0].allowedOperators[2]").value("IN"))
+                .andExpect(jsonPath("$.request.filters[0].allowedOperators[3]").value("NOT_IN"))
+                .andExpect(jsonPath("$.request.filters[1].allowedOperators[4]").value("IN"))
+                .andExpect(jsonPath("$.request.filters[1].allowedOperators[5]").value("NOT_IN"));
+    }
+
+    @Test
+    void executableTemplatesSupportStringAndNumberInOperators() throws Exception {
+        String stringTemplatePayload = """
+                {
+                  "name": "Status In Template",
+                  "request": {
+                    "baseEntity": "DOCUMENT_PARENT",
+                    "columns": ["DOCUMENT_NUMBER", "STATUS"],
+                    "filters": [
+                      {
+                        "key": "STATUS",
+                        "op": "IN",
+                        "mode": "USER_INPUT",
+                        "logicalType": "STRING",
+                        "dataType": "STRING",
+                        "allowedOperators": ["EQ", "LIKE", "IN", "NOT_IN"]
+                      }
+                    ]
+                  }
+                }
+                """;
+
+        MvcResult stringTemplate = mockMvc.perform(post("/api/reports/templates")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-USER-ID", "admin1")
+                        .content(stringTemplatePayload))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        long stringTemplateId = objectMapper.readTree(stringTemplate.getResponse().getContentAsString()).get("id").asLong();
+
+        mockMvc.perform(post("/api/reports/run")
+                        .param("mode", "exec")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "templateId": %d,
+                                  "filters": [
+                                    { "key": "STATUS", "op": "IN", "value": "PENDING,UNDER_REVIEW" }
+                                  ]
+                                }
+                                """.formatted(stringTemplateId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rowCount").value(1));
+
+        String numberTemplatePayload = """
+                {
+                  "name": "Loan Amount In Template",
+                  "request": {
+                    "baseEntity": "LOAN_DATA",
+                    "columns": ["DOCUMENT_PARENT.DOCUMENT_NUMBER", "LOAN_AMOUNT"],
+                    "filters": [
+                      {
+                        "key": "LOAN_AMOUNT",
+                        "op": "IN",
+                        "mode": "USER_INPUT",
+                        "logicalType": "NUMBER",
+                        "dataType": "NUMBER",
+                        "allowedOperators": ["EQ", "LT", "GT", "RANGE", "IN", "NOT_IN"]
+                      }
+                    ]
+                  }
+                }
+                """;
+
+        MvcResult numberTemplate = mockMvc.perform(post("/api/reports/templates")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-USER-ID", "admin1")
+                        .content(numberTemplatePayload))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        long numberTemplateId = objectMapper.readTree(numberTemplate.getResponse().getContentAsString()).get("id").asLong();
+
+        mockMvc.perform(post("/api/reports/run")
+                        .param("mode", "exec")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "templateId": %d,
+                                  "filters": [
+                                    { "key": "LOAN_AMOUNT", "op": "IN", "value": "2000000,3000000" }
+                                  ]
+                                }
+                                """.formatted(numberTemplateId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rowCount").value(1));
+    }
+
     private void assertSingleDocument(MvcResult result, String expectedDocumentNumber) throws Exception {
         JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
         assertThat(json.get("rows").isArray()).isTrue();
