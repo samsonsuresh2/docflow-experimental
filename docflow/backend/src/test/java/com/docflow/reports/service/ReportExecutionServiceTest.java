@@ -85,6 +85,33 @@ class ReportExecutionServiceTest {
     }
 
     @Test
+    void shouldRejectRunWhenNoRuntimeFilterValueIsProvided() {
+        when(templateService.getById(10L)).thenReturn(templateWithTwoUserFilters());
+
+        ReportExecutionModels.RunRequest request = new ReportExecutionModels.RunRequest();
+        request.setTemplateId(10L);
+
+        ReportExecutionModels.RunFilter blankNumber = new ReportExecutionModels.RunFilter();
+        blankNumber.setKey("meta:loanAmount");
+        blankNumber.setOp("GT");
+        blankNumber.setValue("   ");
+
+        ReportExecutionModels.RunFilter blankDate = new ReportExecutionModels.RunFilter();
+        blankDate.setKey("meta:applicationDate");
+        blankDate.setOp("EQ");
+        blankDate.setValue("   ");
+
+        request.setFilters(List.of(blankNumber, blankDate));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> service.run(request, 0, 25));
+
+        assertEquals(400, exception.getStatusCode().value());
+        assertEquals(ReportRunPolicy.AT_LEAST_ONE_FILTER_MESSAGE, exception.getReason());
+        verifyNoInteractions(builder);
+        verifyNoInteractions(executor);
+    }
+
+    @Test
     void shouldRejectInvalidNumberDateAndOperator() {
         when(templateService.getById(10L)).thenReturn(templateWithTwoUserFilters());
 

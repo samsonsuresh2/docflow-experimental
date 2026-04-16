@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import ReportResultsGrid from '../components/ReportResultsGrid';
 import ReportMailDialog from '../components/ReportMailDialog';
+import { validateAtLeastOneReportFilter } from '../lib/reportRunPolicy';
 import {
   fetchAllReportRows,
   fetchExecutableReportTemplate,
@@ -332,6 +333,12 @@ export default function ReportsPage() {
     const request = buildRunRequest();
     if (!request) {
       setRunError('Choose a report template to run.');
+      setHasRun(false);
+      return;
+    }
+    const filterValidationError = validateAtLeastOneReportFilter(request.filters);
+    if (filterValidationError) {
+      setRunError(filterValidationError);
       setHasRun(false);
       return;
     }

@@ -85,6 +85,7 @@ public class ReportExecutionService {
         TemplateContext ctx = TemplateContext.from(templateService.getById(request.getTemplateId()), datePresetService);
         filterTypeValidationService.validateRuntimeDefinition(ctx.template().getRequest(), "template:" + ctx.templateId());
         List<ReportFilter> filters = new ArrayList<>(ctx.fixedFilters());
+        List<ReportFilter> runtimeFilters = new ArrayList<>();
 
         Map<String, TemplateFilterDefinition> allowedFilters = ctx.userFiltersByLookup();
         Set<String> seenKeys = new HashSet<>();
@@ -105,7 +106,9 @@ public class ReportExecutionService {
             }
 
             if (definition.type() == ReportExecutionModels.FieldType.DATE && input.getMode() != null) {
-                filters.addAll(normalizeDateModeFilter(input, definition, ctx.name()));
+                List<ReportFilter> normalizedDateFilters = normalizeDateModeFilter(input, definition, ctx.name());
+                runtimeFilters.addAll(normalizedDateFilters);
+                filters.addAll(normalizedDateFilters);
                 continue;
             }
 
@@ -133,6 +136,7 @@ public class ReportExecutionService {
                 filter.setValueFrom(cleanFrom);
                 filter.setValueTo(cleanTo);
                 filter.setDataType(definition.dataType());
+                runtimeFilters.add(filter);
                 filters.add(filter);
                 continue;
             }
@@ -148,8 +152,11 @@ public class ReportExecutionService {
             filter.setOp(op);
             filter.setValue(cleanedValue);
             filter.setDataType(definition.dataType());
+            runtimeFilters.add(filter);
             filters.add(filter);
         }
+
+        ReportRunPolicy.validateAtLeastOneRuntimeFilter(runtimeFilters);
 
         DynamicReportRequest dynamicRequest = new DynamicReportRequest();
         dynamicRequest.setBaseEntity(ctx.baseEntity());

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import ReportResultsGrid from '../components/ReportResultsGrid';
 import ReportMailConfigModal from '../components/ReportMailConfigModal';
+import { validateAtLeastOneReportFilter } from '../lib/reportRunPolicy';
 import {
   fetchAllReportRows,
   fetchReportScope,
@@ -721,6 +722,12 @@ export default function ReportBuilderPage() {
     const request = buildRunRequest();
     if (!request) {
       setRunError('Select a base entity and at least one column to run a report.');
+      setHasRun(false);
+      return;
+    }
+    const filterValidationError = validateAtLeastOneReportFilter(request.filters);
+    if (filterValidationError) {
+      setRunError(filterValidationError);
       setHasRun(false);
       return;
     }

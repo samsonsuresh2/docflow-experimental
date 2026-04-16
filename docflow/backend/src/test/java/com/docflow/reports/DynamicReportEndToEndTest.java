@@ -186,6 +186,23 @@ class DynamicReportEndToEndTest {
         assertSingleDocument(result, "KYC001");
     }
 
+    @Test
+    void runRejectsRequestWithoutAnyRuntimeFilter() throws Exception {
+        String payload = """
+                {
+                  "baseEntity": "DOCUMENT_PARENT",
+                  "columns": ["DOCUMENT_NUMBER", "STATUS"],
+                  "filters": []
+                }
+                """;
+
+        mockMvc.perform(post("/api/reports/run")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isBadRequest())
+                .andExpect(status().reason(com.docflow.reports.service.ReportRunPolicy.AT_LEAST_ONE_FILTER_MESSAGE));
+    }
+
     private void runCaseKycPending() throws Exception {
         String payload = """
                 {

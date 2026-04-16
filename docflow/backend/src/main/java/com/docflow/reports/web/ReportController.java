@@ -77,7 +77,9 @@ public class ReportController {
     public Map<String, Object> run(@Valid @RequestBody DynamicReportRequest request,
                                    @RequestParam(defaultValue = "0") int page,
                                    @RequestParam(defaultValue = "50") int size) {
-        var built = builder.build(normalizePresetPreviewRequest(request));
+        DynamicReportRequest normalizedRequest = normalizePresetPreviewRequest(request);
+        com.docflow.reports.service.ReportRunPolicy.validateAtLeastOneRuntimeFilter(normalizedRequest.getFilters());
+        var built = builder.build(normalizedRequest);
         return executor.execute(built, page, size);
     }
 
