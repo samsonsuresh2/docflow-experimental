@@ -14,11 +14,17 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Component
 public class MailxEmailDeliveryAdapter implements EmailDeliveryAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(MailxEmailDeliveryAdapter.class);
+    private static final Pattern TABLE_CELL_CLOSE = Pattern.compile("(?i)</t[dh]>");
+    private static final Pattern TABLE_ROW_CLOSE = Pattern.compile("(?i)</tr>");
+    private static final Pattern BREAK_TAG = Pattern.compile("(?i)<br\\s*/?>");
+    private static final Pattern BLOCK_CLOSE = Pattern.compile("(?i)</(p|div|table|thead|tbody|ul|ol|li|h[1-6])>");
+    private static final Pattern ANY_TAG = Pattern.compile("(?is)<[^>]+>");
 
     private final NotificationProperties properties;
 
@@ -42,6 +48,8 @@ public class MailxEmailDeliveryAdapter implements EmailDeliveryAdapter {
 
         List<String> command = new ArrayList<>();
         command.add(properties.getMail().getMailxCommandPath());
+        command.add("-r");
+        command.add(properties.getMail().getFromAddress());
         command.add("-s");
         command.add(StringUtils.hasText(message.getSubject()) ? message.getSubject() : "(no subject)");
         for (String cc : message.getCc()) {
@@ -50,7 +58,7 @@ public class MailxEmailDeliveryAdapter implements EmailDeliveryAdapter {
         }
         attach(command, message.getAttachment());
         command.addAll(message.getTo());
-        String body = message.getBody() != null ? message.getBody() : "";
+        String body = renderMailxBody(message);
 
         try {
             log.info(
@@ -129,5 +137,28 @@ public class MailxEmailDeliveryAdapter implements EmailDeliveryAdapter {
                 .replace("\r", "\\r")
                 .replace("\n", "\\n");
         return normalized.length() > 200 ? normalized.substring(0, 200) + "..." : normalized;
+    }
+
+    private String renderMailxBody(NotificationMessage message) {
+        String body = message.getBody() != null ? message.getBody() : "";
+        if (!message.isHtml() || !StringUtils.hasText(body)) {
+            return body;
+        }
+
+        String normalized = TABLE_CELL_CLOSE.matcher(body).replaceAll("\t");
+        normalized = TABLE_ROW_CLOSE.matcher(normalized).replaceAll(System.lineSeparator());
+        normalized = BREAK_TAG.matcher(normalized).replaceAll(System.lineSeparator());
+        normalized = BLOCK_CLOSE.matcher(normalized).replaceAll(System.lineSeparator());
+        normalized = ANY_TAG.matcher(normalized).replaceAll("");
+        normalized = normalized
+                .replace("&nbsp;", " ")
+                .replace("&amp;", "&")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'");
+        normalized = normalized.replaceAll("[\\t ]+" + System.lineSeparator(), System.lineSeparator());
+        normalized = normalized.replaceAll(System.lineSeparator() + "{3,}", System.lineSeparator() + System.lineSeparator());
+        return normalized.trim();
     }
 }

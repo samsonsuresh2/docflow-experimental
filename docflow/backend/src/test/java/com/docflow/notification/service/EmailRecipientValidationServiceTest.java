@@ -72,6 +72,50 @@ class EmailRecipientValidationServiceTest {
     }
 
     @Test
+    void rejectsMissingFromAddressConfiguration() {
+        NotificationProperties properties = properties();
+        properties.getMail().setFromAddress(null);
+        EmailRecipientValidationService service = new EmailRecipientValidationService(properties);
+
+        NotificationMessage message = new NotificationMessage();
+        message.setTo(List.of("maker@company.internal"));
+
+        assertThatThrownBy(() -> service.validateAndNormalize(message))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("from-address must be configured");
+    }
+
+    @Test
+    void rejectsFromAddressOutsideConfiguredUserEmailDomain() {
+        NotificationProperties properties = properties();
+        properties.getMail().setFromAddress("noreply@external.internal");
+        EmailRecipientValidationService service = new EmailRecipientValidationService(properties);
+
+        NotificationMessage message = new NotificationMessage();
+        message.setTo(List.of("maker@company.internal"));
+
+        assertThatThrownBy(() -> service.validateAndNormalize(message))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("user-email-domain");
+    }
+
+    @Test
+    void allowsRecipientsFromAnyConfiguredInternalDomain() {
+        NotificationProperties properties = properties();
+        properties.getMail().setAllowedInternalDomains(List.of("company.internal", "subsidiary.internal"));
+        EmailRecipientValidationService service = new EmailRecipientValidationService(properties);
+
+        NotificationMessage message = new NotificationMessage();
+        message.setTo(List.of("maker@company.internal"));
+        message.setCc(List.of("reviewer@subsidiary.internal"));
+
+        NotificationMessage normalized = service.validateAndNormalize(message);
+
+        assertThat(normalized.getTo()).containsExactly("maker@company.internal");
+        assertThat(normalized.getCc()).containsExactly("reviewer@subsidiary.internal");
+    }
+
+    @Test
     void rejectsRecipientCountOverConfiguredLimits() {
         NotificationProperties properties = properties();
         properties.getMail().setMaxToCount(1);
@@ -104,7 +148,9 @@ class EmailRecipientValidationServiceTest {
 
     private NotificationProperties properties() {
         NotificationProperties properties = new NotificationProperties();
+        properties.setUserEmailDomain("company.internal");
         properties.getMail().setAllowedInternalDomains(List.of("company.internal"));
+        properties.getMail().setFromAddress("noreply@company.internal");
         properties.getMail().setMaxToCount(10);
         properties.getMail().setMaxCcCount(10);
         return properties;

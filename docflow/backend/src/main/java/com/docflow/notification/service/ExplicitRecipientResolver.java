@@ -12,7 +12,7 @@ public class ExplicitRecipientResolver implements RecipientResolver {
 
     @Override
     public boolean supports(NotificationReferenceType referenceType) {
-        return true;
+        return referenceType == NotificationReferenceType.REPORT;
     }
 
     @Override

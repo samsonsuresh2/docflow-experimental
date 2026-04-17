@@ -28,6 +28,8 @@ public class EmailRecipientValidationService {
     }
 
     public NotificationMessage validateAndNormalize(NotificationMessage message) {
+        validateSenderConfiguration();
+
         NotificationMessage normalized = new NotificationMessage();
         normalized.setChannelType(message.getChannelType());
         normalized.setSubject(message.getSubject());
@@ -65,6 +67,27 @@ public class EmailRecipientValidationService {
         return normalized;
     }
 
+    private void validateSenderConfiguration() {
+        String fromAddress = properties.getMail().getFromAddress();
+        if (!StringUtils.hasText(fromAddress)) {
+            throw new IllegalArgumentException("Mail from-address must be configured.");
+        }
+
+        String normalizedFrom = fromAddress.trim().toLowerCase(Locale.ROOT);
+        validateEmailAddress(normalizedFrom, "From");
+
+        String configuredUserDomain = properties.getUserEmailDomain();
+        if (!StringUtils.hasText(configuredUserDomain)) {
+            throw new IllegalArgumentException("Notification user-email-domain must be configured.");
+        }
+
+        String expectedDomain = configuredUserDomain.trim().toLowerCase(Locale.ROOT);
+        String fromDomain = extractDomain(normalizedFrom);
+        if (!expectedDomain.equals(fromDomain)) {
+            throw new IllegalArgumentException("Mail from-address must use the configured user-email-domain.");
+        }
+    }
+
     private NotificationAttachment validateAttachment(NotificationAttachment attachment) {
         if (attachment == null) {
             return null;
@@ -89,14 +112,14 @@ public class EmailRecipientValidationService {
                     continue;
                 }
                 String candidate = token.trim().toLowerCase(Locale.ROOT);
-                validateEmailAddress(candidate, requiredField);
+                validateEmailAddress(candidate, requiredField ? "To" : "CC");
                 normalized.add(candidate);
             }
         }
         return normalized;
     }
 
-    private void validateEmailAddress(String address, boolean requiredField) {
+    private void validateEmailAddress(String address, String label) {
         try {
             InternetAddress internetAddress = new InternetAddress(address, true);
             internetAddress.validate();
@@ -109,7 +132,7 @@ public class EmailRecipientValidationService {
             throw new IllegalArgumentException("Invalid email address: " + address);
         }
 
-        String domain = address.substring(atIndex + 1).toLowerCase(Locale.ROOT);
+        String domain = extractDomain(address);
         Set<String> allowedDomains = new LinkedHashSet<>();
         for (String allowed : properties.getMail().getAllowedInternalDomains()) {
             if (StringUtils.hasText(allowed)) {
@@ -117,8 +140,12 @@ public class EmailRecipientValidationService {
             }
         }
         if (!allowedDomains.isEmpty() && !allowedDomains.contains(domain)) {
-            String label = requiredField ? "To" : "CC";
             throw new IllegalArgumentException(label + " recipient domain is not allowed: " + address);
         }
+    }
+
+    private String extractDomain(String address) {
+        int atIndex = address.lastIndexOf('@');
+        return address.substring(atIndex + 1).toLowerCase(Locale.ROOT);
     }
 }

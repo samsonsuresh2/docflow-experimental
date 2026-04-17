@@ -71,9 +71,9 @@ class NotificationDeliveryServiceTest {
     void processesOutboxAndLogsRecipientsOnSuccess() {
         NotificationOutbox outbox = new NotificationOutbox();
         NotificationEvent event = new NotificationEvent();
-        event.setEventType(NotificationEventType.DOCUMENT_LIFECYCLE);
+        event.setEventType(NotificationEventType.REPORT_MAIL);
         event.setEventCode(NotificationEventCode.SUBMITTED_FOR_REVIEW);
-        event.setReferenceType(NotificationReferenceType.DOCUMENT);
+        event.setReferenceType(NotificationReferenceType.REPORT);
         event.setReferenceId("123");
         event.setContext(java.util.Map.of("documentId", "123"));
         NotificationExplicitRecipients recipients = new NotificationExplicitRecipients();
@@ -119,9 +119,9 @@ class NotificationDeliveryServiceTest {
     void marksOutboxFailedWhenChannelFails() {
         NotificationOutbox outbox = new NotificationOutbox();
         NotificationEvent event = new NotificationEvent();
-        event.setEventType(NotificationEventType.DOCUMENT_LIFECYCLE);
+        event.setEventType(NotificationEventType.REPORT_MAIL);
         event.setEventCode(NotificationEventCode.REJECTED);
-        event.setReferenceType(NotificationReferenceType.DOCUMENT);
+        event.setReferenceType(NotificationReferenceType.REPORT);
         event.setReferenceId("456");
         NotificationExplicitRecipients recipients = new NotificationExplicitRecipients();
         recipients.setTo(List.of("maker@internal.local"));

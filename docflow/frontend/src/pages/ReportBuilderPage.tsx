@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import ReportResultsGrid from '../components/ReportResultsGrid';
 import ReportMailConfigModal from '../components/ReportMailConfigModal';
+import ReportMailDialog from '../components/ReportMailDialog';
 import { validateAtLeastOneReportFilter } from '../lib/reportRunPolicy';
 import {
   fetchAllReportRows,
   fetchReportScope,
   fetchReportTemplates,
   runDynamicReport,
+  sendReportMail,
   saveReportTemplate,
   updateReportTemplate,
 } from '../lib/reports';
 import {
+  buildReportFilterSummary,
   createDefaultReportMailConfig,
   normalizeReportMailConfig,
   toReportMailApiConfig,
@@ -31,6 +34,7 @@ import type {
   ReportMailConfig,
   ReportMailFieldName,
   ReportMailMode,
+  ReportMailSendDraft,
   ReportRunResponse,
   ReportTemplate,
 } from '../types/reports';
@@ -137,6 +141,8 @@ export default function ReportBuilderPage() {
   const [runError, setRunError] = useState<string | null>(null);
   const [result, setResult] = useState<ReportRunResponse | null>(null);
   const [lastRequest, setLastRequest] = useState<DynamicReportRequest | null>(null);
+  const [mailDialogOpen, setMailDialogOpen] = useState<boolean>(false);
+  const [mailStatusMessage, setMailStatusMessage] = useState<string | null>(null);
 
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState<boolean>(true);
@@ -220,6 +226,8 @@ export default function ReportBuilderPage() {
       setLastRequest(null);
       setRunError(null);
       setMailConfig(createDefaultReportMailConfig());
+      setMailDialogOpen(false);
+      setMailStatusMessage(null);
       return;
     }
     setSelectedColumns([]);
@@ -228,6 +236,8 @@ export default function ReportBuilderPage() {
     setHasRun(false);
     setLastRequest(null);
     setRunError(null);
+    setMailDialogOpen(false);
+    setMailStatusMessage(null);
     setPage(0);
     setMetadataLoading(true);
     setMetadataError(null);
@@ -308,6 +318,10 @@ export default function ReportBuilderPage() {
       return Boolean(field.default.trim() || field.mandatory.trim() || field.editable === false);
     }).length;
   }, [mailConfig]);
+
+  const normalizedMailConfig = useMemo(() => normalizeReportMailConfig(mailConfig), [mailConfig]);
+  const reportMailEnabled = Boolean(normalizedMailConfig.enabled);
+  const filterSummary = useMemo(() => buildReportFilterSummary(lastRequest), [lastRequest]);
 
   const columnOptions: ColumnOption[] = useMemo(() => {
     if (!selectedEntity) {
@@ -799,8 +813,33 @@ export default function ReportBuilderPage() {
     return fetchAllReportRows((nextPage, nextSize) => runDynamicReport(lastRequest, nextPage, nextSize));
   }, [lastRequest, result]);
 
+  const handleOpenMailDialog = () => {
+    if (!reportMailEnabled || !loadedTemplate) {
+      return;
+    }
+    if (!lastRequest) {
+      setRunError('Run the report before sending an email.');
+      return;
+    }
+    setMailStatusMessage(null);
+    setMailDialogOpen(true);
+  };
+
+  const handleSendReportMail = async (request: ReportMailSendDraft) => {
+    if (!lastRequest || !loadedTemplate) {
+      throw new Error('Save or load a template before sending an email.');
+    }
+    await sendReportMail({
+      ...request,
+      templateId: loadedTemplate.id,
+      filters: lastRequest.filters,
+    });
+    setMailStatusMessage('Report email sent successfully.');
+  };
+
   const canRun = Boolean(selectedEntity && selectedColumns.length > 0);
   const canGoNext = Boolean(result && typeof result.rowCount === 'number' && (page + 1) * pageSize < result.rowCount);
+  const canEmailReport = Boolean(reportMailEnabled && loadedTemplate && result && hasRun && !running && !runError);
 
   return (
     <div className="space-y-6">
@@ -1263,7 +1302,21 @@ export default function ReportBuilderPage() {
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
         fetchAllRows={handleFetchAllRows}
+        outputActions={
+          canEmailReport ? (
+            <button
+              type="button"
+              className="inline-flex items-center rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-amber-700 shadow-sm transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-400/40 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20"
+              onClick={handleOpenMailDialog}
+              disabled={!canEmailReport}
+            >
+              Email Report
+            </button>
+          ) : null
+        }
       />
+
+      {mailStatusMessage ? <p className="text-sm text-emerald-600 dark:text-emerald-400">{mailStatusMessage}</p> : null}
 
       <ReportMailConfigModal
         isOpen={isMailConfigModalOpen}
@@ -1271,6 +1324,16 @@ export default function ReportBuilderPage() {
         onSave={setMailConfig}
         value={mailConfig}
         templateName={templateName}
+      />
+
+      <ReportMailDialog
+        isOpen={mailDialogOpen}
+        onClose={() => setMailDialogOpen(false)}
+        templateId={loadedTemplate?.id ?? 0}
+        templateName={templateName}
+        mailConfig={normalizedMailConfig}
+        filterSummary={filterSummary}
+        onSend={handleSendReportMail}
       />
     </div>
   );
