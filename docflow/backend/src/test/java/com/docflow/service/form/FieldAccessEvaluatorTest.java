@@ -15,6 +15,7 @@ class FieldAccessEvaluatorTest {
         UploadFieldDefinition definition = new UploadFieldDefinition();
         definition.setName("alpha");
         definition.setVisibleToRoles(Set.of("MAKER"));
+        definition.setEditableByRoles(Set.of("MAKER"));
 
         FieldAccessDecision decision = FieldAccessEvaluator.evaluate(definition, "REVIEWER", DocumentStatus.DRAFT, null, true);
 

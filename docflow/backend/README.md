@@ -13,6 +13,47 @@ Spring Boot 3.x application targeting Oracle 19c.
 mvn spring-boot:run
 ```
 
+For local-only profile behavior, pass the profile externally instead of relying on packaged defaults, for example `SPRING_PROFILES_ACTIVE=local`, an IDE run configuration, or docker-compose environment.
+
+## Actuator Exposure
+
+The packaged non-prod default exposes `health`, `info`, and `loggers` through `DOCFLOW_ACTUATOR_EXPOSURE`. For UAT and production, remove logger control from exposure and use `DOCFLOW_ACTUATOR_EXPOSURE=health,info`.
+
+`loggers` is intended for non-production troubleshooting only. If UAT or production temporarily enables it during stabilization or incident investigation, revert to `DOCFLOW_ACTUATOR_EXPOSURE=health,info` immediately after the investigation.
+
+## Authentication Modes
+
+DocFlow starts with authentication disabled unless an auth mode is explicitly configured. Set one of `DEV_AUTH`, `HEADER_AUTH`, or `OIDC_AUTH` through deployment configuration; do not rely on packaged defaults for enterprise runtime.
+
+DocFlow supports local/dev header-based authentication modes for non-production testing and OIDC bearer JWT authentication for enterprise SSO. OIDC mode expects clients to send `Authorization: Bearer <JWT>`, validates the token against the configured JWK set, and maps identity claims into the backend user context. Claim names are configurable; avoid client-specific hardcoding in code.
+
+OIDC is used for authentication only. DocFlow authorization continues to use the internal user-role/module access model; OIDC roles or groups claims are not mapped into DocFlow roles.
+
+Example OIDC configuration:
+
+```yaml
+docflow:
+  security:
+    auth-mode: OIDC_AUTH
+    oidc:
+      issuer-uri: https://client-idp.example.com
+      jwk-set-uri: https://client-idp.example.com/.well-known/jwks.json
+      # Optional. If configured, DocFlow validates the token audience.
+      audience: docflow
+      user-id-claim: sub
+      email-claim: email
+```
+
+`DEV_AUTH` remains available for local development when explicitly allowed, and `HEADER_AUTH` remains available for local/SIT testing with configured identity headers.
+
+`HEADER_AUTH` must only be used behind a trusted gateway that strips inbound identity headers from clients and injects its own verified values. For UAT/prod enterprise SSO, prefer `OIDC_AUTH`.
+
+## Logging Guidance
+
+Packaged logging defaults avoid forcing verbose method, SQL, JDBC, and bind-value logging. Lower environments may enable DEBUG/TRACE externally using logging properties or environment variables such as `LOGGING_LEVEL_COM_DOCFLOW=DEBUG`, `LOGGING_LEVEL_ORG_HIBERNATE_SQL=DEBUG`, or `LOGGING_LEVEL_ORG_HIBERNATE_BINDER=TRACE`.
+
+Verbose logging can expose document metadata, report filters, generated SQL, SQL bind values, file names, and user identifiers. In UAT/prod, enable DEBUG/TRACE only for a time-boxed investigation and revert to INFO after troubleshooting.
+
 ## Reports Module (Current Behavior)
 
 This section documents how Reports works **today** in this backend.

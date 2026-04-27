@@ -1,6 +1,7 @@
 package com.docflow.auth;
 
 import com.docflow.context.RequestUserContext;
+import com.docflow.security.AuthenticationResolver;
 import com.docflow.security.ModuleAccessService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +36,9 @@ class AuthControllerTest {
 
     @MockBean
     private ModuleAccessService moduleAccessService;
+
+    @MockBean
+    private AuthenticationResolver authenticationResolver;
 
     @Test
     void meReturnsSessionContextWithAllowedModules() throws Exception {

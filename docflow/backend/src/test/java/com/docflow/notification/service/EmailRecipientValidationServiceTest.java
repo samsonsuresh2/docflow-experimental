@@ -96,7 +96,7 @@ class EmailRecipientValidationServiceTest {
 
         assertThatThrownBy(() -> service.validateAndNormalize(message))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("user-email-domain");
+                .hasMessageContaining("From recipient domain is not allowed");
     }
 
     @Test

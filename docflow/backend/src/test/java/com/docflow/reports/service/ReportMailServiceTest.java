@@ -100,7 +100,7 @@ class ReportMailServiceTest {
     }
 
     @Test
-    void fallsBackToInlineWhenAttachmentFailsAndInlineIsAllowed() {
+    void fallsBackToInlineWhenAttachmentFailsAndInlineIsAllowed() throws Exception {
         ReportExecutionModels.MailRequest request = new ReportExecutionModels.MailRequest();
         request.setTemplateId(10L);
         request.setDeliveryMode(ReportExecutionModels.ReportMailDeliveryMode.ATTACHMENT);
@@ -109,7 +109,7 @@ class ReportMailServiceTest {
         request.setFields(fields);
 
         when(templateService.getById(10L)).thenReturn(templateResponse(reportMailConfig(ReportMailMode.INLINE_OR_ATTACHMENT)));
-        when(reportMailComposer.createAttachment(any(), any(), any())).thenThrow(new java.io.IOException("boom"));
+        when(reportMailComposer.createAttachment(any(), any(), any())).thenThrow(new IllegalStateException("boom"));
         when(reportMailComposer.buildInlineHtml(any(), any(), any())).thenReturn("<p>fallback-inline</p>");
 
         service.enqueue(request);
@@ -141,6 +141,7 @@ class ReportMailServiceTest {
 
         ReportMailFieldConfig subject = new ReportMailFieldConfig();
         subject.setDefaultValue("Report ${reportName}");
+        subject.setEditable(false);
         config.setSubject(subject);
 
         ReportMailFieldConfig body = new ReportMailFieldConfig();

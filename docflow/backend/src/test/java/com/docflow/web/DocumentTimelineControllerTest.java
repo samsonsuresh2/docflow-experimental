@@ -6,6 +6,7 @@ import com.docflow.domain.DocumentStatus;
 import com.docflow.domain.repository.DocumentRepository;
 import com.docflow.service.AuditService;
 import com.docflow.service.DocumentLifecycleEventCatalog;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -15,7 +16,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.oracle.OracleContainer;
+import org.testcontainers.containers.OracleContainer;
 
 import java.time.OffsetDateTime;
 import java.util.Set;
@@ -24,9 +25,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = "docflow.security.auth-mode=HEADER_AUTH")
 @AutoConfigureMockMvc
 @Testcontainers
+@EnabledIfSystemProperty(named = "docflow.docker.tests", matches = "true")
 class DocumentTimelineControllerTest {
 
     @Container
@@ -54,7 +56,7 @@ class DocumentTimelineControllerTest {
 
     @Test
     void timelineReturnsLifecycleEntriesInAscendingOrder() throws Exception {
-        RequestUser user = new RequestUser("reviewer1", Set.of("REVIEWER"));
+        RequestUser user = new RequestUser("reviewer1", Set.of("REVIEWER"), "REVIEWER");
 
         DocumentParent document = new DocumentParent();
         document.setDocumentNumber("DOC-2001");
@@ -72,7 +74,9 @@ class DocumentTimelineControllerTest {
         auditService.logLifecycleEvent(saved, DocumentStatus.OPEN, DocumentStatus.UNDER_REVIEW,
             DocumentLifecycleEventCatalog.REVIEW_STARTED, null, user, second);
 
-        mockMvc.perform(get("/api/documents/{id}/timeline", saved.getId()))
+        mockMvc.perform(get("/api/documents/{id}/timeline", saved.getId())
+                .header("X-USER-ID", "reviewer1")
+                .header("X-USER-ROLES", "REVIEWER"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[0].eventCode").value(DocumentLifecycleEventCatalog.SUBMITTED_FOR_REVIEW))
             .andExpect(jsonPath("$[0].eventLabel").value("Submitted for review"))

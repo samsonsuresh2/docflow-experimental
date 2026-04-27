@@ -25,6 +25,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static com.docflow.notification.model.NotificationRecipientType.MAKER;
+import static com.docflow.notification.model.NotificationRecipientType.PAST_PARTICIPANTS;
+import static com.docflow.notification.model.NotificationRecipientType.TEAM_DL;
 
 class DocumentRecipientResolverTest {
 

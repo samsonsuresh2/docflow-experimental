@@ -5,6 +5,7 @@ import com.docflow.api.dto.FilterSource;
 import com.docflow.domain.DocumentMetadata;
 import com.docflow.domain.DocumentParent;
 import com.docflow.domain.DocumentStatus;
+import com.docflow.domain.SchemaBindingMode;
 import com.docflow.service.search.DocumentSearchFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,7 +18,12 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DataJpaTest
+@DataJpaTest(properties = {
+    "spring.liquibase.enabled=false",
+    "spring.flyway.enabled=false",
+    "spring.jpa.hibernate.ddl-auto=create-drop",
+    "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect"
+})
 class DocumentRepositoryImplTest {
 
     @Autowired
@@ -42,7 +48,8 @@ class DocumentRepositoryImplTest {
             null,
             null,
             List.of(filter),
-            PageRequest.of(0, 10)
+            PageRequest.of(0, 10),
+            null
         );
 
         assertThat(results.getTotalElements()).isEqualTo(1);
@@ -65,7 +72,8 @@ class DocumentRepositoryImplTest {
             null,
             null,
             List.of(filter),
-            PageRequest.of(0, 10)
+            PageRequest.of(0, 10),
+            null
         );
 
         assertThat(results.getTotalElements()).isEqualTo(1);
@@ -82,7 +90,8 @@ class DocumentRepositoryImplTest {
             null,
             DocumentStatus.OPEN,
             List.of(),
-            PageRequest.of(0, 10)
+            PageRequest.of(0, 10),
+            null
         );
 
         assertThat(results.getTotalElements()).isEqualTo(1);
@@ -106,7 +115,8 @@ class DocumentRepositoryImplTest {
             null,
             DocumentStatus.OPEN,
             List.of(filter),
-            PageRequest.of(0, 10)
+            PageRequest.of(0, 10),
+            null
         );
 
         assertThat(results.getTotalElements()).isEqualTo(1);
@@ -120,6 +130,8 @@ class DocumentRepositoryImplTest {
         document.setStatus(status);
         document.setCreatedBy(createdBy);
         document.setCreatedAt(OffsetDateTime.now());
+        document.setSchemaBindingMode(SchemaBindingMode.FLOATING_SANDBOX);
+        document.setSchemaVersion(0);
         return document;
     }
 }

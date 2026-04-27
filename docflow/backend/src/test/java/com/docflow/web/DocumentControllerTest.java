@@ -1,13 +1,18 @@
 package com.docflow.web;
 
 import com.docflow.api.dto.DocumentSummary;
+import com.docflow.auth.AuthProperties;
+import com.docflow.auth.UserRoleService;
 import com.docflow.context.RequestUserContext;
 import com.docflow.domain.DocumentStatus;
+import com.docflow.security.AuthenticationResolver;
+import com.docflow.security.ModuleAccessService;
 import com.docflow.service.DocumentService;
 import com.docflow.service.RelatedEntityService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.PageImpl;
@@ -21,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -28,6 +34,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(DocumentController.class)
+@AutoConfigureMockMvc(addFilters = false)
 class DocumentControllerTest {
 
     @Autowired
@@ -41,6 +48,18 @@ class DocumentControllerTest {
 
     @MockBean
     private RequestUserContext requestUserContext;
+
+    @MockBean
+    private AuthenticationResolver authenticationResolver;
+
+    @MockBean
+    private ModuleAccessService moduleAccessService;
+
+    @MockBean
+    private UserRoleService userRoleService;
+
+    @MockBean
+    private AuthProperties authProperties;
 
     @Test
     void rejectsInvalidStatusWithAllowedValues() throws Exception {
@@ -66,10 +85,10 @@ class DocumentControllerTest {
             .andExpect(status().isOk());
 
         verify(documentService).searchDocuments(
-            anyString(),
+            isNull(),
             statusCaptor.capture(),
-            anyString(),
-            anyString(),
+            isNull(),
+            isNull(),
             anyMap(),
             any()
         );

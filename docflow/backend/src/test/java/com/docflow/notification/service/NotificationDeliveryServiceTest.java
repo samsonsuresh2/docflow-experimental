@@ -11,6 +11,7 @@ import com.docflow.notification.model.NotificationEventCode;
 import com.docflow.notification.model.NotificationEventType;
 import com.docflow.notification.model.NotificationExplicitRecipients;
 import com.docflow.notification.model.NotificationMessage;
+import com.docflow.notification.model.NotificationOutboxStatus;
 import com.docflow.notification.model.NotificationPolicy;
 import com.docflow.notification.model.NotificationRecipientType;
 import com.docflow.notification.model.NotificationReferenceType;
@@ -70,6 +71,7 @@ class NotificationDeliveryServiceTest {
     @Test
     void processesOutboxAndLogsRecipientsOnSuccess() {
         NotificationOutbox outbox = new NotificationOutbox();
+        outbox.setStatus(NotificationOutboxStatus.PROCESSING);
         NotificationEvent event = new NotificationEvent();
         event.setEventType(NotificationEventType.REPORT_MAIL);
         event.setEventCode(NotificationEventCode.SUBMITTED_FOR_REVIEW);
@@ -118,6 +120,7 @@ class NotificationDeliveryServiceTest {
     @Test
     void marksOutboxFailedWhenChannelFails() {
         NotificationOutbox outbox = new NotificationOutbox();
+        outbox.setStatus(NotificationOutboxStatus.PROCESSING);
         NotificationEvent event = new NotificationEvent();
         event.setEventType(NotificationEventType.REPORT_MAIL);
         event.setEventCode(NotificationEventCode.REJECTED);

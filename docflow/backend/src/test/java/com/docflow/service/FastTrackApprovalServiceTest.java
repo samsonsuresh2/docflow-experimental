@@ -14,7 +14,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
-import org.springframework.transaction.support.ResourcelessTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.AbstractPlatformTransactionManager;
+import org.springframework.transaction.support.DefaultTransactionStatus;
 
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
@@ -48,7 +50,7 @@ class FastTrackApprovalServiceTest {
             documentRepository,
             documentService,
             auditService,
-            new ResourcelessTransactionManager()
+            new NoOpTransactionManager()
         );
     }
 
@@ -146,5 +148,25 @@ class FastTrackApprovalServiceTest {
             eq(Pageable.unpaged())
         );
         verifyNoMoreInteractions(documentService);
+    }
+
+    private static class NoOpTransactionManager extends AbstractPlatformTransactionManager {
+
+        @Override
+        protected Object doGetTransaction() {
+            return new Object();
+        }
+
+        @Override
+        protected void doBegin(Object transaction, TransactionDefinition definition) {
+        }
+
+        @Override
+        protected void doCommit(DefaultTransactionStatus status) {
+        }
+
+        @Override
+        protected void doRollback(DefaultTransactionStatus status) {
+        }
     }
 }

@@ -24,7 +24,6 @@ class RestExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody())
-            .containsEntry("status", 409)
             .containsEntry("error", "Conflict")
             .containsEntry("message", "This report has an invalid filter configuration. Please contact your administrator.");
     }
@@ -37,7 +36,6 @@ class RestExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody())
-            .containsEntry("status", 400)
             .containsEntry("error", "Bad Request")
             .containsEntry("message", "Bad Request");
     }

@@ -4,6 +4,7 @@ import com.docflow.domain.DocumentParent;
 import com.docflow.domain.DocumentStatus;
 import com.docflow.domain.repository.DocumentRepository;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -15,7 +16,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.oracle.OracleContainer;
+import org.testcontainers.containers.OracleContainer;
 
 import java.time.OffsetDateTime;
 
@@ -23,9 +24,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = "docflow.security.auth-mode=HEADER_AUTH")
 @AutoConfigureMockMvc
 @Testcontainers
+@EnabledIfSystemProperty(named = "docflow.docker.tests", matches = "true")
 class RelatedEntityControllerTest {
 
     @Container
@@ -79,7 +81,8 @@ class RelatedEntityControllerTest {
         jdbcTemplate.update("UPDATE DOCUMENT_PARENT SET CLIENT_ID = ? WHERE ID = ?", "client-123", saved.getId());
         jdbcTemplate.update("INSERT INTO LOAN_DATA (LOAN_NO, USER_ID) VALUES (?, ?)", "LN-1", "client-123");
 
-        mockMvc.perform(get("/api/documents/{id}/related-entities/LOAN_DATA", saved.getId()))
+        mockMvc.perform(get("/api/documents/{id}/related-entities/LOAN_DATA", saved.getId())
+                .header("X-USER-ID", "tester"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.entityName").value("LOAN_DATA"))
             .andExpect(jsonPath("$.label").value("Loans"))

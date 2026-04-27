@@ -74,7 +74,7 @@ class DefaultDocumentServiceTest {
         sampleDocument.setDocumentNumber("DOC-1");
         sampleDocument.setCreatedBy("maker1");
         sampleDocument.setStatus(DocumentStatus.DRAFT);
-        when(metadataService.getMetadata(any())).thenReturn(Map.of());
+        lenient().when(metadataService.getMetadata(any())).thenReturn(Map.of());
     }
 
     @Test
@@ -122,7 +122,7 @@ class DefaultDocumentServiceTest {
 
     @Test
     void updateStatusRejectsMissingRequiredFieldsForStatus() {
-        when(configService.getUploadFieldsConfig()).thenReturn("[{\"name\":\"field1\",\"requiredAtStatuses\":[\"APPROVED\"]}]");
+        when(configService.getUploadFieldsConfigForBinding(any())).thenReturn("[{\"name\":\"field1\",\"requiredAtStatuses\":[\"APPROVED\"]}]");
         sampleDocument.setStatus(DocumentStatus.REVIEWED);
         when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
         when(requestUserContext.getCurrentUser()).thenReturn(Optional.of(new RequestUser("approver", Set.of("APPROVER"), "APPROVER")));
@@ -135,7 +135,7 @@ class DefaultDocumentServiceTest {
 
     @Test
     void updateMetadataRejectsLockedFieldChange() {
-        when(configService.getUploadFieldsConfig()).thenReturn("[{\"name\":\"lockedField\",\"lockAfterFilled\":true}]");
+        when(configService.getUploadFieldsConfigForBinding(any())).thenReturn("[{\"name\":\"lockedField\",\"lockAfterFilled\":true}]");
         when(requestUserContext.getCurrentUser()).thenReturn(Optional.of(new RequestUser("maker1", Set.of("MAKER"), "MAKER")));
         when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
         when(metadataService.getMetadata(sampleDocument)).thenReturn(Map.of("lockedField", "initial"));
@@ -148,7 +148,7 @@ class DefaultDocumentServiceTest {
 
     @Test
     void updateMetadataRejectsRoleWithoutEditPermission() {
-        when(configService.getUploadFieldsConfig()).thenReturn("[{\"name\":\"editable\",\"editableByRoles\":[\"REVIEWER\"]}]");
+        when(configService.getUploadFieldsConfigForBinding(any())).thenReturn("[{\"name\":\"editable\",\"editableByRoles\":[\"REVIEWER\"]}]");
         when(requestUserContext.getCurrentUser()).thenReturn(Optional.of(new RequestUser("maker1", Set.of("MAKER"), "MAKER")));
         when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
         when(metadataService.getMetadata(sampleDocument)).thenReturn(Map.of());
@@ -162,7 +162,6 @@ class DefaultDocumentServiceTest {
     @Test
     void updateStatusRejectsForbiddenAction() {
         when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
-        when(configService.getUploadFieldsConfig()).thenReturn("[]");
         doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Forbidden"))
             .when(workflowPermissionService)
             .assertAllowed(eq("MAKER"), eq(DocumentStatus.DRAFT), eq(WorkflowActionCodes.SUBMIT));
@@ -175,14 +174,14 @@ class DefaultDocumentServiceTest {
             null
         ))
             .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("cannot perform action SUBMIT");
+            .hasMessageContaining("Forbidden");
     }
 
     @Test
     void reviewerApproveMovesToReviewed() {
         sampleDocument.setStatus(DocumentStatus.UNDER_REVIEW);
         when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
-        when(configService.getUploadFieldsConfig()).thenReturn("[]");
+        when(configService.getUploadFieldsConfigForBinding(any())).thenReturn("[]");
         doNothing().when(workflowPermissionService)
             .assertAllowed(eq("REVIEWER"), eq(DocumentStatus.UNDER_REVIEW), eq(WorkflowActionCodes.REVIEW_APPROVE));
 
@@ -197,7 +196,7 @@ class DefaultDocumentServiceTest {
     void approverApproveMovesToApproved() {
         sampleDocument.setStatus(DocumentStatus.REVIEWED);
         when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
-        when(configService.getUploadFieldsConfig()).thenReturn("[]");
+        when(configService.getUploadFieldsConfigForBinding(any())).thenReturn("[]");
         doNothing().when(workflowPermissionService)
             .assertAllowed(eq("APPROVER"), eq(DocumentStatus.REVIEWED), eq(WorkflowActionCodes.APPROVE));
 
@@ -212,8 +211,6 @@ class DefaultDocumentServiceTest {
     void reviewerCannotFinalApproveFromUnderReview() {
         sampleDocument.setStatus(DocumentStatus.UNDER_REVIEW);
         when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
-        when(configService.getUploadFieldsConfig()).thenReturn("[]");
-
         assertThatThrownBy(() -> service.approve(
             1L,
             new RequestUser("reviewer1", Set.of("REVIEWER"), "REVIEWER"),
@@ -227,8 +224,6 @@ class DefaultDocumentServiceTest {
     void reviewerCannotFinalApproveFromReviewed() {
         sampleDocument.setStatus(DocumentStatus.REVIEWED);
         when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
-        when(configService.getUploadFieldsConfig()).thenReturn("[]");
-
         assertThatThrownBy(() -> service.approve(
             1L,
             new RequestUser("reviewer1", Set.of("REVIEWER"), "REVIEWER"),
@@ -242,8 +237,6 @@ class DefaultDocumentServiceTest {
     void approverCannotFinalApproveFromUnderReview() {
         sampleDocument.setStatus(DocumentStatus.UNDER_REVIEW);
         when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
-        when(configService.getUploadFieldsConfig()).thenReturn("[]");
-
         assertThatThrownBy(() -> service.approve(
             1L,
             new RequestUser("approver1", Set.of("APPROVER"), "APPROVER"),
@@ -256,7 +249,7 @@ class DefaultDocumentServiceTest {
     @Test
     void updateStatusEmitsLifecycleAuditEntry() {
         when(documentRepository.findById(1L)).thenReturn(Optional.of(sampleDocument));
-        when(configService.getUploadFieldsConfig()).thenReturn("[]");
+        when(configService.getUploadFieldsConfigForBinding(any())).thenReturn("[]");
         doNothing().when(workflowPermissionService).assertAllowed(eq("MAKER"), eq(DocumentStatus.DRAFT), eq(WorkflowActionCodes.SUBMIT));
 
         service.updateStatus(
@@ -282,8 +275,6 @@ class DefaultDocumentServiceTest {
         definition.setSource(FilterSource.META_DATA);
         definition.setType("text");
         when(configService.getReviewFilterDefinitions()).thenReturn(List.of(definition));
-        when(requestUserContext.getCurrentUser()).thenReturn(Optional.empty());
-
         assertThatThrownBy(() -> service.searchDocuments(
             null,
             DocumentStatus.OPEN,

@@ -247,7 +247,7 @@ class ReportExecutionServiceTest {
     }
 
     @Test
-    void shouldAllowStringLikeAndIgnoreBlankLikeValue() {
+    void shouldAllowStringLikeAndRejectBlankOnlyValue() {
         when(templateService.getById(10L)).thenReturn(templateWithUserFilter("meta:branch", ReportFilter.FilterLogicalType.STRING));
 
         ReportExecutionModels.RunRequest likeRequest = new ReportExecutionModels.RunRequest();
@@ -272,7 +272,9 @@ class ReportExecutionServiceTest {
         blankLike.setValue("   ");
         blankLikeRequest.setFilters(List.of(blankLike));
 
-        service.run(blankLikeRequest, 0, 25);
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> service.run(blankLikeRequest, 0, 25));
+        assertEquals(400, exception.getStatusCode().value());
+        assertEquals(ReportRunPolicy.AT_LEAST_ONE_FILTER_MESSAGE, exception.getReason());
     }
 
     @Test
